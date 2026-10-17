@@ -3,6 +3,7 @@
 **A fork of [oh-my-pi](https://github.com/can1357/oh-my-pi) tuned for local models on a 32 GB V100.**
 
 - **Upstream:** `can1357/oh-my-pi`, MIT (© 2025 Mario Zechner, 2025–2026 Can Bölük, 2026 Stencil Labs, Inc.)
+- **Fork:** <https://github.com/jaruizramon/RabidAI> (GitHub fork, parent link intact)
 - **Fork point:** `eb74cf84d8` (`main`, source version 18.11.3); the installed binary on this box is `omp/18.2.6`
 - **Branch:** `rabid`
 - **Status:** scaffolding. The source is here; the first implementation tasks are in `NEXT-CHAT.md`.
@@ -53,16 +54,12 @@ keeps running the installed binary meanwhile.
 
 ## Remotes and upstream
 
-`origin` points at `can1357/oh-my-pi` (the clone was `--filter=blob:none`; blob fetches are on demand).
-When a fork repository exists, add it as `origin` and keep upstream as `upstream`:
+- `origin` — <https://github.com/jaruizramon/RabidAI.git> (the fork, parent link intact)
+- `upstream` — <https://github.com/can1357/oh-my-pi.git>
+- `main` is the upstream copy; `rabid` is the working branch (pushed and tracking `origin/rabid`).
 
-```bash
-git remote rename origin upstream
-git remote add origin <your-fork-url>
-git push -u origin rabid
-```
-
-Sync: `git fetch upstream && git rebase upstream/main` on `rabid`. Keep fork changes modular
+The local clone is `--filter=blob:none`; missing blobs are fetched on demand from the configured
+remote. Sync: `git fetch upstream && git rebase upstream/main` on `rabid`. Keep fork changes modular
 (settings, request mapping, compaction, tools) so rebases stay cheap.
 
 ## Staged rename

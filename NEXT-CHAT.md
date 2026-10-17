@@ -10,7 +10,8 @@ Start a new omp chat with cwd **`/home/pipo/Documents/RabidAI`**, then paste:
 ## Repo state at handoff
 
 - Fork point `eb74cf84d8` of `can1357/oh-my-pi` (`main`, source 18.11.3), MIT.
-- Branch `rabid`; `origin` still points at upstream. The clone is `--filter=blob:none`.
+- Branch `rabid`; `origin` = `jaruizramon/RabidAI` (the fork), `upstream` = `can1357/oh-my-pi`.
+  The clone is `--filter=blob:none`; `rabid` is pushed and tracking `origin/rabid`.
 - Installed binary on the box is `omp/18.2.6`; behavior differences are expected.
 - `RABIDAI.md`, `NEXT-CHAT.md`, `docs/rabid/` added; `rabid` bin alias added in
   `packages/coding-agent/package.json` (the `omp` alias stays).
