@@ -86,7 +86,13 @@ nvidia-smi --query-gpu=index,memory.used --format=csv,noheader
 curl -s -X POST localhost:8090/api/slm/unload -H 'content-type: application/json' -d '{}'
 ```
 
-A worker on a gaming card adds ~1.2 GB with `gpuFreeMiB: 2048` (most layers spill to CPU — 11.6 tok/s for a 4B) and ~2.7 GB with `gpuFreeMiB: 512` (whole model on the card, 63 tok/s). Pick by what else needs the card; the inference card must stay untouched.
+A 4B Q4 worker at 8K context needs ≈2.7 GB resident. Measured on an otherwise idle 8 GB
+gaming card: `gpuFreeMiB: 2048` leaves room and runs at **95.9 tok/s**; `4096` spills part
+of the model and drops to 21; `5120` leaves ~1 GB and collapses to **11.6 tok/s**. The
+reservation must be ≤ card − 3.2 GB. A resident 2.8 GB service (a desktop/3D app) costs
+~34 % even when both fit (63.2 tok/s), and if it leaves too little room the same 2048
+reservation starves the worker — the historic 11.6 row in the README came from exactly that.
+The inference card must stay untouched.
 
 ## Gotchas worth keeping
 

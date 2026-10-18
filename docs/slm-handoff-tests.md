@@ -402,6 +402,35 @@ worker is **5.4× faster**.
 lowered 2048 → 1024; 512–1024 for throughput, 2048+ when a game needs the card. README tables
 now carry the headroom column so a capped row can never be read as the card's ceiling.
 
+---
+
+## 2026-10-18 — The headroom curve, and why the table lied (correcting the 3070 numbers)
+
+**Setup.** Spark-X2.5-4B Q4_0, `cuda:1`, ctx 8192, budget 0, loaded through the manager.
+Card idle at ~1 968 MiB of desktop, Laya **not** running. For each `gpuFreeMiB` value: load,
+warm request, then measure the second request.
+
+**Observed.**
+
+| `gpuFreeMiB` | 3070 used | GPU layers | tok/s |
+|---|---|---|---|
+| `-1` | 4 658 MiB | all | 94.9 |
+| `2048` | 4 658 MiB | all | **95.9** |
+| `4096` | 3 744 MiB | partial | 21.0 |
+| `5120` | 2 720 MiB | ~25 % | 11.6 |
+
+**Correction.** The `11.6 tok/s` rows published earlier were measured while **Laya held
+2.8 GB** of the card *and* the reservation was 2048 — leaving ~1.2 GB, so llama.cpp spilled
+most layers to the CPU (GPU util 2–6 %, worker CPU ~400 %). The card does **95.9 tok/s** on
+the same worker with an idle card at the same reservation. The earlier `63.2 tok/s` figure
+was also contaminated: Laya was resident, so the model fit but contended for bandwidth —
+co-residency costs ~34 % even with no spill.
+
+**Conclusion.** `gpuFreeMiB` is a reservation, and it must leave ≈3.2 GB usable or the
+worker stops being a GPU worker. Docs and the README now show the curve instead of a single
+number, and the historic rows carry the crowded-card condition inline. Default stays 1024;
+2048 is right on an idle 8 GB card.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

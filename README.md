@@ -96,13 +96,27 @@ committed compaction entry.
 `—` marks a field the notebook did not record for that run (the run happened; the number
 was simply not captured), never a zero. Rows are rounded as measured.
 
-**Read the Spark rows with the headroom column.** `gpuFreeMiB: 2048` is a *cap*, not a
-property of the card: with the desktop already holding 4.6 GB of the 3070's 8 GB, that cap
-allowed llama.cpp only ~1.2 GB of VRAM, so most layers ran on the CPU (GPU utilisation 2–6 %,
-worker CPU ~400 %) — hence 11.6 tok/s. Lowering the cap to 512 fits the whole model
-(+2.67 GB, 7 324 MiB total) and the same worker measures **63.2 tok/s** (50 % GPU
-utilisation), 5.4× the capped figure. Choose the cap by what else needs the card: 512–1024
-for throughput, 2048+ when a game is running.
+**The Spark rows are configurations, not the card.** `gpuFreeMiB` is a VRAM *reservation*:
+llama.cpp offloads only what fits inside `card − reservation`. Measured on the same worker,
+same prompt, second request (steady state), card otherwise idle at ~1.97 GB of desktop:
+
+| `gpuFreeMiB` | 3070 used | GPU layers | tok/s |
+|---|---|---|---|
+| `-1` (all) | 4 658 MiB | all | **94.9** |
+| `2048` | 4 658 MiB | all | **95.9** |
+| `4096` | 3 744 MiB | partial | 21.0 |
+| `5120` | 2 720 MiB | ~25 % | 11.6 |
+
+So `11.6 tok/s` is the *starved* configuration, not the 3070: a 4B Q4 at 8K context needs
+≈2.7 GB resident, and a reservation that leaves it ~1 GB pushes most layers to the CPU. Two
+other effects are worth knowing: the historic 11.6 rows above were measured with **Laya
+holding 2.8 GB** of the card *and* a 2048 reservation that then left only ~1.2 GB; and with
+Laya co-resident (both fitting in VRAM) the same worker measured 63.2 tok/s instead of 95.9 —
+co-residency costs ~34 % throughput even when nothing spills.
+
+Rule of thumb: leave the worker `reservation ≤ card − 3.2 GB` (weights + KV + context), i.e.
+2048 on an otherwise idle 8 GB card, and do not co-locate a 2.8 GB service with it if you
+want the card's full speed.
 
 The `soft` row is the control: no worker exists, the summary is the main model's, and it
 still carries the harness blocks. Every `slm` row records `method: "slm"` with **no**
@@ -119,9 +133,8 @@ Same prompts, bare worker runs (not commits), so the timings are comparable:
 | Qwen2.5-0.5B | CPU | 8 192 | 0 | 590 | 139 | 3.25 s | 42.8 | second pass, chained document |
 | SmolLM3-3B | CPU | 8 192 | 4 096 | 777 | 388 | 38.13 s | 10.2 | requirements kept; invented `## New information`, duplicate headings |
 | SmolLM3-3B | CPU | 16 384 | 1 024 | — | 407 | 42.6 s | 9.6 | lowering the budget from 4096 bought **no** speed |
-| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 2048` | 8 192 | 0 | — | 298 | 25.6 s | 11.6 | mostly CPU; requirements verbatim |
-| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 512` | 8 192 | 0 | — | 292 | 4.6 s | **63.2** | whole model on the card (steady state) |
-| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 512` | 8 192 | 0 | — | 323 | 5.1 s | 63.7 | first request after load (cold) |
+| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 2048`, idle card | 8 192 | 0 | — | 343 | 3.6 s | **95.9** | fully resident, requirements verbatim |
+| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 512`, Laya resident | 8 192 | 0 | — | 292 | 4.6 s | 63.2 | resident, contending with Laya |
 | Spark-X2.5-4B | RTX 3070 | 8 192 | 1 024 | — | 1 373 | 118 s | 11.6 | thinking dominates the run |
 | Spark-X2.5-4B | RTX 3070 | 8 192 | 0 | — | 546 | 50.9 s | 10.7 | `detailed` register: 2 115-char document |
 
@@ -133,8 +146,9 @@ Main model, same rig, for scale: **36 tok/s** decode.
 |---|---|---|
 | SmolLM3-3B, CPU, `--ctx-size 262144` | **12.5 GB** RSS | why the window is not copied wholesale |
 | SmolLM3-3B, CPU, `--ctx-size 16384` | **2.79 GB** RSS | the shipped default |
-| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 2048` | **+1.18 GB** VRAM (4 637 → 5 814 MiB) | ~2 GB left free; most layers spill to CPU (11.6 tok/s) |
-| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 512` | **+2.67 GB** VRAM (4 652 → 7 324 MiB) | whole model resident, 63.2 tok/s |
+| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 2048`, idle card | **+2.69 GB** VRAM (1 968 → 4 658 MiB) | fully resident, 95.9 tok/s |
+| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 512`, Laya resident | **+2.67 GB** VRAM (4 652 → 7 324 MiB) | resident but contending: 63.2 tok/s |
+| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 5120` | **+0.75 GB** VRAM (1 968 → 2 720 MiB) | starved, ~25 % on the card: 11.6 tok/s |
 | Inference card during a worker run | 10 MiB idle / 23.9 GB with the 27B | untouched by the worker |
 
 Worker CPU under generation: **~400 %** (4 threads of 16), measured through the manager
