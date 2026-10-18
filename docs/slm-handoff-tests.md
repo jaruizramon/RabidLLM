@@ -580,6 +580,24 @@ model call. `boundScratchpad` keeps the newest lines that fit and marks how many
 produce the same bounded prompt, which is what keeps an 88K compaction on the worker. Chunking
 and the middle-clip remain as guards, but no longer carry the load.
 
+---
+
+## 2026-10-18 — The prompt now asks for selection, not preservation
+
+**Observed.** With the scratchpad in place the worker's job changed, but the prompt still said
+"preserve every path", "carry forward all prior content" and "name every file touched" — an
+instruction to transcribe. That fights both the compressed input and the deterministic blocks,
+which already keep the exhaustive record.
+
+**Change.** The system prompt now states the successor goal, the keep set (objective, decisions
+with reasons, binding constraints, verified facts with commands, next step, files that matter)
+and the drop set (reads that changed nothing, repeated output, abandoned approaches, superseded
+items, irrelevant paths). Quoting stays exact; omission is explicitly allowed and paraphrase is
+not. Progress is "what a successor would otherwise redo or miss", not every action.
+
+**Conclusion.** The three layers now have distinct jobs: harness records exactly (requirements,
+file actions), the pad compresses events, the model selects. No layer duplicates another.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
