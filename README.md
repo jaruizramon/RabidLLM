@@ -64,23 +64,69 @@ flowchart LR
   the RAM copy is namespaced per agent dir; a copy whose metadata names another session is
   refused on read rather than merged.
 
-## Measured on the reference rig
+## Test results
 
-V100 32 GB for inference, RTX 3070 8 GB for display, 16-thread i9. Main model
-Qwen3.8-27B MTP Q4_K_M.
+Every row below is a real run on the reference rig (V100 32 GB inference, RTX 3070 8 GB
+display, 16-thread i9-9900K), read from the session JSONL and the handoff metadata. The
+full notebook — setup, commands, defects found — is [`SLM-HANDOFF-TESTS.md`](SLM-HANDOFF-TESTS.md).
 
-| | value |
-|---|---|
-| Main model decode | 36 tok/s |
-| Harness baseline context | 1 948 tokens (24 % of an 8 K window) |
-| Worker, SmolLM3-3B Q4_K_M, 8 K ctx | 9.8 tok/s, 23 s per turn |
-| Worker, Spark-X2.5-4B Q4_0, budget 0 | 25.6 s per turn; 118 s at a 1024 thinking budget |
-| Worker, Qwen2.5-0.5B (fastest, weakest) | 40 tok/s; drops requirements on long input |
-| Worker RAM at 262 144 ctx / at 16 K | 12.5 GB / 2.8 GB |
-| Worker on the 3070, `gpuFreeMiB: 2048` | +1.18 GB VRAM, ~2 GB left free |
+### A. End-to-end compaction commits
 
-A commit reads `method: "slm"` with no main-model summarization request; the handoff file
-was written 3 ms before the commit that consumed it.
+Real `SessionMaintenance` pass on a real session: main model Qwen3.8-27B at an **8192-token
+window** (baseline harness context 1 948 tokens), `thresholdTokens: 2300`,
+`keepRecentTokens: 200`, `methodOrder: [slm]`. "Commit" is the context size recorded on the
+committed compaction entry.
+
+| Worker | Device | Worker ctx | Thinking | Detail | Summary | Commit (before → after) | Worker wall | Worker tok/s |
+|---|---|---|---|---|---|---|---|---|
+| **none** (`soft`) | — | — | — | — | 1 084 chars | 2 422 → 2 536 | — | — |
+| Qwen2.5-0.5B Q4_K_M | CPU, 4 thr | 8 192 | 0 | standard | 820 chars | 3 147 → 3 321 | 3.4 s | **40.4** |
+| SmolLM3-3B Q4_K_M | CPU, 4 thr | 8 192 | 4 096 | standard | — | — | 38.1 s | 10.2 |
+| SmolLM3-3B Q4_K_M | CPU, 4 thr | **16 384** | 1 024 | standard | 2 022 chars | 4 099 → 4 399 | 23.4 s | 9.8 |
+| Spark-X2.5-4B Q4_0 | **RTX 3070** (`cuda:1`) | 8 192 | 0 | standard | ~1 523 chars | 4 317 → 4 632 | 25.6 s | 11.6 |
+| Spark-X2.5-4B Q4_0 | **RTX 3070** (`cuda:1`) | 8 192 | 0 | **detailed** | 2 115 chars | — | 50.9 s | 10.7 |
+
+`—` marks a field the notebook did not record for that run (the run happened; the number
+was simply not captured), never a zero. Rows are rounded as measured.
+
+The `soft` row is the control: no worker exists, the summary is the main model's, and it
+still carries the harness blocks. Every `slm` row records `method: "slm"` with **no**
+main-model summarization request; in the Spark run the handoff file was written 3 ms before
+the commit that consumed it.
+
+### B. Worker throughput and behavior
+
+Same prompts, bare worker runs (not commits), so the timings are comparable:
+
+| Worker | Device | Ctx | Thinking | In | Out | Wall | tok/s | Outcome |
+|---|---|---|---|---|---|---|---|---|
+| Qwen2.5-0.5B | CPU | 8 192 | 0 | 802 | 139 | 3.44 s | **40.4** | clean headings, both requirements; repeat loop + `truncated` on a 2 500-word turn |
+| Qwen2.5-0.5B | CPU | 8 192 | 0 | 590 | 139 | 3.25 s | 42.8 | second pass, chained document |
+| SmolLM3-3B | CPU | 8 192 | 4 096 | 777 | 388 | 38.13 s | 10.2 | requirements kept; invented `## New information`, duplicate headings |
+| SmolLM3-3B | CPU | 16 384 | 1 024 | — | 407 | 42.6 s | 9.6 | lowering the budget from 4096 bought **no** speed |
+| Spark-X2.5-4B | RTX 3070 | 8 192 | 0 | — | 298 | 25.6 s | 11.6 | requirements verbatim and correctly classified |
+| Spark-X2.5-4B | RTX 3070 | 8 192 | 1 024 | — | 1 373 | 118 s | 11.6 | thinking dominates the run |
+| Spark-X2.5-4B | RTX 3070 | 8 192 | 0 | — | 546 | 50.9 s | 10.7 | `detailed` register: 2 115-char document |
+
+Main model, same rig, for scale: **36 tok/s** decode.
+
+### C. Cost on the box
+
+| Setup | Memory | Note |
+|---|---|---|
+| SmolLM3-3B, CPU, `--ctx-size 262144` | **12.5 GB** RSS | why the window is not copied wholesale |
+| SmolLM3-3B, CPU, `--ctx-size 16384` | **2.79 GB** RSS | the shipped default |
+| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 2048` | **+1.18 GB** VRAM (4 637 → 5 814 MiB) | ~2 GB left free; the rest spills to CPU |
+| Inference card during a worker run | 10 MiB idle / 23.9 GB with the 27B | untouched by the worker |
+
+Worker CPU under generation: **~400 %** (4 threads of 16), measured through the manager
+panel.
+
+### What was not measured
+
+Spark on CPU, SmolLM3 or Qwen2.5 on a GPU, more than two turns per session, and two
+concurrent sessions sharing one worker. The matrices above are the runs the notebook
+records; missing cells are unmeasured, not zero.
 
 ## Configure
 
