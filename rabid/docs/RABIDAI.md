@@ -54,7 +54,9 @@ keeps running the installed binary meanwhile.
 
 ## Remotes and upstream
 
-- `origin` — <https://github.com/jaruizramon/RabidAI.git> (the fork, parent link intact)
+- `rabidllm` — <https://github.com/jaruizramon/RabidLLM.git> (standalone; the canonical home)
+- `origin` — <https://github.com/jaruizramon/RabidAI.git> (the old GitHub fork, kept in sync)
+- `upstream` — <https://github.com/can1357/oh-my-pi.git> (for merges)
 - `upstream` — <https://github.com/can1357/oh-my-pi.git>
 - `main` is the upstream copy; `rabid` is the working branch (pushed and tracking `origin/rabid`).
 

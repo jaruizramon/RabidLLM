@@ -1,4 +1,4 @@
-# RabidAI docs
+# RabidLLM docs
 
 The fork's own documentation. The repository holds three things together — the compaction
 mechanism, the harness that supports it, and the rig duplicator — see the root README.

@@ -1,6 +1,6 @@
 # Credits
 
-RabidAI is my own repository: the rig duplicator, the background compaction handoff, and the
+RabidLLM is my own repository (the setup inside is called RabidAI): the rig duplicator, the background compaction handoff, and the
 harness those live in. **The harness is built on [oh-my-pi](https://github.com/can1357/oh-my-pi)
 and that debt is the largest one here.** The license is unchanged.
 

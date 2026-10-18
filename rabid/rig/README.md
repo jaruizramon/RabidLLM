@@ -1,4 +1,4 @@
-# RabidAI rig
+# RabidLLM rig
 
 The local serving stack this fork runs against: one V100 for inference, one display
 GPU, the manager web page, the router, and the SLM handoff worker. Clone, run the
@@ -36,7 +36,7 @@ Prerequisites, by hand (they are large binaries, not repo content):
 Then:
 
 ```sh
-git clone https://github.com/jaruizramon/RabidAI.git && cd RabidAI
+git clone https://github.com/jaruizramon/RabidLLM.git && cd RabidLLM
 ./rig/install.sh            # --dry-run first if you want to see it
 hf download ggml-org/SmolLM3-3B-GGUF SmolLM3-Q4_K_M.gguf --local-dir ~/models
 llama-manager start         # http://localhost:8090

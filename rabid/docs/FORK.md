@@ -1,6 +1,6 @@
 # The rabid harness
 
-RabidAI's harness is built on **oh-my-pi** (MIT — attribution in
+This repository's harness is built on **oh-my-pi** (MIT — attribution in
 [`../../CREDITS.md`](../../CREDITS.md)), and it is more than that harness plus a config
 profile: compaction, maintenance, the token meter, the TUI, the provider layer and the model
 catalog all carry changes. This file is the inventory — what was added, what was rewired, and
