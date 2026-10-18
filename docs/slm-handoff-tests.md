@@ -557,6 +557,29 @@ immediately.
 **Conclusion.** Killing a worker no longer fails a compaction; it costs one retry and a
 respawn.
 
+---
+
+## 2026-10-18 — One turn can be 88K, so the worker reads a scratchpad
+
+**Setup.** Per-thought, per-read, per-conclusion scratchpad, with the SLM reading that instead
+of the raw turn.
+
+**Observed (measured on the live session).**
+
+```
+messages 316 | raw content 355 691 chars ≈ 142 276 tokens
+scratchpad 64 965 chars ≈ 25 986 tokens, 504 lines
+bounded to 40 856 chars ≈ 16 342 tokens at a 16K input budget
+```
+
+One bounded line per event — `THOUGHT` 240, `CALL read(path:range)`, `CALL name(args)` 160,
+`RESULT` 200, `CONCLUSION` 320, `USER` 600 — produced by clipping and extraction, never by a
+model call. `boundScratchpad` keeps the newest lines that fit and marks how many were dropped.
+
+**Conclusion.** Input size is independent of turn size: a 4-message turn and a 316-message one
+produce the same bounded prompt, which is what keeps an 88K compaction on the worker. Chunking
+and the middle-clip remain as guards, but no longer carry the load.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

@@ -56,6 +56,7 @@ flowchart LR
   P -->|worker cannot deliver| N[next configured method]
 ```
 
+- **The worker reads a scratchpad, not the turn.** Each event becomes one bounded line — `USER`, `THOUGHT`, `CALL tool(target)`, `RESULT`, `CONCLUSION` — and the pad keeps the newest that fit. Measured: 316 messages / 142 K tokens of raw content → 26 K-token pad → 16.3 K after bounding, so an 88 K turn cannot overflow the worker.
 - **Stateless runs.** Each request is `system + previous document + new turns`. The model
   never sees its own earlier answers, so there is no self-reinforcing thought loop; the
   document is the only state.
