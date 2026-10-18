@@ -486,6 +486,27 @@ manager panel), so both ran partially offloaded.
 **Conclusion.** This is why "it's taking a while": the fallback ran the 27B over the region.
 With the queue and the larger context, the same compaction should stay on the worker.
 
+---
+
+## 2026-10-18 — Handoff was slow because a second worker stole the card
+
+**Setup.** Live session at 87K/88K. `Auto-handoff` ran for minutes; the log had no SLM
+failure, only `SLM handoff worker ready ctxSize 32768`.
+
+**Observed.** Two workers on the 3070: the session's (pid 3137281, ppid = the session,
+ctx 32768) and a manager-owned one (pid 3135168, ppid = manager.py, ctx 8192). Both fitted
+into 8 GB only partially, so the session's region run crawled and `prepareForCompaction`
+expired inside `awaitMs`, and the chain fell back to `handoff`.
+
+**Fix.** The server now discovers a running `--alias slm-worker` process (`/proc` scan),
+health-checks it, and **adopts** it when the model matches — even without `workerUrl`, and
+even if its context is smaller (logged as a warning). Adoption never signals the process.
+Verified live: adopted port 37921, no third worker spawned, `unload()` left it running.
+
+**Conclusion.** "Load" in the manager panel during a session is now harmless to the session
+(it adopts that worker) but its smaller context splits runs more. For full speed, let the
+session own the card: unload the panel's worker and restart.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

@@ -7,6 +7,7 @@
  * shared by every session; {@link SlmHandoffServer.ensure} serializes starts so
  * concurrent turns cannot double-spawn.
  */
+import * as nodeFs from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { readLines } from "@oh-my-pi/pi-utils/stream";
@@ -345,6 +346,53 @@ export function slmOffloadArgs(
 	];
 }
 
+/** A worker already running on this machine, owned by another process. */
+interface DiscoveredWorker {
+	pid: number;
+	url: string;
+	modelPath: string;
+	ctxSize: number;
+}
+
+/**
+ * Find `llama-server` processes serving this alias, whoever started them (a previous
+ * session, the manager page). Adopting one is always better than spawning a second on
+ * the same card: measured, two Spark workers cannot both be resident on an 8 GB GPU,
+ * and the one that spills makes every run slower than the fallback it was meant to avoid.
+ */
+function discoverSlmWorker(): DiscoveredWorker | undefined {
+	let entries: string[];
+	try {
+		entries = nodeFs.readdirSync("/proc");
+	} catch {
+		return undefined;
+	}
+	for (const entry of entries) {
+		if (!/^\d+$/.test(entry)) continue;
+		let argv: string[];
+		try {
+			argv = nodeFs
+				.readFileSync(`/proc/${entry}/cmdline`, "utf8")
+				.split("\0")
+				.filter((part: string) => part !== "");
+		} catch {
+			continue;
+		}
+		if (!argv.some(part => part.includes("llama-server"))) continue;
+		const flag = (name: string): string | undefined => {
+			const index = argv.indexOf(name);
+			return index === -1 ? undefined : argv[index + 1];
+		};
+		if (flag("--alias") !== SLM_MODEL_ALIAS) continue;
+		const port = Number(flag("--port"));
+		const ctxSize = Number(flag("--ctx-size"));
+		const modelPath = flag("--model");
+		if (!Number.isFinite(port) || port <= 0 || !modelPath) continue;
+		return { pid: Number(entry), url: `http://127.0.0.1:${port}`, modelPath, ctxSize };
+	}
+	return undefined;
+}
+
 /** One supervised stock `llama-server` on the CPU. */
 export class SlmHandoffServer {
 	static #instance: SlmHandoffServer | undefined;
@@ -506,6 +554,27 @@ export class SlmHandoffServer {
 		}
 		this.#externalBaseUrl = undefined;
 		const current = this.#config;
+		// Nobody configured a URL, but a worker may already be running (a previous
+		// session, the manager page). Adopt it; a second process on the same card is
+		// strictly worse than a smaller-context one.
+		if (!this.#child || this.#child.exitCode !== null) {
+			const found = discoverSlmWorker();
+			if (found && found.modelPath === config.modelPath && (await probeHealth(found.url))) {
+				if (found.ctxSize < config.ctxSize) {
+					logger.warn("Adopting an SLM worker with a smaller context than configured", {
+						pid: found.pid,
+						workerCtx: found.ctxSize,
+						configuredCtx: config.ctxSize,
+						note: "runs will be split into more chunks",
+					});
+				}
+				this.#externalBaseUrl = found.url;
+				this.#config = { ...config, ctxSize: found.ctxSize };
+				if (this.#startedAt === 0) this.#startedAt = Date.now();
+				logger.info("Adopted a running SLM worker", { pid: found.pid, url: found.url });
+				return this.status();
+			}
+		}
 		if (current && this.#child && this.#child.exitCode === null) {
 			const reusable =
 				current.modelPath === config.modelPath &&
