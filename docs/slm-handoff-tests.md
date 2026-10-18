@@ -693,6 +693,27 @@ retry is not better.
 per turn (notes + contract); the benefit is that compaction never waits and a session that
 dies mid-turn leaves a current document. At `0` the contract runs only when compaction asks.
 
+---
+
+## 2026-10-18 — 22K worker context and the first production loop
+
+**Spark's KV is cheap.** `spark2_5` declares 36 blocks but only **9 full-attention** layers;
+27 are sliding-window-512 (`attention.sliding_window_pattern`). KV therefore scales with 9
+layers × 4 KV heads × 256 key/value length: ~19 KiB/token at q8_0, ~38 at f16. At 22 528 ctx
+the worker holds **3 110 MiB** on the 3070 (weights 2 294 + KV ~460 + buffers), leaving
+3 074 MiB free, with the V100 untouched at 25 082 MiB.
+
+**Spawn fix.** The harness spawn passed no `--cache-type-k/v`, so f16 KV would have doubled the
+budget and made `--fit` shed layers at 22K. Both are now q8_0.
+
+**Mis-pinning, caught.** Started without `CUDA_VISIBLE_DEVICES`, the worker split across both
+cards — 2 202 MiB on the V100 beside the main model. The harness pins `cuda:1`; a manual start
+must pass `CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1`.
+
+**First production loop.** In the live session: `SLM handoff notes written` at 22:58:54 —
+turns 5, 71 lines, 10 083 chars — and `SLM contract written` at 22:59:27, 3 789 chars in 33 s.
+The notes stage adopted the running worker rather than spawning a second one.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

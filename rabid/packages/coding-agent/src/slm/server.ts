@@ -633,6 +633,13 @@ export class SlmHandoffServer {
 			String(port),
 			"--ctx-size",
 			String(config.ctxSize),
+			// Quantised KV: Spark is a sliding-window hybrid (9 of 36 layers full-attention),
+			// so q8_0 costs ~19 KiB/token instead of ~38 — the difference between 44K fitting
+			// an 8 GB card beside the desktop and losing layers to `--fit`.
+			"--cache-type-k",
+			"q8_0",
+			"--cache-type-v",
+			"q8_0",
 			...slmOffloadArgs(config),
 			"--threads",
 			String(config.threads),
