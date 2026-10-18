@@ -77,17 +77,25 @@ window** (baseline harness context 1 948 tokens), `thresholdTokens: 2300`,
 `keepRecentTokens: 200`, `methodOrder: [slm]`. "Commit" is the context size recorded on the
 committed compaction entry.
 
-| Worker | Device | Worker ctx | Thinking | Detail | Summary | Commit (before → after) | Worker wall | Worker tok/s |
-|---|---|---|---|---|---|---|---|---|
-| **none** (`soft`) | — | — | — | — | 1 084 chars | 2 422 → 2 536 | — | — |
-| Qwen2.5-0.5B Q4_K_M | CPU, 4 thr | 8 192 | 0 | standard | 820 chars | 3 147 → 3 321 | 3.4 s | **40.4** |
-| SmolLM3-3B Q4_K_M | CPU, 4 thr | 8 192 | 4 096 | standard | — | — | 38.1 s | 10.2 |
-| SmolLM3-3B Q4_K_M | CPU, 4 thr | **16 384** | 1 024 | standard | 2 022 chars | 4 099 → 4 399 | 23.4 s | 9.8 |
-| Spark-X2.5-4B Q4_0 | **RTX 3070** (`cuda:1`) | 8 192 | 0 | standard | ~1 523 chars | 4 317 → 4 632 | 25.6 s | 11.6 |
-| Spark-X2.5-4B Q4_0 | **RTX 3070** (`cuda:1`) | 8 192 | 0 | **detailed** | 2 115 chars | — | 50.9 s | 10.7 |
+| Worker | Device | VRAM headroom | Worker ctx | Thinking | Detail | Summary | Commit | Wall | tok/s |
+|---|---|---|---|---|---|---|---|---|---|
+| **none** (`soft`) | — | — | — | — | — | 1 084 chars | 2 422 → 2 536 | — | — |
+| Qwen2.5-0.5B Q4_K_M | CPU, 4 thr | — | 8 192 | 0 | standard | 820 chars | 3 147 → 3 321 | 3.4 s | **40.4** |
+| SmolLM3-3B Q4_K_M | CPU, 4 thr | — | 8 192 | 4 096 | standard | — | — | 38.1 s | 10.2 |
+| SmolLM3-3B Q4_K_M | CPU, 4 thr | — | **16 384** | 1 024 | standard | 2 022 chars | 4 099 → 4 399 | 23.4 s | 9.8 |
+| Spark-X2.5-4B Q4_0 | **RTX 3070** | 2 048 | 8 192 | 0 | standard | ~1 523 chars | 4 317 → 4 632 | 25.6 s | 11.6 |
+| Spark-X2.5-4B Q4_0 | **RTX 3070** | 2 048 | 8 192 | 0 | **detailed** | 2 115 chars | — | 50.9 s | 10.7 |
 
 `—` marks a field the notebook did not record for that run (the run happened; the number
 was simply not captured), never a zero. Rows are rounded as measured.
+
+**Read the Spark rows with the headroom column.** `gpuFreeMiB: 2048` is a *cap*, not a
+property of the card: with the desktop already holding 4.6 GB of the 3070's 8 GB, that cap
+allowed llama.cpp only ~1.2 GB of VRAM, so most layers ran on the CPU (GPU utilisation 2–6 %,
+worker CPU ~400 %) — hence 11.6 tok/s. Lowering the cap to 512 fits the whole model
+(+2.67 GB, 7 324 MiB total) and the same worker measures **63.2 tok/s** (50 % GPU
+utilisation), 5.4× the capped figure. Choose the cap by what else needs the card: 512–1024
+for throughput, 2048+ when a game is running.
 
 The `soft` row is the control: no worker exists, the summary is the main model's, and it
 still carries the harness blocks. Every `slm` row records `method: "slm"` with **no**
@@ -104,7 +112,9 @@ Same prompts, bare worker runs (not commits), so the timings are comparable:
 | Qwen2.5-0.5B | CPU | 8 192 | 0 | 590 | 139 | 3.25 s | 42.8 | second pass, chained document |
 | SmolLM3-3B | CPU | 8 192 | 4 096 | 777 | 388 | 38.13 s | 10.2 | requirements kept; invented `## New information`, duplicate headings |
 | SmolLM3-3B | CPU | 16 384 | 1 024 | — | 407 | 42.6 s | 9.6 | lowering the budget from 4096 bought **no** speed |
-| Spark-X2.5-4B | RTX 3070 | 8 192 | 0 | — | 298 | 25.6 s | 11.6 | requirements verbatim and correctly classified |
+| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 2048` | 8 192 | 0 | — | 298 | 25.6 s | 11.6 | mostly CPU; requirements verbatim |
+| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 512` | 8 192 | 0 | — | 292 | 4.6 s | **63.2** | whole model on the card (steady state) |
+| Spark-X2.5-4B | RTX 3070, `gpuFreeMiB 512` | 8 192 | 0 | — | 323 | 5.1 s | 63.7 | first request after load (cold) |
 | Spark-X2.5-4B | RTX 3070 | 8 192 | 1 024 | — | 1 373 | 118 s | 11.6 | thinking dominates the run |
 | Spark-X2.5-4B | RTX 3070 | 8 192 | 0 | — | 546 | 50.9 s | 10.7 | `detailed` register: 2 115-char document |
 
@@ -116,7 +126,8 @@ Main model, same rig, for scale: **36 tok/s** decode.
 |---|---|---|
 | SmolLM3-3B, CPU, `--ctx-size 262144` | **12.5 GB** RSS | why the window is not copied wholesale |
 | SmolLM3-3B, CPU, `--ctx-size 16384` | **2.79 GB** RSS | the shipped default |
-| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 2048` | **+1.18 GB** VRAM (4 637 → 5 814 MiB) | ~2 GB left free; the rest spills to CPU |
+| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 2048` | **+1.18 GB** VRAM (4 637 → 5 814 MiB) | ~2 GB left free; most layers spill to CPU (11.6 tok/s) |
+| Spark-X2.5-4B, RTX 3070, `gpuFreeMiB 512` | **+2.67 GB** VRAM (4 652 → 7 324 MiB) | whole model resident, 63.2 tok/s |
 | Inference card during a worker run | 10 MiB idle / 23.9 GB with the 27B | untouched by the worker |
 
 Worker CPU under generation: **~400 %** (4 threads of 16), measured through the manager

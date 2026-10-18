@@ -591,13 +591,13 @@ export const cfgSlmHandoffDetail = register({
 export const cfgSlmHandoffGpuFreeMiB = register({
 	id: "compaction.slmHandoff.gpuFreeMiB",
 	type: "number",
-	default: 2048,
+	default: 1024,
 	ui: {
 		tab: "context",
 		group: "SLM handoff",
 		label: "SLM Handoff GPU Headroom",
 		description:
-			"VRAM (MiB) to leave free on a GPU worker's card; llama.cpp then offloads only the layers that fit. -1 disables auto-fit and offloads exactly gpuLayers",
+			"VRAM (MiB) to leave free on a GPU worker's card; llama.cpp then offloads only the layers that fit. Lower means more layers on the card: 2048 on an 8 GB card already holding 4.6 GB measured 11.6 tok/s, 512 measured 63.2. -1 disables auto-fit",
 	},
 });
 

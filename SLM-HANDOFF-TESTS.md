@@ -378,6 +378,30 @@ asserts the registers are mutually exclusive and that `detailed` asks for paths,
 and reasons. Cost of the verbose register on this box: ~40 % more summary text, ~2× worker
 output, ~2× wall time — still off the critical path, still bounded by `maxHandoffTokens`.
 
+---
+
+## 2026-10-17 — The 3070 is not slow; the VRAM cap was (correcting table B)
+
+**Setup.** Spark-X2.5-4B Q4_0 on `cuda:1`, ctx 8192, budget 0, loaded through the manager.
+Two variants of the same worker: `gpuFreeMiB: 2048` (the earlier row) and `gpuFreeMiB: 512`.
+Two requests each; the second is the steady-state measurement (the first builds CUDA graphs).
+
+**Observed.**
+
+```
+gpuFreeMiB 2048: 3070 4 637 -> 5 814 MiB (+1 177)   GPU util 2-6 %   worker CPU ~400 %   11.6 tok/s
+gpuFreeMiB  512: 3070 4 652 -> 7 324 MiB (+2 672)   GPU util 50 %                     63.2 / 63.7 tok/s
+```
+
+The earlier 11.6 tok/s figure was not the card's speed — `--fit-target 2048` on a desktop
+already holding 4.6 GB of an 8 GB card left llama.cpp ~1.2 GB, so it spilled most layers to
+CPU (hence 400 % CPU and 2–6 % GPU). With 512 the whole model is resident and the same
+worker is **5.4× faster**.
+
+**Conclusion.** `gpuFreeMiB` is a throughput/headroom trade, not a device property. Default
+lowered 2048 → 1024; 512–1024 for throughput, 2048+ when a game needs the card. README tables
+now carry the headroom column so a capped row can never be read as the card's ceiling.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

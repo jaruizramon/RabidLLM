@@ -85,8 +85,7 @@ nvidia-smi --query-gpu=index,memory.used --format=csv,noheader
 curl -s -X POST localhost:8090/api/slm/unload -H 'content-type: application/json' -d '{}'
 ```
 
-A worker on a gaming card should add ~1.2 GB with `gpuFreeMiB: 2048`, leaving that much
-free; the inference card must stay untouched.
+A worker on a gaming card adds ~1.2 GB with `gpuFreeMiB: 2048` (most layers spill to CPU — 11.6 tok/s for a 4B) and ~2.7 GB with `gpuFreeMiB: 512` (whole model on the card, 63 tok/s). Pick by what else needs the card; the inference card must stay untouched.
 
 ## Gotchas worth keeping
 
