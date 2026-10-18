@@ -4054,7 +4054,7 @@ export class AgentSession implements SettingsScope {
 			if (message?.role !== "assistant") continue;
 			const assistant = message as AssistantMessage;
 			if (assistant.duration === undefined) continue;
-			this.tokenRate.seed(assistant.usage.output, assistant.duration);
+			this.tokenRate.seed(assistant.usage.output, assistant.duration, assistant.ttft);
 			return;
 		}
 		this.tokenRate.reset();

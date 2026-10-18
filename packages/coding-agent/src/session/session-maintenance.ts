@@ -149,6 +149,13 @@ import {
 	type SlmHandoffRecord,
 } from "./slm-handoff";
 
+/**
+ * Output tokens a turn must produce before its rate counts as evidence for the
+ * speed floor. Below this the turn is dominated by prefill and prompt size, not
+ * by how fast the model generates.
+ */
+const SPEED_FLOOR_MIN_OUTPUT_TOKENS = 200;
+
 export type CompactionCheckResult = Readonly<{
 	continuationScheduled: boolean;
 	automaticContinuationBlocked?: boolean;
@@ -3066,6 +3073,13 @@ export class SessionMaintenance {
 			assistantMessage.stopReason === "aborted" ||
 			assistantMessage.stopReason === "length"
 		) {
+			return undefined;
+		}
+		// A short answer after a large prefill says nothing about generation speed. Without
+		// this gate every "long prompt, two-sentence reply" turn looks slow and the floor
+		// compacts a healthy session.
+		if (assistantMessage.usage.output < SPEED_FLOOR_MIN_OUTPUT_TOKENS) {
+			this.#speedState = { slowTurns: 0, cooldown: this.#speedState.cooldown };
 			return undefined;
 		}
 		const scope = this.#host.settings;
@@ -6321,7 +6335,7 @@ export class SessionMaintenance {
 			const shouldFallBack = reason !== "idle" && ((reason === "overflow" && !reclaimed) || stillOverThreshold);
 			if (shouldFallBack) {
 				const errorMessage = reclaimed
-					? `Auto-shake reclaimed ~${result.tokensFreed} tokens but context is still above the threshold; trying the next preferred compaction method.`
+					? `Auto-shake reclaimed ~${result.tokensFreed} tokens but the context is still over the compaction target; trying the next preferred compaction method.`
 					: "Auto-shake found nothing eligible to drop; trying the next preferred compaction method.";
 				await this.#emitLifecycleEvent(
 					{

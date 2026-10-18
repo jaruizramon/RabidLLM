@@ -62,6 +62,7 @@ function describeStatus(status: SlmServerStatus, deps: ModelsWorkerDeps): string
 		`Worker SLM: running (pid ${status.pid ?? "?"}, 127.0.0.1:${status.port ?? "?"})`,
 		`Model: ${status.modelPath ?? resolveSlmModelPath(cfgSlmHandoffModelPath.get(deps.settings))}`,
 		`Context: ${status.ctxSize ?? "?"} · Threads: ${status.threads ?? "?"} · Reasoning budget: ${status.reasoningBudgetTokens ?? "?"}`,
+		`Worker: ${status.external ? "adopted (not owned by this session)" : "spawned by the harness"}`,
 		`Device: ${status.device ?? "?"} · GPU layers: ${status.gpuLayers ?? "?"}${status.device?.startsWith("cuda") ? ` · Leaves ${cfgSlmHandoffGpuFreeMiB.get(deps.settings)} MiB free` : ""}`,
 		`Handoff RAM: ${paths.ram}`,
 		`Handoff disk: ${paths.disk}`,

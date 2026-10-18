@@ -33,6 +33,7 @@ import {
 	cfgSlmHandoffReasoningBudgetTokens,
 	cfgSlmHandoffServerPath,
 	cfgSlmHandoffThreads,
+	cfgSlmHandoffWorkerUrl,
 	type CompactionSettings,
 } from "./context-settings";
 import { resolveCompactionMethodOrder } from "./compaction-methods";
@@ -374,8 +375,11 @@ export function resolveSlmThreads(value: number): number {
  * must both exist. Synchronous and network-free — this gates every turn.
  */
 export function isSlmHandoffConfigured(
-	settings: Pick<CompactionSettings, "slmHandoffModelPath" | "slmHandoffServerPath">,
+	settings: Pick<CompactionSettings, "slmHandoffModelPath" | "slmHandoffServerPath" | "slmHandoffWorkerUrl">,
 ): boolean {
+	// An adopted worker owns the model and the binary; the harness only needs the URL,
+	// and the health check happens at use.
+	if (settings.slmHandoffWorkerUrl.trim() !== "") return true;
 	if (!fsSync.existsSync(resolveSlmModelPath(settings.slmHandoffModelPath))) return false;
 	const serverPath = resolveSlmServerPath(settings.slmHandoffServerPath);
 	if (!serverPath) return false;
@@ -430,6 +434,7 @@ export function resolveSlmServerConfig(settings: Settings, contextWindow: number
 		device,
 		gpuLayers,
 		gpuFreeMiB: cfgSlmHandoffGpuFreeMiB.get(settings),
+		workerUrl: cfgSlmHandoffWorkerUrl.get(settings).trim() || undefined,
 	};
 }
 

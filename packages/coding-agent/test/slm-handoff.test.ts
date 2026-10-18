@@ -348,8 +348,19 @@ describe("isSlmHandoffConfigured", () => {
 			isSlmHandoffConfigured({
 				slmHandoffModelPath: path.join(TEMP_ROOT, "absent.gguf"),
 				slmHandoffServerPath: "",
+				slmHandoffWorkerUrl: "",
 			}),
 		).toBe(false);
+	});
+
+	it("is true for an adopted worker even with no local model or binary", () => {
+		expect(
+			isSlmHandoffConfigured({
+				slmHandoffModelPath: path.join(TEMP_ROOT, "absent.gguf"),
+				slmHandoffServerPath: "",
+				slmHandoffWorkerUrl: "http://127.0.0.1:44091",
+			}),
+		).toBe(true);
 	});
 
 	it("is true when the model file and the server binary both resolve", async () => {
@@ -359,6 +370,12 @@ describe("isSlmHandoffConfigured", () => {
 		await Bun.write(serverPath, "#!/bin/sh\nexit 0\n");
 		await fs.chmod(serverPath, 0o755);
 
-		expect(isSlmHandoffConfigured({ slmHandoffModelPath: modelPath, slmHandoffServerPath: serverPath })).toBe(true);
+		expect(
+			isSlmHandoffConfigured({
+				slmHandoffModelPath: modelPath,
+				slmHandoffServerPath: serverPath,
+				slmHandoffWorkerUrl: "",
+			}),
+		).toBe(true);
 	});
 });

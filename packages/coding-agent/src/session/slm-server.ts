@@ -48,6 +48,8 @@ export interface SlmServerConfig {
 	gpuLayers: number;
 	/** VRAM (MiB) to leave free on the worker's card; -1 offloads exactly `gpuLayers`. */
 	gpuFreeMiB: number;
+	/** Adopt this already-running worker instead of spawning one; never killed on release. */
+	workerUrl?: string;
 }
 
 export interface SlmServerStatus {
@@ -61,6 +63,8 @@ export interface SlmServerStatus {
 	/** `cpu`, `cuda`, or `cuda:N`. */
 	device?: string;
 	gpuLayers?: number;
+	/** True when the harness adopted an existing process it does not own. */
+	external?: boolean;
 	uptimeMs?: number;
 }
 
@@ -177,6 +181,16 @@ async function resolveCpuMask(threads: number): Promise<string | undefined> {
 	let mask = 0n;
 	for (const id of selected) mask |= 1n << BigInt(id);
 	return `0x${mask.toString(16)}`;
+}
+
+/** True when `baseUrl` answers `/health` with 2xx. */
+async function probeHealth(baseUrl: string): Promise<boolean> {
+	try {
+		const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(1_500) });
+		return response.ok;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -340,6 +354,8 @@ export class SlmHandoffServer {
 	}
 
 	#child: Bun.Subprocess | undefined;
+	/** Set when a worker was adopted: the harness must never signal it. */
+	#externalBaseUrl: string | undefined;
 	#config: SlmServerConfig | undefined;
 	#port: number | undefined;
 	#startedAt = 0;
@@ -349,8 +365,28 @@ export class SlmHandoffServer {
 	#manualHold = false;
 	#exitHookInstalled = false;
 
+	/** Endpoint of a live worker, owned or adopted. */
+	#baseUrl(): string | undefined {
+		if (this.#externalBaseUrl !== undefined) return this.#externalBaseUrl;
+		return this.#port === undefined ? undefined : `http://127.0.0.1:${this.#port}`;
+	}
+
 	status(): SlmServerStatus {
 		const config = this.#config;
+		if (this.#externalBaseUrl !== undefined && config) {
+			const url = new URL(this.#externalBaseUrl);
+			return {
+				running: true,
+				external: true,
+				port: Number(url.port) || undefined,
+				modelPath: config.modelPath,
+				ctxSize: config.ctxSize,
+				threads: config.threads,
+				reasoningBudgetTokens: config.reasoningBudgetTokens,
+				device: "external",
+				uptimeMs: this.#startedAt === 0 ? undefined : Date.now() - this.#startedAt,
+			};
+		}
 		if (!config || !this.#child || this.#child.exitCode !== null) return { running: false };
 		return {
 			running: true,
@@ -405,8 +441,9 @@ export class SlmHandoffServer {
 		user: string,
 		signal?: AbortSignal,
 	): Promise<SlmCompletionResult> {
-		const status = await this.ensure(config);
-		if (status.port === undefined) throw new Error("SLM worker has no port");
+		await this.ensure(config);
+		const baseUrl = this.#baseUrl();
+		if (baseUrl === undefined) throw new Error("SLM worker has no endpoint");
 		const request: SlmCompletionRequest = {
 			model: SLM_MODEL_ALIAS,
 			messages: [
@@ -425,9 +462,9 @@ export class SlmHandoffServer {
 		const startedAt = Date.now();
 		const timeout = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
 		const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-		const result = await requestSlmCompletion(`http://127.0.0.1:${status.port}`, request, requestSignal);
+		const result = await requestSlmCompletion(baseUrl, request, requestSignal);
 		logger.debug("SLM handoff run complete", {
-			port: status.port,
+			baseUrl,
 			durationMs: Date.now() - startedAt,
 			inputTokens: result.inputTokens,
 			outputTokens: result.outputTokens,
@@ -450,6 +487,24 @@ export class SlmHandoffServer {
 	}
 
 	async #ensureLocked(config: SlmServerConfig): Promise<SlmServerStatus> {
+		const adopted = config.workerUrl?.trim() ?? "";
+		if (adopted !== "") {
+			// A worker is already running somewhere (the manager page, a previous
+			// session). Spawning a second one would double VRAM on the same card —
+			// measured: two Spark workers do not fit in 8 GB — so adopt it, and never
+			// signal it: the harness does not own it.
+			const baseUrl = adopted.replace(/\/$/, "");
+			if (!(await probeHealth(baseUrl))) {
+				throw new Error(
+					`compaction.slmHandoff.workerUrl is ${baseUrl} but nothing answers /health there; start the worker or clear the setting`,
+				);
+			}
+			this.#externalBaseUrl = baseUrl;
+			this.#config = config;
+			if (this.#startedAt === 0) this.#startedAt = Date.now();
+			return this.status();
+		}
+		this.#externalBaseUrl = undefined;
 		const current = this.#config;
 		if (current && this.#child && this.#child.exitCode === null) {
 			const reusable =
@@ -602,6 +657,7 @@ export class SlmHandoffServer {
 
 	async #stop(): Promise<void> {
 		const child = this.#child;
+		this.#externalBaseUrl = undefined;
 		this.#child = undefined;
 		this.#config = undefined;
 		this.#port = undefined;

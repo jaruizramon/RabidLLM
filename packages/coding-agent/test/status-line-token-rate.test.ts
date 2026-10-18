@@ -4,7 +4,7 @@ import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { renderSegment } from "@oh-my-pi/pi-tui/status-line/segments";
 import type { SegmentContext } from "@oh-my-pi/pi-tui/status-line/types";
 import { initTheme } from "@oh-my-pi/pi-tui/theme";
-import { calculateTokensPerSecond } from "@oh-my-pi/pi-coding-agent/utils/token-rate";
+import { calculateTokensPerSecond, TokenRateMeter } from "@oh-my-pi/pi-coding-agent/utils/token-rate";
 
 beforeAll(async () => {
 	await initTheme();
@@ -99,5 +99,33 @@ describe("token rate calculation", () => {
 			false,
 		);
 		expect(rate).toBeNull();
+	});
+});
+
+describe("decode throughput vs prompt prefill", () => {
+	it("seeds the meter with the decode window, ignoring prefill", () => {
+		const meter = new TokenRateMeter(text => text.length);
+		meter.seed(200, 10_000, 8_000);
+		// 200 tokens in the 2s after ttft is 100 tok/s, not 20 for the whole request.
+		expect(meter.rate()).toBeCloseTo(100, 0);
+	});
+
+	it("falls back to the whole duration when ttft is absent or implausible", () => {
+		const noTtft = new TokenRateMeter(text => text.length);
+		noTtft.seed(200, 10_000);
+		expect(noTtft.rate()).toBeCloseTo(20, 0);
+
+		const badTtft = new TokenRateMeter(text => text.length);
+		badTtft.seed(200, 10_000, 12_000);
+		expect(badTtft.rate()).toBeCloseTo(20, 0);
+	});
+
+	it("reports the same decode rate on the display path", () => {
+		const message = assistantMessage({
+			usage: { ...assistantMessage().usage, output: 200 },
+			duration: 10_000,
+			ttft: 8_000,
+		});
+		expect(calculateTokensPerSecond([message], false)).toBeCloseTo(100, 0);
 	});
 });

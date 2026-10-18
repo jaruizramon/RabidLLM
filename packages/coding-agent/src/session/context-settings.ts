@@ -564,6 +564,27 @@ export const cfgSlmHandoffGpuLayers = register({
 	},
 });
 
+export const cfgSlmHandoffWorkerUrl = register({
+	id: "compaction.slmHandoff.workerUrl",
+	type: "string",
+	default: "",
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Worker URL",
+		description:
+			"Adopt an already-running worker (e.g. one loaded from the manager page) instead of spawning a second one on the same card, e.g. http://127.0.0.1:44091. Empty spawns and owns its own worker",
+	},
+	validate: raw => {
+		if (raw === undefined) return;
+		if (typeof raw !== "string") throw new Error("compaction.slmHandoff.workerUrl must be a string");
+		const value = raw.trim();
+		if (value !== "" && !/^https?:\/\/[^\s]+$/i.test(value)) {
+			throw new Error('compaction.slmHandoff.workerUrl must be empty or a URL like "http://127.0.0.1:44091"');
+		}
+	},
+});
+
 export const cfgSlmHandoffDetail = register({
 	id: "compaction.slmHandoff.detail",
 	type: "string",
@@ -634,6 +655,7 @@ export const cfgCompaction = combine({
 	slmHandoffGpuLayers: cfgSlmHandoffGpuLayers,
 	slmHandoffGpuFreeMiB: cfgSlmHandoffGpuFreeMiB,
 	slmHandoffDetail: cfgSlmHandoffDetail,
+	slmHandoffWorkerUrl: cfgSlmHandoffWorkerUrl,
 });
 
 /**

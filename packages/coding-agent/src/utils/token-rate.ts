@@ -14,6 +14,8 @@ type AssistantLikeMessage = {
 	role: "assistant";
 	timestamp: number;
 	duration?: number;
+	/** Time to first token: the prefill share of `duration`. */
+	ttft?: number;
 	usage: AssistantUsage;
 };
 
@@ -65,7 +67,12 @@ export function calculateTokensPerSecond(
 
 	if (resolvedDurationMs === null || resolvedDurationMs < MIN_DURATION_MS) return null;
 
-	const tokensPerSecond = (outputTokens * 1000) / resolvedDurationMs;
+	// Decode throughput, not whole-request throughput: a local model's prompt
+	// prefill can dominate `duration`, which would report a fast model as slow.
+	const ttftMs =
+		typeof assistant.ttft === "number" && Number.isFinite(assistant.ttft) ? Math.max(0, assistant.ttft) : 0;
+	const decodeMs = ttftMs > 0 && ttftMs < resolvedDurationMs ? resolvedDurationMs - ttftMs : resolvedDurationMs;
+	const tokensPerSecond = (outputTokens * 1000) / decodeMs;
 	if (!Number.isFinite(tokensPerSecond) || tokensPerSecond <= 0) return null;
 
 	return tokensPerSecond;
@@ -241,16 +248,28 @@ export class TokenRateMeter {
 	 * a just-finished turn, the reading holds until the next message blends
 	 * with it or {@link reset} blanks it.
 	 */
-	seed(outputTokens: number, durationMs: number): void {
+	/**
+	 * Seed the history from one completed message.
+	 *
+	 * `durationMs` is the whole request, which on a local model is dominated by the
+	 * prompt prefill; `ttftMs` is subtracted so the ratio is decode throughput — the
+	 * number a "tokens per second" reading is supposed to mean, and the one the
+	 * speed-floor trigger must compare against its floor.
+	 */
+	seed(outputTokens: number, durationMs: number, ttftMs?: number): void {
 		if (!Number.isFinite(outputTokens) || outputTokens <= 0 || !Number.isFinite(durationMs) || durationMs <= 0) {
 			this.reset();
 			return;
 		}
+		const prefillMs = Number.isFinite(ttftMs) && ttftMs !== undefined ? Math.max(0, ttftMs) : 0;
+		// A ttft at or past the duration means the provider reported something odd;
+		// fall back to the full duration rather than inventing a tiny window.
+		const decodeMs = prefillMs > 0 && prefillMs < durationMs ? durationMs - prefillMs : durationMs;
 		this.#clearInflight();
-		const scale = Math.max(1, METER_MIN_TOKENS / outputTokens, METER_MIN_TIME_MS / durationMs);
+		const scale = Math.max(1, METER_MIN_TOKENS / outputTokens, METER_MIN_TIME_MS / decodeMs);
 		for (const sums of this.#history) {
 			sums.tokens = outputTokens * scale;
-			sums.time = durationMs * scale;
+			sums.time = decodeMs * scale;
 		}
 	}
 
