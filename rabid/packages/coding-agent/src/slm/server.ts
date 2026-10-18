@@ -207,13 +207,14 @@ export async function requestSlmCompletion(
 	baseUrl: string,
 	request: SlmCompletionRequest,
 	signal: AbortSignal,
+	normalize: "handoff" | "notes" = "handoff",
 ): Promise<SlmCompletionResult> {
-	let result = await postCompletion(baseUrl, request, signal);
+	let result = await postCompletion(baseUrl, request, signal, normalize);
 	if (result.document === "" && !signal.aborted) {
 		// One deterministic retry: a sampler that emitted nothing usable once
 		// usually does the same at temperature 0, and a second empty answer is a
 		// hard failure the caller can fall back from.
-		result = await postCompletion(baseUrl, { ...request, temperature: 0 }, signal);
+		result = await postCompletion(baseUrl, { ...request, temperature: 0 }, signal, normalize);
 	}
 	if (result.document === "") throw new Error("SLM worker returned no handoff document");
 	return result;
@@ -223,6 +224,7 @@ async function postCompletion(
 	baseUrl: string,
 	request: SlmCompletionRequest,
 	signal: AbortSignal,
+	normalize: "handoff" | "notes",
 ): Promise<SlmCompletionResult> {
 	const response = await fetch(`${baseUrl}/v1/chat/completions`, {
 		method: "POST",
@@ -242,7 +244,7 @@ async function postCompletion(
 	const content = typeof choice?.message?.content === "string" ? choice.message.content : "";
 	const usage = payload.usage;
 	return {
-		...normalizeSlmOutput(content),
+		...normalizeSlmOutput(content, normalize),
 		truncated: choice?.finish_reason === "length",
 		inputTokens: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : 0,
 		outputTokens: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : 0,
@@ -257,7 +259,10 @@ async function postCompletion(
  * tolerated by wrapping the text, because a handoff with prose beats no handoff
  * at all; an empty result is the caller's signal to retry.
  */
-export function normalizeSlmOutput(content: string): { document: string; formatFallback: boolean } {
+export function normalizeSlmOutput(
+	content: string,
+	mode: "handoff" | "notes" = "handoff",
+): { document: string; formatFallback: boolean } {
 	let text = content;
 	const lastThinkClose = text.lastIndexOf("</think>");
 	if (lastThinkClose !== -1) text = text.slice(lastThinkClose + "</think>".length);
@@ -265,12 +270,14 @@ export function normalizeSlmOutput(content: string): { document: string; formatF
 	const fence = /^```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)\r?\n?```$/;
 	const fenced = fence.exec(text);
 	if (fenced?.[1] !== undefined) text = fenced[1].trim();
-	const heading = text.indexOf("## ");
 	let formatFallback = false;
-	if (heading > 0) text = text.slice(heading).trim();
-	else if (heading === -1 && text !== "") {
-		text = `## Handoff\n\n${text}`;
-		formatFallback = true;
+	if (mode === "handoff") {
+		const heading = text.indexOf("## ");
+		if (heading > 0) text = text.slice(heading).trim();
+		else if (heading === -1 && text !== "") {
+			text = `## Handoff\n\n${text}`;
+			formatFallback = true;
+		}
 	}
 	// A partially framed answer (prose, then a fence) leaves its closing marker
 	// behind once the preamble is gone.
@@ -492,7 +499,7 @@ export class SlmHandoffServer {
 		system: string,
 		user: string,
 		signal?: AbortSignal,
-		options?: { temperature?: number; maxTokens?: number },
+		options?: { temperature?: number; maxTokens?: number; normalize?: "handoff" | "notes" },
 	): Promise<SlmCompletionResult> {
 		await this.ensure(config);
 		const baseUrl = this.#baseUrl();
@@ -515,7 +522,7 @@ export class SlmHandoffServer {
 		const startedAt = Date.now();
 		const timeout = AbortSignal.timeout(COMPLETION_TIMEOUT_MS);
 		const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-		const result = await requestSlmCompletion(baseUrl, request, requestSignal);
+		const result = await requestSlmCompletion(baseUrl, request, requestSignal, options?.normalize);
 		logger.debug("SLM handoff run complete", {
 			baseUrl,
 			durationMs: Date.now() - startedAt,

@@ -13,6 +13,11 @@ Rules:
 - Drop: reads and results that changed nothing, repeated output, abandoned approaches, anything a later event superseded (say what superseded it), and any path that plays no part in continuing.
 - Quote exactly when you quote. A requirement, identifier, path, or command you choose to include is verbatim — never rounded, never generalized. Omission is allowed; paraphrase is not.
 - Carry forward previous content that still informs the work. The document is cumulative, but it is a summary, not a transcript.
+{{#if abridgeOlder}}- Drop by provenance. Everything inside `<previous_handoff>` is older by definition: keep an item only if it still changes what the successor does next; drop it otherwise. What survives becomes one clause — no mechanism, no narration, no restating how something was done. Only the turn in `<turn_notes>` may carry detail.
+- `## Progress ### Done` is a ledger of what not to redo, one line per subsystem — not a per-test history. Fold repeated confirmations of the same thing into a single line.
+- Never repeat an item in two sections; a fact belongs where a successor would look for it, once.
+- Never abridge these: `## Hard requirements` and `## Key decisions` stay verbatim and cumulative; remove one only when a later decision provably supersedes it, and say so. `## Critical context` is current state: delete facts that no longer hold (ports, PIDs, load state, paths that moved) rather than carrying them.
+- Your output must not exceed {{targetTokens}} tokens. Growing past the previous document is an error unless the turn added a requirement or a decision.{{/if}}
 - Merge duplicates instead of repeating them.
 - Remove only what the new turn proves obsolete, and say why when a prior requirement was superseded.
 - Address the successor in the imperative ("Run …", "Do not …").

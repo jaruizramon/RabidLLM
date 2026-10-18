@@ -30,6 +30,7 @@ import {
 	cfgSlmHandoffGpuLayers,
 	cfgSlmHandoffMaxContextTokens,
 	cfgSlmHandoffMaxHandoffTokens,
+	cfgSlmHandoffAbridgeOlder,
 	cfgSlmHandoffContractEveryTurns,
 	cfgSlmHandoffMaxInputTokens,
 	cfgSlmHandoffMaxNotesTokens,
@@ -199,7 +200,12 @@ export function parseSlmNotesFile(raw: string): SlmNotesRecord | undefined {
 	if (!text.startsWith(NOTES_METADATA_OPEN)) return undefined;
 	const close = text.indexOf("-->");
 	if (close === -1) return undefined;
-	const body = text.slice(close + 3).trim();
+	const body = text
+		.slice(close + 3)
+		.split("\n")
+		.filter(line => !/^## /.test(line.trim()))
+		.join("\n")
+		.trim();
 	if (body === "") return undefined;
 	let metadata: SlmNotesMetadata | undefined;
 	try {
@@ -775,8 +781,19 @@ export class SlmHandoffCoordinator {
 		const sessionId = this.#options.sessionId();
 		const agentDir = this.#options.agentDir();
 		const detail = cfgSlmHandoffDetail.get(this.#options.settings);
+		const abridgeOlder = cfgSlmHandoffAbridgeOlder.get(this.#options.settings);
+		// A hard decay budget is the only thing that reliably shrinks the document: an
+		// instruction alone measured longer than no instruction (5 711 vs 4 173 chars).
+		// The new turn gets an allowance; everything older must fit in the remainder.
+		const previousTokens = previous === undefined ? 0 : Math.ceil(previous.length / CHARS_PER_TOKEN);
+		const targetTokens = Math.min(
+			config.maxHandoffTokens,
+			previousTokens === 0 ? config.maxHandoffTokens : Math.max(600, Math.round(previousTokens * 0.9) + 300),
+		);
 		const systemPrompt = prompt.render(slmHandoffSystemPrompt, {
 			maxHandoffTokens: config.maxHandoffTokens,
+			targetTokens,
+			abridgeOlder,
 			detailConcise: detail === "concise",
 			detailStandard: detail === "standard",
 			detailDetailed: detail === "detailed",
@@ -788,9 +805,13 @@ export class SlmHandoffCoordinator {
 			maxHandoffTokens: config.maxHandoffTokens,
 		});
 		const startedAt = Date.now();
-		let result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
+		let result = await this.#completeWithRetry(config, systemPrompt, userPrompt, {
+			maxTokens: targetTokens,
+		});
 		// A path the input never contained is an invention, not an abbreviation.
-		const source = `${notes.text}\n${actionLog}`;
+		// The previous document is a legitimate source: a path carried forward from it is not
+		// an invention (measured: `scripts/sim-smoke.mjs` was flagged on every contract).
+		const source = `${notes.text}\n${actionLog}\n${previous ?? ""}`;
 		const invented = unknownPaths(result.document, source);
 		if (invented.length > 0) {
 			logger.warn("SLM contract named paths absent from the notes; retrying", { paths: invented });
@@ -914,7 +935,7 @@ export class SlmHandoffCoordinator {
 		config: SlmServerConfig,
 		system: string,
 		user: string,
-		options?: { temperature?: number; maxTokens?: number },
+		options?: { temperature?: number; maxTokens?: number; normalize?: "handoff" | "notes" },
 	): Promise<Awaited<ReturnType<SlmHandoffServer["complete"]>>> {
 		try {
 			return await this.#server.complete(config, system, user, this.#abort.signal, options);
@@ -986,6 +1007,9 @@ export class SlmHandoffCoordinator {
 				result = await this.#completeWithRetry(config, systemPrompt, userPrompt, {
 					temperature: 0,
 					maxTokens: perRunTokens,
+					// Notes are lines, not a document: the handoff normalizer would wrap
+					// them in `## Handoff` and that heading then reaches the contract.
+					normalize: "notes",
 				});
 			} catch (error) {
 				const text = String(error);

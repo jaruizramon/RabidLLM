@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-import { requestSlmCompletion, type SlmCompletionRequest } from "@oh-my-pi/pi-coding-agent/slm/server";
+import {
+	normalizeSlmOutput,
+	requestSlmCompletion,
+	type SlmCompletionRequest,
+} from "@oh-my-pi/pi-coding-agent/slm/server";
 
 interface WorkerReply {
 	content: string;
@@ -116,5 +120,19 @@ describe("requestSlmCompletion", () => {
 		await expect(requestSlmCompletion(baseUrl(), REQUEST, AbortSignal.timeout(30_000))).rejects.toThrow(
 			"SLM worker HTTP 503: worker exploded",
 		);
+	});
+});
+
+describe("normalizeSlmOutput modes", () => {
+	it("handoff mode wraps heading-less text, notes mode keeps the lines", () => {
+		const notes = "- [USER] ship it\n- [THOUGHT] one way";
+
+		const asHandoff = normalizeSlmOutput(notes);
+		const asNotes = normalizeSlmOutput(notes, "notes");
+
+		expect(asHandoff.document).toContain("## Handoff");
+		expect(asHandoff.formatFallback).toBe(true);
+		expect(asNotes.document).toBe(`${notes}\n`);
+		expect(asNotes.formatFallback).toBe(false);
 	});
 });

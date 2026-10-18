@@ -714,6 +714,36 @@ must pass `CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1`.
 turns 5, 71 lines, 10 083 chars — and `SLM contract written` at 22:59:27, 3 789 chars in 33 s.
 The notes stage adopted the running worker rather than spawning a second one.
 
+---
+
+## 2026-10-18 — Scout of the live session: notes pollution, abridging that grew
+
+**Notes were handoff-shaped.** Every notes chunk was normalized by the handoff path, which wraps
+heading-less text in `## Handoff`. The live notes file carried five such headings. Notes are
+read with `normalize: "notes"` now (no wrapping), and heading lines are filtered on read so
+existing files are repaired.
+
+**Instruction-only abridging failed, measurably.** Two contracts over the same real document and
+notes:
+
+| run | chars | Progress | Hard requirements |
+|---|---|---|---|
+| A abridge | 5 331 | 1 551 | 487 |
+| B abridge from A | **5 711** | 1 959 | 487 |
+| C no abridging | **4 173** | 1 025 | 487 |
+
+The rule produced padding and duplicated bullets; the control was smaller. Replaced with a hard
+decay budget: `targetTokens = max(600, round(previousTokens * 0.9) + 300)`, capped by
+`maxHandoffTokens`, passed both as the prompt's target and as `max_tokens`. The prompt rule now
+says *drop* older items that no longer change the next action, fold `Done` to one line per
+subsystem, never repeat a fact in two sections, and prune stale `Critical context` — while
+`Hard requirements` and `Key decisions` remain verbatim and cumulative.
+
+**Path guard false positive.** `scripts/sim-smoke.mjs` was flagged on every contract because it
+appears in the previous document, not in the turn's notes. The guard now accepts the previous
+document as a source too, so carry-overs pass and real corruptions (`scripts/im-smoke.mjs`)
+still trip it.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

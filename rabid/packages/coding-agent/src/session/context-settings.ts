@@ -590,6 +590,19 @@ export const cfgSlmHandoffContractEveryTurns = register({
 	},
 });
 
+export const cfgSlmHandoffAbridgeOlder = register({
+	id: "compaction.slmHandoff.abridgeOlder",
+	type: "boolean",
+	default: true,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "Abridge Older Context",
+		description:
+			"Compress everything carried over from the previous handoff to one clause per item, keeping full detail only for the newest turn. Hard requirements, decisions and critical context are exempt",
+	},
+});
+
 export const cfgSlmHandoffWorkerUrl = register({
 	id: "compaction.slmHandoff.workerUrl",
 	type: "string",
@@ -682,6 +695,7 @@ export const cfgCompaction = combine({
 	slmHandoffGpuFreeMiB: cfgSlmHandoffGpuFreeMiB,
 	slmHandoffDetail: cfgSlmHandoffDetail,
 	slmHandoffWorkerUrl: cfgSlmHandoffWorkerUrl,
+	slmHandoffAbridgeOlder: cfgSlmHandoffAbridgeOlder,
 	slmHandoffContractEveryTurns: cfgSlmHandoffContractEveryTurns,
 	slmHandoffMaxNotesTokens: cfgSlmHandoffMaxNotesTokens,
 });
