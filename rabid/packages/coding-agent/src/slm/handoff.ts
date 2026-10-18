@@ -687,6 +687,31 @@ export class SlmHandoffCoordinator {
 		if (dropped > 0) logger.warn("SLM handoff backlog exceeded its budget; dropped the oldest turns", { dropped });
 	}
 
+	/**
+	 * One worker call, retried once when the socket dies.
+	 *
+	 * A worker can be killed by hand, by the manager panel, or by a crash mid-run; the run
+	 * is stateless, so a retry is safe and `ensure()` will respawn a dead process. Without
+	 * this, a single ECONNRESET at compaction time costs the whole handoff and falls back
+	 * to the main model (observed live).
+	 */
+	async #completeWithRetry(
+		config: SlmServerConfig,
+		system: string,
+		user: string,
+	): Promise<Awaited<ReturnType<SlmHandoffServer["complete"]>>> {
+		try {
+			return await this.#server.complete(config, system, user, this.#abort.signal);
+		} catch (error) {
+			if (this.#disposed || this.#abort.signal.aborted) throw error;
+			const text = String(error);
+			if (!/ECONNRESET|ECONNREFUSED|socket|fetch failed/i.test(text)) throw error;
+			logger.warn("SLM worker connection dropped; retrying once", { error: text.slice(0, 160) });
+			await Bun.sleep(500);
+			return await this.#server.complete(config, system, user, this.#abort.signal);
+		}
+	}
+
 	async #runBatch(batch: readonly AgentMessage[]): Promise<void> {
 		const config = resolveSlmServerConfig(this.#options.settings, this.#options.modelContextWindow());
 		const sessionId = this.#options.sessionId();
@@ -723,7 +748,7 @@ export class SlmHandoffCoordinator {
 			const startedAt = Date.now();
 			let result: Awaited<ReturnType<SlmHandoffServer["complete"]>>;
 			try {
-				result = await this.#server.complete(config, systemPrompt, userPrompt, this.#abort.signal);
+				result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
 			} catch (error) {
 				const text = String(error);
 				if (chunk.length > 1 && /exceeds the (?:available )?context|context size/i.test(text)) {

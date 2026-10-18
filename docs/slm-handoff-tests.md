@@ -529,6 +529,34 @@ both ends, reports the omission, and never exceeds the limit.
 **Conclusion.** Two independent guarantees now: chunks fit by construction (middle clip), and
 if the estimate still undershoots, the server's own rejection halves the chunk.
 
+---
+
+## 2026-10-18 — A killed worker cost the whole compaction (ECONNRESET)
+
+**Setup.** Live session at 88 257 tokens; mid-run compaction started while the worker (ctx
+32768) was up. The worker was then killed by hand while clearing a duplicate.
+
+**Observed.**
+
+```
+21:49:43 SLM handoff worker ready            port 36155 ctxSize 32768
+21:53:18 SLM handoff run failed              ECONNRESET: socket closed unexpectedly
+21:53:18 Background SLM handoff unavailable; trying next preferred compaction method
+21:53:18 Mid-run compaction ran between provider calls   contextTokens 88257
+```
+
+The compaction then ran on the 27B, and the session had no compaction entry yet — mid-run
+compaction is staged and applied at the turn boundary, so the bar still read 80K while the
+turn continued.
+
+**Fix.** A worker call is retried once on a connection-level failure (ECONNRESET,
+ECONNREFUSED, socket, fetch failed). Runs are stateless, so the retry is safe, and `ensure()`
+respawns a dead process before the second attempt. Aborts and non-network errors still fail
+immediately.
+
+**Conclusion.** Killing a worker no longer fails a compaction; it costs one retry and a
+respawn.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
