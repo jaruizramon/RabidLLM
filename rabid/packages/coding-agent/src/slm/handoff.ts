@@ -75,6 +75,13 @@ const METADATA_OPEN = "<!-- rabid-slm-handoff";
 const METADATA_CLOSE = "-->";
 /** Approximate token→character ratio used for every budget comparison here. */
 const CHARS_PER_TOKEN = 4;
+/**
+ * Splitting budget for one worker run. Code, JSON arguments and paths tokenize far
+ * denser than prose (measured: a transcript estimated at 13 824 tokens arrived as
+ * 22 141), so chunks are sized against a conservative ratio and the server's own
+ * overflow error still splits them further.
+ */
+const CHUNK_CHARS_PER_TOKEN = 2.5;
 const USER_MESSAGE_CLIP = 2_000;
 const GOAL_CLIP = 160;
 const FALLBACK_GOAL = "SLM handoff";
@@ -696,7 +703,13 @@ export class SlmHandoffCoordinator {
 			detailStandard: detail === "standard",
 			detailDetailed: detail === "detailed",
 		});
-		for (const chunk of chunkByRenderedLength(batch, config.maxInputTokens * CHARS_PER_TOKEN)) {
+		// A queue rather than a plain loop: an oversized chunk is split in half and both
+		// halves are retried with their own rendered prompt. The character estimate
+		// cannot be exact (code tokenizes denser than prose), so the server's own
+		// overflow rejection is the authority.
+		const queue: AgentMessage[][] = chunkByRenderedLength(batch, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN);
+		while (queue.length > 0) {
+			const chunk = queue.shift()!;
 			const userPrompt = prompt.render(slmHandoffInputPrompt, {
 				previousHandoff: previous?.document || "(none)",
 				turnTranscript: renderTurnTranscript(chunk),
@@ -704,7 +717,22 @@ export class SlmHandoffCoordinator {
 				maxHandoffTokens: config.maxHandoffTokens,
 			});
 			const startedAt = Date.now();
-			const result = await this.#server.complete(config, systemPrompt, userPrompt, this.#abort.signal);
+			let result: Awaited<ReturnType<SlmHandoffServer["complete"]>>;
+			try {
+				result = await this.#server.complete(config, systemPrompt, userPrompt, this.#abort.signal);
+			} catch (error) {
+				const text = String(error);
+				if (chunk.length > 1 && /exceeds the (?:available )?context|context size/i.test(text)) {
+					const mid = Math.ceil(chunk.length / 2);
+					logger.warn("SLM worker rejected an oversized chunk; splitting it", {
+						messages: chunk.length,
+						error: text.slice(0, 160),
+					});
+					queue.unshift(chunk.slice(mid), chunk.slice(0, mid));
+					continue;
+				}
+				throw error;
+			}
 			const leaf = chunk[chunk.length - 1]!;
 			const record: SlmHandoffRecord = {
 				document: result.document,

@@ -58,7 +58,7 @@ compaction:
     modelPath: @HOME@/models/Spark-X2.5-4B-Q4_0.gguf
     device: cuda:1
     gpuFreeMiB: 2048
-    maxContextTokens: 16384
+    maxContextTokens: 32768
     maxHandoffTokens: 2048
     detail: detailed
     reasoningBudgetTokens: 0

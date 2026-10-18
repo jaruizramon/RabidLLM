@@ -453,6 +453,39 @@ ttft yields the decode rate (100 tok/s for 200 tokens in 2 s), and a reported tt
 context threshold (40K) is what should fire first; the floor should trip only where decode
 actually decays — the ~88K the user expected, not 29K.
 
+---
+
+## 2026-10-18 — A 22K request against a 16K context: the chunk estimate was optimistic
+
+**Setup.** Live rabid session at 54K/88K, mid-run compaction. The worker started
+(`ctxSize 16384`) and immediately failed.
+
+**Observed.**
+
+```
+SLM handoff run failed   Error: SLM worker HTTP 400: request (22141 tokens) exceeds the context
+Background SLM handoff unavailable; trying next preferred compaction method   reason=threshold
+```
+
+The region was split with a 4-chars-per-token assumption; this transcript is code- and
+JSON-dense (~2.5 chars/token), so a chunk sized at 13 824 estimated tokens went out as
+22 141 real tokens and the server rejected it — and the whole compaction fell back to the
+main model. Two workers were also resident on the 3070 at the time (one left over from the
+manager panel), so both ran partially offloaded.
+
+**Fix.**
+
+- Chunk splitting now uses a conservative 2.5 chars/token (`CHUNK_CHARS_PER_TOKEN`), and the
+  batch runs from a queue: on a context-overflow rejection the chunk is halved and both halves
+  are retried with their own rendered prompt. The server's rejection is the authority; the
+  estimate is only a hint.
+- `maxContextTokens` raised to 32768 for 88K targets (one run needs prompt ≈16K + output
+  budget, and the card holds a 4B Q4 + 32K KV with room to spare once only one worker runs).
+- The stale manager worker was unloaded; the harness owns the worker.
+
+**Conclusion.** This is why "it's taking a while": the fallback ran the 27B over the region.
+With the queue and the larger context, the same compaction should stay on the worker.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
