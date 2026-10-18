@@ -671,6 +671,28 @@ open call.
 path; notes budget 4 096 holds roughly one long turn, so older turns roll off (newest-first is
 the intent).
 
+---
+
+## 2026-10-18 — Rinse and repeat: notes → contract every turn
+
+Ran the loop end to end against a live turn on the up worker (notes, then contract), with the
+prompts and renderers the coordinator uses.
+
+**Measured.** Short turn: notes **257 tokens in one run**, contract **1 179 tokens in 13.6 s**,
+3 796-char document with all eight headings, "What just happened" carrying Learned/Verified
+bullets and the exact formulas, and the file names that mattered.
+
+**Defect the loop exposed.** The contract rewrote `src/sim/demil.js` as `src/imil/demil.js`. The
+prompt already said "copy paths character for character"; the model did it anyway. Added a
+deterministic check: every path token in the document must appear in the notes or
+`recent_actions` (a relative path is accepted when the input carried an absolute one). An
+unknown path triggers one retry that names the offending tokens; the document is kept if the
+retry is not better.
+
+**Cadence.** `compaction.slmHandoff.contractEveryTurns`, default `1`. Cost is two worker calls
+per turn (notes + contract); the benefit is that compaction never waits and a session that
+dies mid-turn leaves a current document. At `0` the contract runs only when compaction asks.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

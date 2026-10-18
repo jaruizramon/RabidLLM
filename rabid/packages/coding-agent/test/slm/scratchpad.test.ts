@@ -5,6 +5,7 @@ import {
 	countLogEchoes,
 	renderScratchpad,
 	stripLogEchoes,
+	unknownPaths,
 } from "@oh-my-pi/pi-coding-agent/slm/scratchpad";
 
 function user(text: string): AgentMessage {
@@ -140,5 +141,21 @@ describe("log transcription guard", () => {
 		expect(cleaned).not.toContain("[THOUGHT]");
 		expect(cleaned).not.toContain("[TOOL read]");
 		expect(cleaned).not.toContain("[SAID]");
+	});
+});
+
+describe("unknownPaths", () => {
+	const source = [
+		"- [TOOL read] src/sim/economy.js → …",
+		"- [TOOL edit] src/sim/demil.js → applied",
+		"/home/pipo/Documents/basicRocket/scripts/sim-smoke.mjs",
+	].join("\n");
+
+	it("catches a path the input never contained", () => {
+		expect(unknownPaths("See src/imil/demil.js for the check.", source)).toEqual(["src/imil/demil.js"]);
+	});
+
+	it("accepts a relative path that the input only carried as an absolute one", () => {
+		expect(unknownPaths("Run scripts/sim-smoke.mjs.", source)).toEqual([]);
 	});
 });

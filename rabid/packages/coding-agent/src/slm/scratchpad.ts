@@ -161,3 +161,20 @@ export function stripLogEchoes(document: string): string {
 		.replace(/\n{3,}/g, "\n\n")
 		.trim();
 }
+
+/** Paths with a directory component: `src/sim/economy.js`, `./a/b.ts`. */
+const PATH_TOKEN = /\b[\w.-]+(?:\/[\w.-]+)+\.[a-z]{1,6}\b/g;
+
+/**
+ * Paths the document names that the notes and actions never contained.
+ *
+ * Measured: a 4B contract rewrote `src/sim/demil.js` as `src/imil/demil.js` even though the
+ * prompt says to copy paths. A successor following that path loses a turn, so a document
+ * that invents paths is worth one retry — the same treatment as a transcribed log.
+ */
+export function unknownPaths(document: string, source: string): string[] {
+	const known = new Set(source.match(PATH_TOKEN) ?? []);
+	return [...new Set(document.match(PATH_TOKEN) ?? [])].filter(
+		token => ![...known].some(path => path === token || path.endsWith(`/${token}`) || token.endsWith(`/${path}`)),
+	);
+}

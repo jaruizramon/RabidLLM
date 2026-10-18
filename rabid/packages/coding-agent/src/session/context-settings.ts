@@ -577,6 +577,19 @@ export const cfgSlmHandoffMaxNotesTokens = register({
 	},
 });
 
+export const cfgSlmHandoffContractEveryTurns = register({
+	id: "compaction.slmHandoff.contractEveryTurns",
+	type: "number",
+	default: 1,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Contract Cadence",
+		description:
+			"Write the handoff contract after every N completed turns (0 = only when compaction asks). At 1 the summary of a turn is ready when the next prompt starts, so compaction reuses it instead of waiting",
+	},
+});
+
 export const cfgSlmHandoffWorkerUrl = register({
 	id: "compaction.slmHandoff.workerUrl",
 	type: "string",
@@ -669,6 +682,7 @@ export const cfgCompaction = combine({
 	slmHandoffGpuFreeMiB: cfgSlmHandoffGpuFreeMiB,
 	slmHandoffDetail: cfgSlmHandoffDetail,
 	slmHandoffWorkerUrl: cfgSlmHandoffWorkerUrl,
+	slmHandoffContractEveryTurns: cfgSlmHandoffContractEveryTurns,
 	slmHandoffMaxNotesTokens: cfgSlmHandoffMaxNotesTokens,
 });
 

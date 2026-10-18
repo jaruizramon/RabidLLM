@@ -30,6 +30,7 @@ import {
 	cfgSlmHandoffGpuLayers,
 	cfgSlmHandoffMaxContextTokens,
 	cfgSlmHandoffMaxHandoffTokens,
+	cfgSlmHandoffContractEveryTurns,
 	cfgSlmHandoffMaxInputTokens,
 	cfgSlmHandoffMaxNotesTokens,
 	cfgSlmHandoffModelPath,
@@ -42,7 +43,7 @@ import {
 import { resolveCompactionMethodOrder } from "../session/compaction-methods";
 import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
 import { messageText, renderFileActions } from "../rabid/turn-cards";
-import { boundScratchpad, countLogEchoes, renderScratchpad, stripLogEchoes } from "./scratchpad";
+import { boundScratchpad, countLogEchoes, renderScratchpad, stripLogEchoes, unknownPaths } from "./scratchpad";
 import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
 export { ensureSlmModelDownloaded } from "./server";
@@ -558,6 +559,7 @@ export function resolveSlmServerConfig(settings: Settings, contextWindow: number
 		gpuFreeMiB: cfgSlmHandoffGpuFreeMiB.get(settings),
 		workerUrl: cfgSlmHandoffWorkerUrl.get(settings).trim() || undefined,
 		maxNotesTokens: Math.max(256, cfgSlmHandoffMaxNotesTokens.get(settings)),
+		contractEveryTurns: Math.max(0, Math.floor(cfgSlmHandoffContractEveryTurns.get(settings))),
 	};
 }
 
@@ -787,6 +789,15 @@ export class SlmHandoffCoordinator {
 		});
 		const startedAt = Date.now();
 		let result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
+		// A path the input never contained is an invention, not an abbreviation.
+		const source = `${notes.text}\n${actionLog}`;
+		const invented = unknownPaths(result.document, source);
+		if (invented.length > 0) {
+			logger.warn("SLM contract named paths absent from the notes; retrying", { paths: invented });
+			const stricter = `${userPrompt}\n\nYour previous answer named paths that do not appear in the notes or recent_actions: ${invented.join(", ")}. Copy paths character for character from those sections; if a path is not there, do not name it.`;
+			const second = await this.#completeWithRetry(config, systemPrompt, stricter);
+			if (unknownPaths(second.document, source).length < invented.length) result = second;
+		}
 		// Notes are cheap to copy; the document must not be a copy of them.
 		const echoes = countLogEchoes(result.document);
 		if (echoes >= 3) {
@@ -929,9 +940,13 @@ export class SlmHandoffCoordinator {
 		const sessionId = this.#options.sessionId();
 		const agentDir = this.#options.agentDir();
 		const existing = await readSlmNotes(agentDir, sessionId);
+		const previousDocument = (await readSlmHandoff(agentDir, sessionId))?.document;
+		// One increment per batch: `turns` counts completed turns, not chunk runs.
+		const turnNumber = (existing?.metadata.turns ?? 0) + 1;
 		const notesBudget = Math.floor(config.maxNotesTokens * CHUNK_CHARS_PER_TOKEN);
 		let notes = existing?.text ?? "";
 		const systemPrompt = prompt.render(slmNotesSystemPrompt, {});
+		let lastRecord: SlmNotesRecord | undefined;
 		const perRunTokens = Math.min(NOTES_PER_RUN_TOKENS, config.maxNotesTokens);
 		const perRunLines = Math.max(8, Math.floor(perRunTokens / NOTE_TOKENS_PER_LINE));
 		// Split by note lines first, then by rendered size: a run that overruns its budget
@@ -997,16 +1012,28 @@ export class SlmHandoffCoordinator {
 					sessionId,
 					coveredLeafKey: leaf,
 					coveredAt: Date.now(),
-					turns: (existing?.metadata.turns ?? 0) + 1,
+					turns: turnNumber,
 				},
 			};
 			await writeSlmNotes(agentDir, sessionId, record);
+			lastRecord = record;
 			logger.debug("SLM handoff notes written", {
 				turns: record.metadata.turns,
 				lines: notes.split("\n").length,
 				chars: notes.length,
 				ms: Date.now() - startedAt,
 			});
+		}
+		// Cadence: at 1 the contract is written as the turn ends, so the summary is ready
+		// when the next prompt starts and compaction reuses it without another call.
+		const every = config.contractEveryTurns;
+		if (lastRecord !== undefined && every > 0 && turnNumber % every === 0) {
+			try {
+				await this.#runContract(config, lastRecord, previousDocument, renderFileActions(batch));
+			} catch (error) {
+				// The notes survive: compaction retries the contract from them.
+				logger.warn("SLM contract after turn failed", { error: String(error) });
+			}
 		}
 	}
 }

@@ -53,6 +53,8 @@ export interface SlmServerConfig {
 	workerUrl?: string;
 	/** Maximum size of the per-turn notes, in tokens. */
 	maxNotesTokens: number;
+	/** Write the contract after every N turns; 0 writes it only at compaction. */
+	contractEveryTurns: number;
 }
 
 export interface SlmServerStatus {
