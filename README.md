@@ -1,7 +1,13 @@
 # RabidAI
 
-One repository holding three things that only make sense together, built for one box: a
-single inference GPU, a gaming card, and local models.
+My setup, kept in one repository: a duplicator for this box, the background compaction
+handoff it runs, and the harness those two live in. Three things, because they only work
+together — a single inference GPU, a gaming card, and local models.
+
+> The harness is built on [oh-my-pi](https://github.com/can1357/oh-my-pi) (MIT) and that debt
+> is the largest one here. Attribution, what is upstream and what is mine:
+> [`CREDITS.md`](CREDITS.md). Everything not listed in [`rabid/docs/FORK.md`](rabid/docs/FORK.md)
+> is upstream work, unmodified.
 
 | Pillar | What it is | Where |
 |---|---|---|
@@ -210,14 +216,20 @@ rabid/
 docs/                      upstream documentation (compaction.md, settings.md, …)
 ```
 
-## Upstream
+## Credits and upstream
 
-RabidAI is a fork; the harness, tools, providers and most docs are oh-my-pi's work, with the
-divergences inventoried in [`rabid/docs/FORK.md`](rabid/docs/FORK.md).
-The upstream README is kept at [`docs/upstream-readme.md`](docs/upstream-readme.md);
-upstream project and releases live at [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi)
-([omp.sh](https://omp.sh)). Sync with `git fetch upstream && git merge upstream/main` —
-`rig/` and the `slm-*` modules are the fork's own surface.
+RabidAI's harness is a modified copy of [oh-my-pi](https://github.com/can1357/oh-my-pi), MIT,
+Copyright (c) 2025 Mario Zechner, (c) 2025–2026 Can Bölük, (c) 2026 Stencil Labs, Inc. —
+itself a fork of [Pi](https://github.com/badlogic/pi-mono) by @mariozechner. The license text
+in [`LICENSE`](LICENSE) is unchanged, the upstream README is preserved at
+[`docs/upstream-readme.md`](docs/upstream-readme.md), and the full attribution — including
+third-party tools and the model weights this repo does *not* ship — is in
+[`CREDITS.md`](CREDITS.md).
+
+The harness keeps upstream paths on purpose: `git fetch upstream && git merge upstream/main`
+stays reviewable, and [`rabid/docs/FORK.md`](rabid/docs/FORK.md) is the inventory of what a
+merge has to reconcile. `rig/`, `src/slm/`, `src/rabid/` and the harness changes listed there
+are mine.
 
 ## Status and limits
 

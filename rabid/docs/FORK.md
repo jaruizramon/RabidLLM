@@ -1,9 +1,10 @@
 # The rabid harness
 
-RabidAI is **not** upstream oh-my-pi with a config profile bolted on. The harness itself is
-modified: compaction, maintenance, the token meter, the TUI, the provider layer and the model
-catalog all carry fork changes. This file is the inventory, so a future merge with upstream
-has a boundary to check against.
+RabidAI's harness is built on **oh-my-pi** (MIT — attribution in
+[`../../CREDITS.md`](../../CREDITS.md)), and it is more than that harness plus a config
+profile: compaction, maintenance, the token meter, the TUI, the provider layer and the model
+catalog all carry changes. This file is the inventory — what was added, what was rewired, and
+what stayed untouched — so a future merge with upstream has a boundary to check against.
 
 Upstream README: [`../docs/upstream-readme.md`](../../docs/upstream-readme.md). Sync:
 `git fetch upstream && git merge upstream/main`.
