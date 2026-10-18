@@ -20,6 +20,17 @@ describe("CustomEditor keybindings", () => {
 		expect(onRetry).toHaveBeenCalledTimes(1);
 	});
 
+	it("routes Alt+Q to the preset selector", () => {
+		const editor = new CustomEditor(getEditorTheme());
+		const onSelectPreset = vi.fn();
+
+		editor.setActionKeys("app.preset.select", ["alt+q"]);
+		editor.onSelectPreset = onSelectPreset;
+		editor.handleInput("\x1bq");
+
+		expect(onSelectPreset).toHaveBeenCalledTimes(1);
+	});
+
 	it("lets custom handlers keep precedence over the default retry chord", () => {
 		const editor = new CustomEditor(getEditorTheme());
 		const onRetry = vi.fn();

@@ -150,6 +150,7 @@ describe("async speculative compaction", () => {
 			shake: async () => ({ modified: false, tokensRemoved: 0 }),
 			dropImages: async () => ({ removed: 0 }),
 			generateHandoffDocument: options.generateHandoffDocument ?? (async () => undefined),
+			prepareSlmHandoff: async () => undefined,
 			removeAssistantMessageFromActiveContext: () => {},
 			dropPersistedAssistantTurn: async () => undefined,
 			runRecoveryCompactionWithRollback: async () => ({ continuationScheduled: false }),
@@ -265,7 +266,7 @@ describe("async speculative compaction", () => {
 		await maintenance.runAutoCompaction("threshold", false, { triggerContextTokens: THRESHOLD });
 
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("armed summary");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("armed summary");
 		expect(compactSpy).toHaveBeenCalledTimes(1);
 		expect(events).toEqual(expect.arrayContaining(["auto_compaction_start", "auto_compaction_end"]));
 	});
@@ -358,7 +359,7 @@ describe("async speculative compaction", () => {
 		await maintenance.runAutoCompaction("threshold", false, { triggerContextTokens: THRESHOLD });
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("native summary 2");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("native summary 2");
 	});
 
 	it("preserves an in-flight native interval through the next compaction", async () => {
@@ -544,7 +545,7 @@ describe("async speculative compaction", () => {
 
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("remote summary 2");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("remote summary 2");
 	});
 
 	it("discards an armed summary after a reset boundary and re-summarizes the new branch", async () => {
@@ -564,7 +565,7 @@ describe("async speculative compaction", () => {
 
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("summary 2");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("summary 2");
 	});
 
 	it("does not start speculative work when async compaction is disabled", () => {
@@ -678,7 +679,7 @@ describe("async speculative compaction", () => {
 		});
 
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("grace summary");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("grace summary");
 		expect(compactSpy).toHaveBeenCalledTimes(1);
 	});
 
@@ -786,7 +787,7 @@ describe("async speculative compaction", () => {
 		});
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
 		expect(entry?.type === "compaction" ? entry.method : undefined).toBe("soft");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("soft summary");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("soft summary");
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 	});
 
@@ -851,7 +852,7 @@ describe("async speculative compaction", () => {
 		// Stale speculation was discarded and a fresh compaction was run on the new branch
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("summary 2");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("summary 2");
 	});
 
 	it("discards an armed summary when a persisted custom message prevents recovery headroom", async () => {
@@ -884,7 +885,7 @@ describe("async speculative compaction", () => {
 		// speculation is discarded and fresh compaction runs on the new branch.
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("summary 2");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("summary 2");
 	});
 
 	it("discards an armed summary when a pending prompt exhausts recovery headroom", async () => {
@@ -906,7 +907,7 @@ describe("async speculative compaction", () => {
 
 		expect(compactSpy).toHaveBeenCalledTimes(2);
 		const entry = sessionManager.getEntries().findLast(item => item.type === "compaction");
-		expect(entry?.type === "compaction" ? entry.summary : undefined).toBe("summary 2");
+		expect(entry?.type === "compaction" ? entry.summary : undefined).toContain("summary 2");
 	});
 
 	it("discards an armed handoff summary when post-snapshot branch growth prevents recovery headroom", async () => {

@@ -1,0 +1,20 @@
+#!/bin/sh
+# llama-proxy — the tailnet front door to the V100 router (§23 of
+# ~/Desktop/local-qwen-on-v100.md).
+#
+# The router only ever listens on 127.0.0.1:8080 and carries no API key, so nothing
+# outside this box can reach the models.  This binds the box's Tailscale address and
+# relays to that loopback router: the laptop on the tailnet speaks the same paths and
+# the same model ids, at http://<tailnet-ip>:8080/v1, with a streaming completion
+# relayed token by token.
+#
+#   llama-proxy          bind the tailnet address and relay (foreground; Ctrl-C stops it)
+#   llama-proxy stop     stop it (INT first, as this rig needs)
+#   llama-proxy status   what is bound, and what the upstream answers
+#   llama-proxy logs     follow the access log
+#
+# Nothing starts by itself here, the same as the manager: the model server and this
+# proxy are both started by hand, and the V100 stays empty until a card is dropped on
+# the manager page.  Code, pidfile, state file and log live with the manager's, under
+# ~/.local/share/llama-v100.
+exec python3 "$HOME/.local/share/llama-v100/proxy.py" "$@"

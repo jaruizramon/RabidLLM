@@ -232,6 +232,33 @@ Choose Nemotron for live English dictation. It processes new audio in 160 ms chu
 
 In Tern, click the microphone beside Send, speak when **Recording · Stop** appears, then click Stop to finish the draft. This button never submits automatically. Keyboard dictation still follows `stt.submitTrigger`.
 
+
+## llama-server preset switching (`/preset`)
+
+`/preset` routes through llama-manager (default `http://127.0.0.1:8090`, override with `RABID_LLAMA_MANAGER`) and checks the router's preset list (`RABID_LLAMA_ROUTER`, default `http://127.0.0.1:8080`):
+
+- `/preset`, or `Alt+Q` — choose a **mode** (`fast`, `balanced`, `deep`), then which local model it applies to, then confirm (`Enter` applies, `Esc` cancels). The mode changes the request-side budget/sampling and hides `task`; it never unloads a model by itself. If the chosen model is not resident, the confirmation names the model that will be evicted and the harness loads it through the manager.
+- `/preset fast <model-id>` — apply a mode to a model without the pickers (ACP/scripts). The applied mode is written to `rabid.mode` in the config, so it survives a restart.
+
+The row above the input confirms what is in force, even before the first token, and shows both gauges — e.g.
+
+```text
+ ⚡ rabid-fast · reasoning 1,220/2,048 █████░░░░░ · ctx 62% ██████░┊░░ · 30.0 tok/s
+```
+
+- The reasoning gauge counts streamed thinking (approximate tokens) against the budget actually sent for the selected
+  level; when it fills, the server stops thinking for that request.
+- The context gauge marks the compaction threshold with `┊`; when the fill crosses it, automatic maintenance
+  (“rummaging”) fires and the archive panel below appears. To watch it sooner, lower `compaction.thresholdPercent`
+  in `~/.rabid/agent/config.yml` (e.g. `10`) or run `/shake` explicitly.
+- The old model-keyed `llama-rabid/rabid-fast` profile cannot be mistaken for an active mode once the gauge header
+  names the live mode.
+- `/preset unload <id>` — unloads it through the manager, which parks its context for a fast reload.
+- `/preset reload` — re-reads omp's `models.yml` only. It never calls the router, so the resident model stays in VRAM.
+- `/preset restart` — stops and starts the router so it re-reads `models.ini`. This is the **only** action that evicts the resident model; the TUI asks for confirmation first.
+
+A preset added to `models.ini` while the router is running is known to the manager (it parses the file per call) but not to the router (it reads the file at startup). `/preset load` refuses such a preset and points at `/preset restart` instead of evicting the resident model silently. Unloading is also what makes a later load fast: the manager parks the KV/context state on unload and restores it on the next load.
+
 ## Integration notes
 
 - Local tiny inference for title, memory, or judgment workloads is selected with a `local/<model-id>` role assignment. An unset `tiny` role stays on its online default; an unset `memory` role follows the effective `tiny` role and can therefore become local when `tiny` is local. Unset `speech` and `dictation` roles use their own built-in priority lists, whose first candidates are local.

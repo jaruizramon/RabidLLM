@@ -440,7 +440,7 @@ describe("issue #986 compaction auth fallback", () => {
 
 		const result = await session.compact();
 
-		expect(result.summary).toBe("same-provider manual summary");
+		expect(result.summary).toContain("same-provider manual summary");
 		expect(attemptedModels).toEqual([
 			`${currentModel.provider}/${currentModel.id}`,
 			`${sameProviderModel.provider}/${sameProviderModel.id}`,
@@ -495,7 +495,7 @@ describe("issue #986 compaction auth fallback", () => {
 
 		const result = await session.compact();
 
-		expect(result.summary).toBe("fallback summary");
+		expect(result.summary).toContain("fallback summary");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(compactSpy.mock.calls.map(([, model]) => `${model.provider}/${model.id}`)).toEqual([
 			`${currentModel.provider}/${currentModel.id}`,
@@ -585,7 +585,7 @@ describe("issue #986 compaction auth fallback", () => {
 
 		const result = await session.compact();
 
-		expect(result.summary).toBe("fallback summary");
+		expect(result.summary).toContain("fallback summary");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(compactSpy).toHaveBeenCalledTimes(3);
 		expect(compactSpy.mock.calls.map(([, model]) => `${model.provider}/${model.id}`)).toEqual([

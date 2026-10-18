@@ -849,6 +849,10 @@ export type OpenAICompletionsParams = Omit<ChatCompletionCreateParamsStreaming, 
 		reasoning_effort?: string;
 	};
 	reasoning?: { effort?: string; enabled?: boolean; max_tokens?: number };
+	/** llama.cpp thinking-token budget (`compat.reasoningBudgetField` decides which spelling). */
+	reasoning_budget_tokens?: number;
+	/** Legacy llama.cpp spelling of {@link reasoning_budget_tokens}. */
+	thinking_budget_tokens?: number;
 	venice_parameters?: { disable_thinking?: boolean; [key: string]: unknown };
 	reasoning_effort?: string | null;
 	service_tier?: ServiceTier;
@@ -1267,16 +1271,16 @@ export function applyChatCompletionsReasoningParams(
 		hasTools: options?.hasTools,
 	});
 	applyChatCompletionsCompatPolicy(params, policy);
-	if (
-		model.provider !== "cline-pass" ||
-		!policy.reasoning.enabled ||
-		model.thinking?.mode !== "budget" ||
-		options?.reasoning === undefined
-	) {
+	if (!policy.reasoning.enabled || options?.reasoning === undefined) return;
+	const budget = options.thinkingBudgets?.[options.reasoning] ?? model.thinking?.effortBudgets?.[options.reasoning];
+	if (budget === undefined) return;
+	// llama.cpp caps the reasoning sampler with a top-level budget; the
+	// OpenAI-style `reasoning.max_tokens` below is meaningless there.
+	if (compat.reasoningBudgetField !== undefined) {
+		params[compat.reasoningBudgetField] = budget;
 		return;
 	}
-	const budget = options.thinkingBudgets?.[options.reasoning] ?? model.thinking.effortBudgets?.[options.reasoning];
-	if (budget === undefined) return;
+	if (model.provider !== "cline-pass" || model.thinking?.mode !== "budget") return;
 	delete params.reasoning_effort;
 	params.reasoning = { ...params.reasoning, max_tokens: budget };
 }

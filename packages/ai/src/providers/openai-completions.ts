@@ -2,7 +2,7 @@ import { resolveModelPolicy } from "@oh-my-pi/pi-catalog/compat/resolve";
 import type { Effort } from "@oh-my-pi/pi-catalog/effort";
 import { resolveWireModelId } from "@oh-my-pi/pi-catalog/model-thinking";
 import { calculateCost } from "@oh-my-pi/pi-catalog/models";
-import type { ResolvedOpenAICompat } from "@oh-my-pi/pi-catalog/types";
+import type { ResolvedOpenAICompat, ThinkingBudgets } from "@oh-my-pi/pi-catalog/types";
 import { clinePassClientHeaders } from "@oh-my-pi/pi-catalog/wire/cline-pass";
 import {
 	$env,
@@ -642,6 +642,8 @@ export interface OpenAICompletionsOptions extends StreamOptions {
 	reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	/** Force-disable reasoning where supported, or request the lowest effort on generic effort endpoints. */
 	disableReasoning?: boolean;
+	/** Custom token budgets per thinking level (llama.cpp sends the selected level's budget). */
+	thinkingBudgets?: ThinkingBudgets;
 	serviceTier?: ServiceTier;
 	/** @internal True when maxTokens came from the caller, not the model default. */
 	maxTokensExplicit?: boolean;

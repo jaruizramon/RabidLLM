@@ -1,0 +1,15 @@
+# file|hf repo|note
+# Weights are NOT part of this repo. `rig/install.sh` checks for each file and prints
+# the exact `hf download` command. Any llama.cpp GGUF works; the presets in models.ini
+# name these files, so either install them or edit the presets.
+#
+# --- main models (V100 router, models.ini) ---
+Qwen3.8-27B-MTP-Q4_K_M.gguf|XHToken/Qwen3.8-27B-GGUF|dense 27B, MTP head, ~25 GiB VRAM at 163840 ctx
+Qwen3.8-27B-Uncensored-Q4_K_M.gguf|XHToken/Qwen3.8-27B-GGUF|uncensored sibling
+Nemotron-3-Nano-30B-A3B-UD-Q5_K_XL.gguf||MoE 30B-A3B; repo varies
+Ornith-1.0-35B-Q6_K.gguf||35B MoE
+Qwen3.6-35B-A3B-UD-Q5_K_M.gguf||35B MoE, vision
+# --- SLM handoff workers (CPU or second GPU) ---
+Spark-X2.5-4B-Q4_0.gguf|abenzerps/Spark-X2.5-4B-GGUF|smallest published Spark quant (2.41 GB); detailed prose worker
+SmolLM3-Q4_K_M.gguf|ggml-org/SmolLM3-3B-GGUF|default worker when no second GPU is available (1.9 GB)
+qwen2.5-0.5b-instruct-q4_k_m.gguf|Qwen/Qwen2.5-0.5B-Instruct-GGUF|fastest worker (491 MB), weakest prose

@@ -6,6 +6,9 @@ provider "llama.cpp" {
 	supports-reasoning-effort #false
 	// Replaces the string-only named-tool-choice provider table.
 	supports-named-tool-choice #false
+	// llama-server caps the reasoning sampler with a top-level token budget;
+	// OpenAI's `reasoning.max_tokens` never reaches that sampler.
+	reasoning-budget-field "reasoning_budget_tokens"
 
 	class "qwen" {
 		// Responses cannot encode the template's thinking controls.

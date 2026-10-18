@@ -290,6 +290,38 @@ export const cfgReadToolResultPreview = register({
 // Tools
 // ────────────────────────────────────────────────────────────────────────
 
+/**
+ * Tool names removed from the enabled set before the system prompt and the
+ * request are built: the model never sees the schema and the prompt's
+ * tool-conditional guidance omits it. The server-side request filter stays the
+ * backstop for clients OMP does not control.
+ */
+export const cfgToolsDisabled = register({
+	id: "tools.disabled",
+	type: "array",
+	default: EMPTY_STRING_ARRAY,
+	validate: value => {
+		if (value === undefined || value === null) return;
+		if (!Array.isArray(value)) throw new Error("tools.disabled must be a list of tool names");
+		for (const entry of value) {
+			if (typeof entry !== "string" || entry.trim() === "") {
+				throw new Error("tools.disabled entries must be non-empty tool names");
+			}
+		}
+	},
+	normalize: value =>
+		Array.isArray(value)
+			? [...new Set(value.filter((entry): entry is string => typeof entry === "string").map(entry => entry.trim()))]
+			: value,
+	ui: {
+		tab: "tools",
+		group: "Available Tools",
+		label: "Disabled Tools",
+		description:
+			"Tool names never advertised to the model (for example task on a local llama.cpp slot). Applied per session and per model profile.",
+	},
+});
+
 // Tool approval policies
 export const cfgToolsApproval = register({
 	id: "tools.approval",

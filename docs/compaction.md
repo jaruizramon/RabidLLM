@@ -110,6 +110,81 @@ What the LLM sees:
     prompt   from cmp          messages from firstKeptEntryId
 ```
 
+### Archive progress panel
+
+While automatic maintenance (or a manual `/compact` / `/shake`) runs, a two-row panel sits above the status bar. It
+reads the session's compaction ledger (`AgentSession.getCompactionRummage`), not logs:
+
+```text
+ ⠼ rummaging ramdisk · shake · 75% → …
+   412 entries · 37 regions · 18K tok · 2.1MB · /dev/shm/… · 1.3s
+
+ ✔ archive · handoff · 75% → 21% (−54 pts)
+   143K tok reclaimed · ~/.omp/sessions/artifacts/8.shake.log · 3.2s
+```
+
+- The headline row carries the state (phase or outcome), the method, and the context percentage: `before% → …`
+  while running, `before% → after% (−N pts)` when finished.
+- The detail row carries the offload numbers: entries scanned, eligible regions, offloaded tokens/bytes (live), or
+  tokens reclaimed, the recovery-artifact path, and elapsed time (finished).
+- `shake` reports the entries it scanned, eligible regions, offloaded tokens, artifact bytes and the recovery
+  artifact path. The label is `ramdisk` when that path is under `/dev/shm`, `archive` otherwise.
+- `handoff`/`context-full`/`snapcompact` report the summarizing/rewriting phase and the context percentage they
+  started from.
+- The finished panel fades after eight seconds. A skipped or failed pass says so instead of inventing a reduction.
+
+The panel only observes the existing maintenance pass; it does not change compaction policy, method order, or the
+content kept, so acceptance and answer quality are unaffected.
+
+### Turn cards (episodic archive)
+
+`turnCards.enabled` distills each completed prompt, using the compaction model chain, into a card of at most
+`turnCards.maxTokens` (default 1024):
+
+- one-sentence restatement of the prompt,
+- the unique files touched,
+- one entry per read/edit/write/bash/grep call with a pointer (line range, edit hunk, or command) and a
+  `turnCards.summaryWords`-word summary, written in pidgin English (real words, primitive grammar: drop articles,
+  copulas and filler; keep paths/identifiers verbatim) to buy density without losing the pointer.
+
+Cards are written to `<agent dir>/turn-cards/<session>.jsonl` (machine), `<session>.md` (readable) and
+`<session>.chain.md` (the cumulative chain compaction reads). They are archive/recall material only: the live
+transcript is untouched, and nothing is injected into future prompts.
+
+The distillation runs after `agent_end`, off the turn; failures are logged without affecting the answer. **A
+cancelled turn is still carded** — its reads and edits happened — and the next prompt awaits the in-flight
+distillation before it is admitted, so a prompt submitted right after `Esc` cannot overtake the card. Only a
+provider error skips the card.
+
+Point `omp-thoughts` (or any archiver) at `~/.rabid/agent/turn-cards/` to fold cards into the rig's thoughts
+archive; the fork never writes the script-owned `THOUGHTS.md`.
+
+#### Deterministic chain compaction
+
+`compaction.turnCardChain: true` removes the summary model call: the handoff/soft preparation reads
+`<session>.chain.md` (every card appended in turn order), tails it to an 8K-token budget, and uses it as the
+compaction summary. If the 8K tail dropped older cards, the previous summary is prepended so older history is not lost. Coverage is checked first — the chain must hold at least as
+many cards as the summarized user prompts, or a previous summary must exist; otherwise the LLM path runs. The
+result is marked `details.turnCardChain = true`. `shake` still runs first; the chain only replaces the prose
+summarizer, so compaction is deterministic whenever the cards cover the range.
+
+### Speed-floor trigger
+
+Token and percentage thresholds cannot see a model that has simply become slow at moderate context. Set:
+
+```yaml
+compaction:
+  speedFloorTps: 20      # 0 disables
+  speedConsecutive: 3    # completed assistant messages below the floor
+  speedMinTokens: 20000  # smaller contexts are ignored: not a context problem
+```
+
+When the measured generation rate (the same decayed meter as the tok/s row) stays below the floor for the
+configured streak and the live context is large enough, maintenance runs through the normal method order — shake
+first, then the configured `compactionModel` for summaries. A cooldown equal to the streak follows a trigger, so the
+post-compaction context gets a chance to show its new rate before firing again. Error, aborted, and `length` stops do
+not participate; those keep their own recovery paths.
+
 ### Overflow/incomplete recovery vs threshold/idle maintenance
 
 The automatic paths are intentionally different:
@@ -215,6 +290,40 @@ Including `snapcompact` in `compaction.methodOrder` replaces the LLM summarizati
 - Rationale: the shape table comes from the snapcompact 200k-token evals in `packages/snapcompact`, where bitmap frames preserved QA recall at lower billed-token cost than raw text for vision-capable models.
 
 The archive is sized from the room under the compaction trigger, not from the window. The plan gives the frames half of what the resolved threshold (the active model's `compaction.modelThresholds` entry applied) leaves after the system prompt, tools, kept recent turns (counted as the trigger counts them, without opaque reasoning replay signatures), the archive's text and, for a pre-prompt pass, the pending prompt, keeps the whole compacted context plus that prompt within 60% of the threshold, and never goes past what fits the window; it always allows at least one frame (a text-only archive when the discarded text fits the text edges), so when even that leaves no room it only logs a warning and renders one frame. Each frame is charged the shape's own price for the active model when the model's catalog `image-tokenization` rule is `verified` against provider billing, and otherwise that price or `FRAME_TOKEN_ESTIMATE` (5,024), whichever is higher. The 80-frame default, the deployment's catalog `image-count-budget`, and the frame payload budget (`frameDataBytesBudget`: half the deployment's catalog `inline-image-byte-budget`, 12 MB on the official Anthropic and Codex endpoints, else 3,000,000 bytes; sized from a per-shape frame estimate) cap the result whatever the room. Every context rebuild attaches the archive at the active model's frame payload budget, and every request drops the oldest archive frames past the request model's budget, so a model switch to a host with a smaller budget never sends the larger archive. 60% is a sizing target, not a guarantee: a render that lands above it or over the frame payload budget is re-rendered with the oldest frames dropped, at most twice, at the frame count estimated to fit both (`frames × budget / payload` for bytes), and a one-frame archive cannot shrink further. The result is then judged by the path that asked for it: a render still over the byte budget or the window is rejected/skipped rather than committed as an unusable prompt; a threshold pass whose result (plus its pending prompt) is above the 80% recovery band moves to the next configured method with a warning notice, or, when no later method other than `shake` can run, keeps that result with a warning notice as long as it still fits the window with the pending prompt; overflow and incomplete recovery retry the turn and need only the window fit, and manual `/compact` keeps only its reduction and window-fit checks.
+
+### Background SLM handoff method
+
+Including `slm` in `compaction.methodOrder` commits a handoff document that a CPU worker keeps current, so compaction sends nothing to the main model:
+
+- `SlmHandoffCoordinator` (`packages/coding-agent/src/session/slm-handoff.ts`) runs one stateless request per completed turn: the previous document plus only the turns since the last covered one, with a fresh two-message context per request so the worker never reads its own earlier answers. When the covered message no longer exists (compaction, branch change, resume), it re-seeds from the live context.
+- The document is keyed by the **transcript id** (`sessionManager.getSessionId()`: minted per transcript, fresh on fork, stable across provider-id rotation), digested with SHA-256 so two ids that differ only in punctuation cannot share a file; the RAM directory is namespaced by agent dir so profiles cannot shadow each other. A copy whose metadata names a different session is refused rather than merged.
+- The document is published to `/dev/shm/rabid-slm-handoff/<agent>/<session>.md` first — the copy maintenance reads — and mirrored to `<agent dir>/slm-handoffs/<session>.md`. Metadata (covered leaf key, `coveredAt`, budgets, token counts) rides in an `<!-- rabid-slm-handoff … -->` comment so the `.md` stays hand-editable.
+- The worker is a separate stock `llama-server` process pinned to `--n-gpu-layers 0`, at most `compaction.slmHandoff.threads` threads (default: a quarter of the logical CPUs, spread over physical cores via `--cpu-mask`), q8_0 KV cache, `--ctx-size` copied from the active model's window (capped by `compaction.slmHandoff.maxContextTokens`), and up to `compaction.slmHandoff.reasoningBudgetTokens` thinking tokens per run (default 1024: a full 4096 spent ~38 s on a 200-word merge). `--ctx-size` is the smaller of the model window and `compaction.slmHandoff.maxContextTokens` (default 16K, not the window: one run only sees the turns since the last handoff, so a bigger copy buys nothing and costs RAM plus prefill). It never goes through the V100 router, which admits one resident model at a time and would evict the main model.
+- At the compaction trigger the committed summary is the ready document plus a verbatim `## User messages (verbatim; authoritative)` block, so a requirement the 3B model paraphrased or dropped is still recorded in the user's own words. No summarization request is made — which is why `slm` is usable for `overflow` as well as threshold/incomplete/idle reasons.
+- If the document does not cover the live leaf, maintenance waits up to `compaction.slmHandoff.awaitMs` for the in-flight run and then advances to the next configured method. A missing GGUF or server binary makes the method unavailable, so the fallback chain runs unchanged. Background runs never download; only `/models-worker` does.
+- Manual `/compact` selects `slm` only without focus instructions: a precomputed document cannot honor new direction.
+- Memory on a shared or gaming card is capped by construction: with `compaction.slmHandoff.gpuFreeMiB` (default 2048) the worker runs `--n-gpu-layers auto --fit on --fit-target <MiB> --fit-ctx <window>`, so llama.cpp offloads only the layers that still leave that much VRAM free and spills the rest to the CPU. Measured on an 8 GB RTX 3070 already holding 4.6 GB of desktop: `Spark-X2.5-4B-Q4_0` (2.41 GB) added 1 177 MiB and left ~2 GB free.
+- `compaction.slmHandoff.detail` selects the prose register the worker writes in (`concise`, `standard`, `detailed`). The default `detailed` asks for the exact path and symbol, the exact command and its outcome, and one clause of why per item — enough that a successor with no context cannot misread it. It is not padding: measured on the same turn, `detailed` produced 2 115 summary chars / 546 worker tokens / 50.9 s against 1 523 / 298 / 25.6 s for the shorter register, and every file claim matched the harness-extracted action block.
+- The quant is the knob that decides the weight footprint: `Spark-X2.5-4B` publishes Q4_0 2.41 GB, Q4_K_M 2.60 GB, Q5_K_M 2.98 GB, Q6_K 3.38 GB, and Q8_0 4.38 GB (`abenzerps/Spark-X2.5-4B-GGUF`); nothing smaller is published, so go below Q4_0 only by quantizing the BF16 source with `llama-quantize`. Point `compaction.slmHandoff.modelPath` at the file; the headroom cap above then decides how much of it lands on the card.
+- The worker's device is configurable: `compaction.slmHandoff.device` accepts `cpu` (default — every GPU backend is blanked so the worker can never take memory from the inference or display card), `cuda` (driver picks), or `cuda:N` (pinned under `CUDA_DEVICE_ORDER=PCI_BUS_ID`, matching `nvidia-smi -L`). `compaction.slmHandoff.gpuLayers` defaults to all layers on a GPU and none on the CPU. On a small card, pin a lower layer count rather than raising the window.
+- Two durability rules: `dispose` lets an in-flight run finish (5 s) before aborting, so a one-shot session does not always lose its turn's work; and when compaction must wait, it re-derives the document from the region it is about to discard (`messagesToSummarize` + `turnPrefixMessages`) instead of trusting a chain that may have drifted.
+- `/models-worker` also guarantees a fallback: it puts `slm` first and, if that would leave no other method, appends `handoff`, so a worker that cannot cover the live leaf degrades to a document the main model writes instead of leaving the context uncompacted. `unload` undoes both: it drops `slm` and, when `handoff` is all that remains, restores the default order.
+- `/models-worker` downloads the GGUF when missing, starts the worker, holds it against idle teardown, and prepends `slm` to `compaction.methodOrder`. `/models-worker status` reports the running process and configured budgets; `/models-worker unload` stops it and removes `slm` from the order. Subagent sessions never schedule handoff runs.
+- Any GGUF can be the worker: `/models-worker ~/models/<file>.gguf` sets `compaction.slmHandoff.modelPath`, and only the default SmolLM3 filename is auto-downloaded (a missing custom path reports the `hf download` command instead). Set `compaction.slmHandoff.reasoningBudgetTokens: 0` for a model without a thinking mode.
+- Measured on this 16-thread box with the same two-turn input (`MUST use port 8451 … NEVER touch 8080`) at `--ctx-size 262144`, 4 threads: SmolLM3-3B Q4_K_M took 17.1 s, 12.5 GB RSS, and kept both requirements verbatim under the right headings; Qwen2.5-0.5B-Instruct Q4_K_M took 2.0 s, 2.8 GB RSS, but dropped the port requirement and repeated one line under five headings. A 0.5B model is mechanically compatible and far cheaper, yet it does not hold the requirement-preservation contract that makes the handoff safe — keep SmolLM3-3B as the default and treat smaller models as an experiment, with the verbatim user-message appendix as the only backstop.
+
+### Deterministic requirement block
+
+Every text compaction — `slm`, `handoff`, and each LLM method including provider-native `remote` — ends its committed summary with two harness-authored blocks plus the model's prose:
+
+- `## Recent file actions` — extracted from the tool calls in the summarized region (`edit`/`write`/`read`/`search`/`bash`, newest 24, consecutive repeats collapsed). The summarizer never writes these paths, so a file named in the summary is a file the session touched.
+- `## What just happened` — written by the summarizer from the action log: `Learned:`, `Implemented:`, `Files:`. The prompt supplies `<recent_actions>` and forbids naming a path that is not in it, so "learned this / implemented that" is grounded rather than invented.
+
+Then `## User messages (verbatim; authoritative)`: the operator's own messages, rendered by this process from the summarized window, never by a model. A summarizer that paraphrases, truncates, or invents cannot alter it, and each pass carries the previous block forward (deduplicated, order-preserving), so a summary chain cannot erode a requirement that an earlier pass recorded.
+
+The block is bounded at 5 % of the live window, clamped to 1K–8K tokens: small windows must not spend their summary on verbatim text, and large ones gain nothing past 8K. Snapcompact and extension-supplied compactions keep their own shape — snapcompact's summary is a lead-in to rendered frames, and a hook-owned summary belongs to the extension.
+
+This is what makes a weak worker safe: in testing, a 0.5B worker degenerated into a repeat loop on a long turn and a 3B worker invented sections, while both committed summaries still contained the exact requirement lines.
 
 ### Maintenance progress guard
 

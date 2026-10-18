@@ -277,6 +277,8 @@ export interface AgentSessionConfig {
 	rebindModelAfterDiscovery?: boolean;
 	/** Tool registry for LSP and settings. */
 	toolRegistry?: Map<string, AgentTool>;
+	/** Construction slate before `tools.disabled` filtering; keeps hidden tools restorable on a model switch. */
+	selectedToolNames?: readonly string[];
 	/** Creates tools registered only while vibe mode is active. */
 	createVibeTools?: () => AgentTool[];
 	/** Names whose current registry entry is the built-in implementation. */

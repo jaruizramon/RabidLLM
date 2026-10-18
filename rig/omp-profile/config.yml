@@ -1,0 +1,71 @@
+setupVersion: 2
+modelRoles:
+  default: llama-rabid/qwen3.8-27b:medium
+  smol: deepseek/deepseek-flash
+  slow: deepseek/deepseek-flash
+  tiny: deepseek/deepseek-flash
+hideThinkingBlock: false
+defaultThinkingLevel: auto
+composer:
+  tokenRate: true
+profiles:
+  llama-rabid/rabid-deep:
+    thinkingBudgets:
+      medium: 32768
+      high: 32768
+    tools:
+      disabled:
+        - task
+  llama-rabid/rabid-balanced:
+    thinkingBudgets:
+      medium: 4096
+      high: 4096
+    tools:
+      disabled:
+        - task
+  llama-rabid/rabid-fast:
+    thinkingBudgets:
+      medium: 2048
+      high: 2048
+    sampling:
+      temperature: 0.7
+      topP: 0.8
+      topK: 20
+    tools:
+      disabled:
+        - task
+dev:
+  autoqaConsent: granted
+compaction:
+  thresholdPercent: 75
+  modelThresholds:
+    llama-rabid/*: f40000
+  asyncEnabled: false
+  methodOrder:
+    - slm
+    - shake
+    - handoff
+    - soft
+  handoffSaveToDisk: true
+  keepRecentTokens: 12000
+  turnCardChain: true
+  speedFloorTps: 20
+  speedConsecutive: 3
+  speedMinTokens: 20000
+  midTurnEnabled: true
+  autoContinue: true
+  slmHandoff:
+    modelPath: @HOME@/models/Spark-X2.5-4B-Q4_0.gguf
+    device: cuda:1
+    gpuFreeMiB: 2048
+    maxContextTokens: 16384
+    maxHandoffTokens: 2048
+    detail: detailed
+    reasoningBudgetTokens: 0
+    awaitMs: 300000
+turnCards:
+  enabled: true
+  maxTokens: 1024
+  summaryWords: 50
+rabid:
+  mode: fast

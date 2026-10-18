@@ -1,0 +1,8 @@
+#!/bin/sh
+# The stock llama.cpp b11026 build (CUDA 12.8 prebuilt) — kept as the rollback path.
+# Point ~/.local/bin/llama-server back at this binary to return the router to it; the
+# only thing that needs the PrismML fork is Bonsai 2's ternary weights (§21).
+export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export LD_LIBRARY_PATH=@HOME@/.local/opt/llama.cpp${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+exec @HOME@/.local/opt/llama.cpp/llama-server "$@"

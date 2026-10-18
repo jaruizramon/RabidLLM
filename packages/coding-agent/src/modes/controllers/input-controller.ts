@@ -636,6 +636,10 @@ export class InputController {
 			hintUsage.record("effort");
 			this.cycleThinkingLevel();
 		};
+		this.ctx.editor.setActionKeys("app.preset.select", this.ctx.keybindings.getKeys("app.preset.select"));
+		this.ctx.editor.onSelectPreset = () => {
+			void executeBuiltinSlashCommand("/preset", { ctx: this.ctx });
+		};
 		this.ctx.editor.setActionKeys("app.model.cycleForward", this.ctx.keybindings.getKeys("app.model.cycleForward"));
 		this.ctx.editor.onCycleModelForward = () => this.cycleRoleModel("forward");
 		this.ctx.editor.setActionKeys("app.model.cycleBackward", this.ctx.keybindings.getKeys("app.model.cycleBackward"));

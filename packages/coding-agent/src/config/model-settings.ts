@@ -4,6 +4,7 @@
  */
 import { register, type SettingValueOf } from "./registry";
 import type { AuthAccountPolicies } from "@oh-my-pi/pi-ai/auth-storage";
+import { type ModelProfile, normalizeModelProfiles } from "./model-profiles";
 import type { cfgDefaultThinkingLevel } from "../session/settings";
 
 /** Display metadata for one model tag. */
@@ -113,6 +114,22 @@ export const cfgModelPresets = register({
 	id: "modelPresets",
 	type: "record",
 	default: EMPTY_MODEL_PRESETS_RECORD,
+});
+
+const EMPTY_MODEL_PROFILES: Record<string, ModelProfile> = {};
+
+/**
+ * Per-model policy overrides, keyed by `provider/model-id` or a `…*` prefix.
+ * Resolved after model selection; the global `compaction.*`,
+ * `thinkingBudgets.*`, `tools.disabled`, and sampling settings stay the
+ * fallback for models without a matching profile.
+ */
+export const cfgModelProfiles = register({
+	id: "profiles",
+	type: "record",
+	default: EMPTY_MODEL_PROFILES,
+	validate: normalizeModelProfiles,
+	normalize: normalizeModelProfiles,
 });
 
 export const cfgModelTags = register({ id: "modelTags", type: "record", default: EMPTY_MODEL_TAGS_RECORD });

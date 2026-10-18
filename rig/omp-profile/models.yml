@@ -1,0 +1,286 @@
+providers:
+  local-llama:
+    # 8101 = llama-toolfilter (toolfilter.py), the loopback relay that strips the
+    # `task` tool before the router renders/grammars it. 8080 is the router itself.
+    baseUrl: http://127.0.0.1:8101/v1
+    auth: none
+    api: openai-completions
+    models:
+      - id: qwen3.8-27b
+        name: Qwen3.8-27B MTP-Q4_K_M (local, 164K)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 163840
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-uncensored
+        name: Qwen3.8-27B Uncensored (local, 164K)
+        reasoning: true
+        input: [text]
+        contextWindow: 163840
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: nemotron-3-nano-30b
+        name: Nemotron 3 Nano 30B-A3B (local, 256K)
+        reasoning: true
+        input: [text]
+        contextWindow: 262144
+        maxTokens: 32768
+        # No tokenizer: vocab 131,072 (pixtral pre-tokenizer).  The file declares a 1M
+        # window and it does load at 32,118 MiB, but that leaves 650 MiB on the card, so
+        # the preset serves 262144 — NVIDIA's own --max-model-len (§20.4).
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: ornith-1.0-35b
+        name: Ornith 1.0 35B-A3B (local, 256K)
+        reasoning: true
+        input: [text]
+        contextWindow: 262144
+        maxTokens: 32768
+        # Same 248,320-token Qwen3.5 vocabulary as qwen3.8-27b, so the qwen3 embedding fits.
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.6-35b-a3b-q5-k-m
+        name: Qwen3.6-35B-A3B UD-Q5_K_M (local, 256K, vision)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 262144
+        maxTokens: 32768
+        # Same 248,320-token Qwen3.5 vocabulary as qwen3.8-27b, so the qwen3 embedding fits.
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          # The template has no reasoning_effort branch at all — thinking is on unless
+          # `enable_thinking` is false — so the knob cannot be offered: a harness that
+          # believes it exists sends a value there is no branch to receive (§21.1).
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      # 1Cat-vLLM (the V100 vLLM fork) serves these on the same port as the GGUF cards;
+      # the manager hands the port to whichever engine the loaded preset names.
+      - id: qwen2.5-0.5b-1cat
+        name: Qwen2.5-0.5B (local, 1Cat-vLLM, 8K)
+        reasoning: false
+        input: [text]
+        contextWindow: 8192
+        maxTokens: 4096
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3-8b-1cat
+        name: Qwen3-8B (local, 1Cat-vLLM, 32K)
+        reasoning: true
+        input: [text]
+        contextWindow: 32768
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-nvfp4-1cat
+        name: Qwen3.8-27B NVFP4 (local, 1Cat-vLLM, 32K)
+        reasoning: true
+        input: [text]
+        contextWindow: 32768
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-fp8-1cat
+        name: Qwen3.8-27B FP8 (local, 1Cat-vLLM, 8K)
+        reasoning: true
+        input: [text]
+        # 8192, not the sibling's 32768: this card's preset is 27 GiB of FP8 weights on a
+        # 32 GiB card, so the vLLM preset claims only 8K of KV for one sequence.  The
+        # harness's own system prompt is ~29K tokens, so use `omp --no-tools` here, and
+        # 4096 sits inside what an 8K window can actually return.
+        contextWindow: 8192
+        maxTokens: 4096
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+  # RabidAI's llama-server group: the same llama-server endpoint and models as
+  # `local-llama`, listed separately so the model picker shows them under
+  # `llama-rabid`.
+  llama-rabid:
+    # 8101 = llama-toolfilter (toolfilter.py), the loopback relay that strips the
+    # `task` tool before the router renders/grammars it. 8080 is the router itself.
+    baseUrl: http://127.0.0.1:8101/v1
+    auth: none
+    api: openai-completions
+    models:
+      - id: qwen3.8-27b
+        name: Qwen3.8-27B MTP-Q4_K_M (local, 164K)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text, image]
+        contextWindow: 163840
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-uncensored
+        name: Qwen3.8-27B Uncensored (local, 164K)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        contextWindow: 163840
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: nemotron-3-nano-30b
+        name: Nemotron 3 Nano 30B-A3B (local, 256K)
+        reasoning: true
+        input: [text]
+        contextWindow: 262144
+        maxTokens: 32768
+        # No tokenizer: vocab 131,072 (pixtral pre-tokenizer).  The file declares a 1M
+        # window and it does load at 32,118 MiB, but that leaves 650 MiB on the card, so
+        # the preset serves 262144 — NVIDIA's own --max-model-len (§20.4).
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: ornith-1.0-35b
+        name: Ornith 1.0 35B-A3B (local, 256K)
+        reasoning: true
+        input: [text]
+        contextWindow: 262144
+        maxTokens: 32768
+        # Same 248,320-token Qwen3.5 vocabulary as qwen3.8-27b, so the qwen3 embedding fits.
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.6-35b-a3b-q5-k-m
+        name: Qwen3.6-35B-A3B UD-Q5_K_M (local, 256K, vision)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text, image]
+        contextWindow: 262144
+        maxTokens: 32768
+        # Same 248,320-token Qwen3.5 vocabulary as qwen3.8-27b, so the qwen3 embedding fits.
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          # The template has no reasoning_effort branch at all — thinking is on unless
+          # `enable_thinking` is false — so the knob cannot be offered: a harness that
+          # believes it exists sends a value there is no branch to receive (§21.1).
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      # 1Cat-vLLM (the V100 vLLM fork) serves these on the same port as the GGUF cards;
+      # the manager hands the port to whichever engine the loaded preset names.
+      - id: qwen2.5-0.5b-1cat
+        name: Qwen2.5-0.5B (local, 1Cat-vLLM, 8K)
+        reasoning: false
+        input: [text]
+        contextWindow: 8192
+        maxTokens: 4096
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3-8b-1cat
+        name: Qwen3-8B (local, 1Cat-vLLM, 32K)
+        reasoning: true
+        input: [text]
+        contextWindow: 32768
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-nvfp4-1cat
+        name: Qwen3.8-27B NVFP4 (local, 1Cat-vLLM, 32K)
+        reasoning: true
+        input: [text]
+        contextWindow: 32768
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-fp8-1cat
+        name: Qwen3.8-27B FP8 (local, 1Cat-vLLM, 8K)
+        reasoning: true
+        input: [text]
+        # 8192, not the sibling's 32768: this card's preset is 27 GiB of FP8 weights on a
+        # 32 GiB card, so the vLLM preset claims only 8K of KV for one sequence.  The
+        # harness's own system prompt is ~29K tokens, so use `omp --no-tools` here, and
+        # 4096 sits inside what an 8K window can actually return.
+        contextWindow: 8192
+        maxTokens: 4096
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      # RabidAI coherence presets (models.ini sections). `/preset <id>` loads the
+      # matching preset through the manager; the loaded model keeps its VRAM until
+      # an explicit switch.
+      - id: rabid-deep
+        name: Rabid Deep — Qwen3.8-27B UD + MTP 3 (local, 164K, full reasoning)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        contextWindow: 163840
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: rabid-balanced
+        name: Rabid Balanced — Qwen3.6-35B-A3B Q5 text (local, 256K, budget 4096)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        contextWindow: 262144
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: rabid-fast
+        name: Rabid Fast — Qwen3.6-35B-A3B Q5 text (local, 256K, budget 2048, temp 0.7)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        contextWindow: 262144
+        maxTokens: 32768
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens

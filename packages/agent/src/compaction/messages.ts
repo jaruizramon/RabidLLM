@@ -250,7 +250,7 @@ export function convertMessageToLlm(message: AgentMessage): Message | undefined 
 									{
 										type: "text" as const,
 										text:
-											message.method === "handoff"
+											message.method === "handoff" || message.method === "slm"
 												? renderHandoffSummaryContext(message.summary)
 												: renderCompactionSummaryContext(message.summary),
 									},

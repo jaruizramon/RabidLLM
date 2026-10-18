@@ -141,6 +141,16 @@ describe("AgentSession shake", () => {
 			const text = tr.content.map(b => (b.type === "text" ? b.text : "")).join("");
 			expect(text).toContain(`artifact://${result.artifactId}`);
 			expect(text).toContain("shaken");
+
+			// The status panel's ledger closes on the manual `/shake` path too.
+			const rummage = session.getCompactionRummage();
+			expect(rummage?.action).toBe("shake");
+			expect(rummage?.phase).toBe("rewriting");
+			expect(rummage?.endedAt).toBeNumber();
+			expect(rummage?.regions).toBeGreaterThan(0);
+			expect(rummage?.archivedTokens).toBeGreaterThan(0);
+			expect(rummage?.tokensFreed).toBe(result.tokensFreed);
+			expect(rummage?.archivePath).toContain(result.artifactId);
 		});
 
 		it("continues artifact-less when ordinary shake cannot allocate an artifact", async () => {
@@ -740,6 +750,12 @@ describe("AgentSession shake", () => {
 			const end = events.filter(e => e.type === "auto_compaction_end");
 			expect(end).toHaveLength(1);
 			expect(end[0]).toMatchObject({ type: "auto_compaction_end", action: "shake" });
+
+			// The status panel's ledger opens at the lifecycle start and closes at
+			// the matching end, even when the method is supplied by a spy.
+			const rummage = session.getCompactionRummage();
+			expect(rummage).toMatchObject({ action: "shake", phase: "scanning", aborted: false });
+			expect(rummage?.endedAt).toBeNumber();
 		});
 
 		it("keeps a successful overflow shake recovery committed before retrying", async () => {

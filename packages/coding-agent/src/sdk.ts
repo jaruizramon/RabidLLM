@@ -333,6 +333,11 @@ import {
 	cfgSessionToolGates,
 } from "./tools/settings";
 import { cfgToolsFormat } from "./session/context-settings";
+import {
+	resolveDisabledToolNames,
+	resolveModelSampling,
+	resolveModelThinkingBudgets,
+} from "./session/model-profile-settings";
 import { cfgAutolearnEnabled } from "./autolearn/settings";
 import { cfgBrowserEnabled } from "./tools/browser/settings";
 import {
@@ -350,9 +355,7 @@ import {
 	cfgRetryUsageAwareFallback,
 	cfgRetryUsageReservePct,
 	cfgRetryUsageReservePolicy,
-	cfgSampling,
 	cfgSkillful,
-	cfgThinkingBudgets,
 	cfgTierAnthropic,
 	cfgTierGoogle,
 	cfgTierOpenai,
@@ -4170,6 +4173,15 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			}
 		}
 
+		// `tools.disabled` hides a tool from the very first request and the
+		// initial system prompt. The unfiltered slate travels with the session so
+		// a model switch that lifts the policy restores it.
+		const initialSelectedToolNames = [...initialToolNames];
+		const disabledToolNames = resolveDisabledToolNames(settings, model);
+		if (disabledToolNames.length > 0) {
+			initialToolNames = initialToolNames.filter(name => !disabledToolNames.includes(name));
+		}
+
 		// Pre-register in the global agent registry BEFORE building the system prompt,
 		// so that subagents launched in the same parallel batch can see each other in
 		// their initial `# IRC Peers` block (rendered inside `rebuildSystemPrompt`).
@@ -4413,7 +4425,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			const kimiApiFormat = cfgProvidersKimiApiFormat.get(settings);
 			return settingsAwareStreamFn(streamModel, context, {
 				...streamOptions,
-				thinkingBudgets: streamOptions?.thinkingBudgets ?? cfgThinkingBudgets.get(settings),
+				thinkingBudgets: streamOptions?.thinkingBudgets ?? resolveModelThinkingBudgets(settings, streamModel),
 				kimiApiFormat: streamOptions?.kimiApiFormat ?? (kimiApiFormat === "auto" ? undefined : kimiApiFormat),
 				preferWebsockets: streamOptions?.preferWebsockets ?? resolveOpenAIWebsocketPreference(settings),
 			});
@@ -4474,7 +4486,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			steeringMode: cfgSteeringMode.get(settings),
 			followUpMode: cfgFollowUpMode.get(settings),
 			interruptMode: cfgInterruptMode.get(settings),
-			...cfgSampling.get(settings),
+			...resolveModelSampling(settings, model),
 			getToolContext: tc => toolContextStore.getContext(tc),
 			getApiKey: effectiveGetApiKey,
 			streamFn: (streamModel, context, streamOptions) => {
@@ -4721,6 +4733,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			interactivePrompts: options.interactivePrompts,
 			rebindModelAfterDiscovery: options.model === undefined || options.rebindModelAfterDiscovery === true,
 			toolRegistry,
+			selectedToolNames: initialSelectedToolNames,
 			reconcileBrowserMcpFilter: mcpManager
 				? async enabled => {
 						await mcpManager.reconcileBrowserFilter(enabled);

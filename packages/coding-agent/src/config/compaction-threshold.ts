@@ -1,4 +1,5 @@
 import { isRecord } from "@oh-my-pi/pi-utils";
+import { checkModelSelectorKey, matchModelSelector } from "./model-selectors";
 
 /**
  * One `task.agentCompactionThresholdOverrides` or `compaction.modelThresholds`
@@ -82,21 +83,13 @@ export function validateAgentCompactionThresholdOverrides(value: unknown): Recor
 	return validateThresholdMap("task.agentCompactionThresholdOverrides", "agent name", value, { allowFixed: false });
 }
 
-function checkModelThresholdKey(key: string): string | undefined {
-	const star = key.indexOf("*");
-	if (star !== -1 && star !== key.length - 1) return "`*` is only allowed as the last character";
-	const slash = key.indexOf("/");
-	if (slash <= 0 || slash === key.length - 1) return "expected `provider/model-id` or a `provider/…*` prefix";
-	return undefined;
-}
-
 /**
  * Validate `compaction.modelThresholds`: keys are an exact `provider/model-id`
  * or a `*`-terminated prefix of one (`deepseek/*`, `openrouter/anthropic/*`).
  */
 export function validateModelCompactionThresholds(value: unknown): Record<string, CompactionThresholdPair> {
 	return validateThresholdMap("compaction.modelThresholds", "model selector", value, {
-		checkKey: checkModelThresholdKey,
+		checkKey: checkModelSelectorKey,
 		allowFixed: true,
 	});
 }
@@ -128,15 +121,8 @@ export function matchModelCompactionThreshold(
 	raw: unknown,
 	model: { provider: string; id: string },
 ): ModelCompactionThresholdMatch | undefined {
-	const thresholds = modelThresholdsOf(raw);
-	const selector = `${model.provider}/${model.id}`;
-	if (Object.hasOwn(thresholds, selector)) return { key: selector, threshold: thresholds[selector] };
-	let best: ModelCompactionThresholdMatch | undefined;
-	for (const key in thresholds) {
-		if (!key.endsWith("*") || !selector.startsWith(key.slice(0, -1))) continue;
-		if (!best || key.length > best.key.length) best = { key, threshold: thresholds[key] };
-	}
-	return best;
+	const match = matchModelSelector(modelThresholdsOf(raw), model);
+	return match ? { key: match.key, threshold: match.value } : undefined;
 }
 
 const appliedThresholds = new WeakMap<object, Map<string, { threshold: CompactionThresholdPair; applied: object }>>();

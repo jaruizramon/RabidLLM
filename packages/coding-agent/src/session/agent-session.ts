@@ -96,6 +96,7 @@ import {
 	escapeXmlText,
 	formatDuration,
 	getAgentDbPath,
+	getAgentDir,
 	isBunTestRuntime,
 	isInteractiveHost,
 	isRecord,
@@ -445,6 +446,7 @@ import {
 	SessionMaintenance,
 	type SessionMaintenanceHost,
 } from "./session-maintenance";
+import { CompactionRummageTracker, type CompactionRummageState } from "./compaction-rummage";
 import {
 	cleanupEmptyMoveSession,
 	copySessionArtifacts,
@@ -518,9 +520,15 @@ import {
 	cfgTierGoogle,
 	cfgTierOpenai,
 	cfgProvidersAnthropicSlowMode,
+	cfgTurnCardsEnabled,
 	type ResetAutoRedeemMode,
 } from "./settings";
 import { type AnthropicSlowModeController, anthropicSlowModeLanes, formatUsageLimitLabel } from "./anthropic-slow-mode";
+import { resolveModelSampling } from "./model-profile-settings";
+import { cfgRabidMode } from "./rabid-modes";
+import { SlmHandoffCoordinator } from "./slm-handoff";
+import { writeTurnCard } from "./turn-cards";
+import { cfgModelProfiles } from "../config/model-settings";
 import type { UsageLimitState } from "./usage-limit";
 import { cfgInterruptMode } from "../modes/settings";
 import { cfgFollowUpMode } from "../modes/settings";
@@ -552,6 +560,7 @@ import {
 	cfgDevAutoqaConsent,
 	cfgTodoEnabled,
 	cfgToolsApproval,
+	cfgToolsDisabled,
 } from "../tools/settings";
 import { cfgTtsrJudge } from "../export/ttsr-settings";
 
@@ -928,6 +937,21 @@ export class AgentSession implements SettingsScope {
 	#movedFromEmptySessionFile?: string;
 
 	readonly #maintenance: SessionMaintenance;
+	/** Archive/offload ledger for the current (or last finished) maintenance pass. */
+	readonly #compactionRummage = new CompactionRummageTracker();
+	/** Message index already distilled into a turn card. */
+	#turnCardCursor = 0;
+	/**
+	 * In-flight per-prompt distillation. The next prompt awaits it, so a
+	 * cancelled turn is still carded before the conversation moves on.
+	 */
+	#turnCardTask: Promise<void> | undefined;
+	/**
+	 * Rolling background handoff (`compaction.methodOrder` entry `slm`). Kept
+	 * per session because it tracks this transcript's coverage, but the worker
+	 * process itself is process-wide.
+	 */
+	readonly #slmHandoff: SlmHandoffCoordinator;
 
 	// Branch summarization state
 	#branchSummaryAbortController: AbortController | undefined = undefined;
@@ -1714,6 +1738,8 @@ export class AgentSession implements SettingsScope {
 
 	/** Live generation tok/s for the working row; fed by this session's own streamed deltas. */
 	readonly tokenRate: TokenRateMeter;
+	/** Approximate thinking characters streamed for the current/last assistant message. */
+	#reasoningChars = 0;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -2167,6 +2193,7 @@ export class AgentSession implements SettingsScope {
 		this.#tools = new SessionTools(sessionToolsHost, {
 			autoApprove: config.autoApprove,
 			toolRegistry: config.toolRegistry,
+			selectedToolNames: config.selectedToolNames,
 			createVibeTools: config.createVibeTools,
 			createThinkTool: config.createThinkTool,
 			builtInToolNames: config.builtInToolNames,
@@ -2245,6 +2272,19 @@ export class AgentSession implements SettingsScope {
 		this.#loopGuards = new LoopGuards(streamGuardsHost);
 		this.#agentId = config.agentId;
 		this.#agentKind = config.agentKind ?? "main";
+		this.#slmHandoff = new SlmHandoffCoordinator({
+			settings: this.settings,
+			// The transcript id, not `this.sessionId`: that getter prefers the
+			// provider-side id, which is caller-supplied (`SDK providerSessionId`), is
+			// inherited by a fork, and rotates on `freshSession`/context reset. Any of
+			// those would hand two transcripts the same file, or lose the chain
+			// mid-conversation. The manager id is minted per transcript and stable.
+			sessionId: () => this.sessionManager.getSessionId(),
+			agentDir: () => this.settings.getAgentDir(),
+			agentKind: () => this.#agentKind,
+			messages: () => this.agent.state.messages,
+			modelContextWindow: () => this.model?.contextWindow,
+		});
 		// A subagent's streamed text reaches no output sink until the run settles
 		// (the parent sees only the yield), so a failed turn's partial prose is
 		// replay-safe and transient provider errors after it stay retryable —
@@ -2496,6 +2536,8 @@ export class AgentSession implements SettingsScope {
 			recordAnchoredHistoryRewrite: tokensRemoved => this.#stats.recordAnchoredHistoryRewrite(tokensRemoved),
 			getContextBreakdown: options => this.getContextBreakdown(options),
 			getContextUsage: options => this.getContextUsage(options),
+			recentTokenRate: () => this.tokenRate.rate(),
+			rummage: this.#compactionRummage,
 			shake: (mode, options) => this.shake(mode, options),
 			dropImages: () => this.dropImages(),
 			generateHandoffDocument: (customInstructions, options) =>
@@ -2513,8 +2555,14 @@ export class AgentSession implements SettingsScope {
 				this.#models.setModelTemporary(model, thinkingLevel, options, "automatic"),
 			abort: options => this.abort(options),
 			abortHandoff: () => this.abortHandoff(),
+			prepareSlmHandoff: options => this.#slmHandoff.prepareForCompaction(options),
 		};
 		this.#maintenance = new SessionMaintenance(maintenanceHost);
+		this.addDisposer(() => {
+			void this.#slmHandoff
+				.dispose()
+				.catch(error => logger.warn("SLM handoff dispose failed", { error: String(error) }));
+		});
 		this.addDisposer(
 			this.agent.addBeforeModelCallHook((_signal, context) =>
 				this.#maintenance.renderArchiveForModel(context.messages),
@@ -2682,6 +2730,18 @@ export class AgentSession implements SettingsScope {
 		return undefined;
 	}
 
+	/** Applies the sampling defaults in force for the active model (globals overlaid by its profile). */
+	#applyModelSampling(): void {
+		const sampling = resolveModelSampling(this.settings, this.model);
+		this.agent.temperature = sampling.temperature;
+		this.agent.topP = sampling.topP;
+		this.agent.topK = sampling.topK;
+		this.agent.minP = sampling.minP;
+		this.agent.presencePenalty = sampling.presencePenalty;
+		this.agent.repetitionPenalty = sampling.repetitionPenalty;
+		this.agent.hideThinkingSummary = sampling.hideThinkingSummary;
+	}
+
 	/**
 	 * Applies session-level settings (queue modes, sampling, service tiers,
 	 * advisors, think tool, skillful) to the live session whenever they change.
@@ -2694,14 +2754,25 @@ export class AgentSession implements SettingsScope {
 		cfgSteeringMode.listen(this, mode => this.agent.setSteeringMode(mode));
 		cfgFollowUpMode.listen(this, mode => this.agent.setFollowUpMode(mode));
 		cfgInterruptMode.listen(this, mode => this.agent.setInterruptMode(mode));
-		cfgSampling.listen(this, sampling => {
-			this.agent.temperature = sampling.temperature;
-			this.agent.topP = sampling.topP;
-			this.agent.topK = sampling.topK;
-			this.agent.minP = sampling.minP;
-			this.agent.presencePenalty = sampling.presencePenalty;
-			this.agent.repetitionPenalty = sampling.repetitionPenalty;
-			this.agent.hideThinkingSummary = sampling.hideThinkingSummary;
+		cfgSampling.listen(this, () => this.#applyModelSampling());
+		cfgRabidMode.listen(this, async () => {
+			// Budgets resolve per request; sampling and the tool surface are applied state.
+			this.#applyModelSampling();
+			try {
+				await this.reconcileDisabledTools();
+			} catch (error) {
+				this.emitNotice("error", `Failed to apply rabid mode: ${error}`);
+			}
+		});
+		cfgModelProfiles.listen(this, async () => {
+			// Compaction and thinking budgets resolve per use; sampling and the
+			// tool surface are applied state and need a live re-apply.
+			this.#applyModelSampling();
+			try {
+				await this.reconcileDisabledTools();
+			} catch (error) {
+				this.emitNotice("error", `Failed to apply profiles: ${error}`);
+			}
 		});
 		cfgTierOpenai.listen(this, tier => this.setServiceTierFamily("openai", serviceTierSettingToTier(tier)));
 		cfgTierAnthropic.listen(this, tier => this.setServiceTierFamily("anthropic", serviceTierSettingToTier(tier)));
@@ -2717,6 +2788,13 @@ export class AgentSession implements SettingsScope {
 				await this.#tools.reconcileThinkTool();
 			} catch (error) {
 				this.emitNotice("error", `Failed to apply external thinking: ${error}`);
+			}
+		});
+		cfgToolsDisabled.listen(this, async () => {
+			try {
+				await this.reconcileDisabledTools();
+			} catch (error) {
+				this.emitNotice("error", `Failed to apply tools.disabled: ${error}`);
 			}
 		});
 		this.#skillfulApplied = cfgSkillful.get(this.settings);
@@ -3937,6 +4015,37 @@ export class AgentSession implements SettingsScope {
 		return true;
 	}
 
+	/**
+	 * Distill the just-completed prompt into an episodic card (archive only).
+	 * Fire-and-forget: the card is written under `<agent>/turn-cards/`, and a
+	 * failure never affects the turn.
+	 */
+	#scheduleTurnCard(): void {
+		if (!cfgTurnCardsEnabled.get(this.settings) || this.#turnCardTask) return;
+		const messages = this.agent.state.messages;
+		if (messages.length < this.#turnCardCursor) this.#turnCardCursor = 0;
+		const turnMessages = messages.slice(this.#turnCardCursor);
+		this.#turnCardCursor = messages.length;
+		if (!turnMessages.some(message => message.role === "user")) return;
+		const lastAssistant = turnMessages.findLast(message => message.role === "assistant");
+		// A cancelled turn still gets a card: its reads/edits happened. Only a
+		// provider error leaves nothing trustworthy to archive.
+		if (lastAssistant?.stopReason === "error") return;
+		const task = (async () => {
+			const card = await this.#maintenance.distillTurnCard(turnMessages);
+			if (card) await writeTurnCard(getAgentDir(), this.sessionId, card);
+		})().catch(error => logger.warn("Turn card distillation failed", { error: String(error) }));
+		this.#turnCardTask = task.finally(() => {
+			this.#turnCardTask = undefined;
+		});
+	}
+
+	/** Await the in-flight per-prompt card before admitting the next prompt. */
+	async #awaitTurnCard(): Promise<void> {
+		const task = this.#turnCardTask;
+		if (task) await task;
+	}
+
 	/** Re-seed the rate meter from the last completed assistant turn after a conversation swap (resume, branch switch). */
 	#reseedTokenRate(): void {
 		const messages = this.agent.state.messages;
@@ -4141,8 +4250,10 @@ export class AgentSession implements SettingsScope {
 		// the main session's reading survives focus round-trips.
 		if (event.type === "message_start" && event.message.role === "assistant") {
 			this.tokenRate.begin(event.message.timestamp);
+			this.#reasoningChars = 0;
 		} else if (event.type === "message_update" && event.message.role === "assistant") {
 			const delta = event.assistantMessageEvent;
+			if (delta.type === "thinking_delta") this.#reasoningChars += delta.delta.length;
 			if (delta.type === "text_delta" || delta.type === "thinking_delta" || delta.type === "toolcall_delta") {
 				this.tokenRate.push(delta.delta);
 			}
@@ -4346,6 +4457,10 @@ export class AgentSession implements SettingsScope {
 
 		// Check auto-retry and auto-compaction after agent completes
 		if (event.type === "agent_end") {
+			this.#scheduleTurnCard();
+			// Fire-and-forget, like the card: the handoff must never delay the
+			// next prompt's admission.
+			this.#slmHandoff.schedule();
 			const settledMessages = event.messages;
 			const activeMessages = this.agent.state.messages;
 			// TTSR retry work runs concurrently and clears the live flag before
@@ -6482,6 +6597,14 @@ export class AgentSession implements SettingsScope {
 		return this.#tools.reconcileBuiltinTools(options);
 	}
 
+	/**
+	 * Re-applies the model's disabled-tool policy (`tools.disabled`, then the
+	 * active profile) to the live selection. Safe when nothing changed.
+	 */
+	reconcileDisabledTools(): Promise<void> {
+		return this.#tools.reconcileDisabledToolNames();
+	}
+
 	/** Updates source provenance when a live registry entry is replaced or restored. */
 	setToolBuiltIn(name: string, builtIn: boolean): void {
 		this.#tools.setToolBuiltIn(name, builtIn);
@@ -7450,6 +7573,9 @@ export class AgentSession implements SettingsScope {
 	}
 
 	async #prompt(text: string, options?: PromptOptions): Promise<boolean> {
+		// The previous prompt's card (including a cancelled turn) must finish
+		// before the conversation moves on.
+		await this.#awaitTurnCard();
 		// Stamp the operator's submission instant before ANY async preprocessing —
 		// command execution, image normalization, vision-model description — so the
 		// prompt→yield delta includes the whole wait, whatever path the prompt takes.
@@ -11022,6 +11148,13 @@ export class AgentSession implements SettingsScope {
 	async #reconcileModelDependentState(model: Model): Promise<void> {
 		// Re-evaluate append-only context mode — provider or setting may have changed
 		this.#syncAppendOnlyContext(model);
+		this.#applyModelSampling();
+
+		try {
+			await this.#tools.reconcileDisabledToolNames();
+		} catch (error) {
+			logger.warn("disabled-tool reconcile after model change failed", { error: String(error) });
+		}
 
 		try {
 			await this.#maintenance.renderArchiveForModel();
@@ -12845,6 +12978,26 @@ export class AgentSession implements SettingsScope {
 
 	getContextUsage(options?: { contextWindow?: number }): ContextUsage | undefined {
 		return this.#stats.getContextUsage(options);
+	}
+
+	/**
+	 * Archive/offload progress for the current or last-finished maintenance
+	 * pass: scanned entries, offloaded regions/tokens, the recovery artifact,
+	 * and the before → after context percentages. Undefined before the first
+	 * pass of a session.
+	 */
+	getCompactionRummage(): Readonly<CompactionRummageState> | undefined {
+		return this.#compactionRummage.get();
+	}
+
+	/**
+	 * Approximate reasoning tokens streamed for the current (or last) assistant
+	 * message. Character-based on purpose: the gauge updates every delta without
+	 * re-tokenizing the stream; the provider's exact count is not exposed for
+	 * hidden reasoning anyway.
+	 */
+	getReasoningUsage(): { tokens: number; chars: number } {
+		return { tokens: Math.ceil(this.#reasoningChars / 4), chars: this.#reasoningChars };
 	}
 
 	/**

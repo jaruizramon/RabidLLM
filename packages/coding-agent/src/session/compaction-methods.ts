@@ -26,6 +26,12 @@ export const COMPACTION_METHOD_CHOICES = [
 		description: "Generate a handoff document and continue from it as the compaction summary",
 	},
 	{
+		value: "slm",
+		label: "Background SLM handoff",
+		description:
+			"Maintain a handoff document on the CPU with SmolLM3 after every turn; compaction reads the ready handoff with no main-model summarization call",
+	},
+	{
 		value: "soft",
 		label: "Soft compaction",
 		description: "Summarize in place with a compaction model without using server compaction",
@@ -53,6 +59,7 @@ const COMPACTION_METHODS: Record<CompactionMethod, true> = {
 	remote: true,
 	snapcompact: true,
 	handoff: true,
+	slm: true,
 	soft: true,
 	shake: true,
 };
@@ -76,10 +83,24 @@ export function resolveCompactionMethodOrder(value: unknown): CompactionMethod[]
 	return methods;
 }
 
+/**
+ * Preference list with `slm` first and a guaranteed non-`slm` fallback.
+ *
+ * The coordinator can legitimately fail to cover the live leaf (a stale handoff,
+ * a worker that never became ready), so `slm` alone would leave the context
+ * uncompacted; `handoff` is appended when nothing else would follow it.
+ */
+export function withSlmFirst(order: readonly CompactionMethod[]): CompactionMethod[] {
+	const next: CompactionMethod[] = ["slm", ...order.filter(method => method !== "slm")];
+	if (next.length === 1) next.push("handoff");
+	return next;
+}
+
 const STRATEGY_BY_COMPACTION_METHOD: Record<CompactionMethod, "context-full" | "handoff" | "shake" | "snapcompact"> = {
 	remote: "context-full",
 	snapcompact: "snapcompact",
 	handoff: "handoff",
+	slm: "handoff",
 	soft: "context-full",
 	shake: "shake",
 };
@@ -122,6 +143,9 @@ export function resolveSpeculationMethod(
 ): "remote" | "handoff" | "soft" | undefined {
 	for (const candidate of resolveCompactionMethodOrder(settings.methodOrder)) {
 		if (skipRemote && candidate === "remote") continue;
+		// The SLM coordinator owns its own background work: nothing to speculate,
+		// and a parallel LLM summary would only burn the main model's quota.
+		if (candidate === "slm") return undefined;
 		const available =
 			candidate === "remote"
 				? canUseRemoteCompaction(model, resolveMethodSettings(settings, candidate))

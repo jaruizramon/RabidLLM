@@ -11,6 +11,8 @@ import {
 	parseCompactionPointInput,
 	parseModelCompactionEntry,
 } from "../config/compaction-threshold";
+import { cfgModelProfiles } from "../config/model-settings";
+import { matchModelProfile } from "../config/model-profiles";
 import type { ContextWindowTiers } from "../config/model-registry";
 import type { ScopeLike } from "../config/registry";
 import type { Settings } from "../config/settings";
@@ -22,7 +24,12 @@ import {
 	cfgExtendedContext,
 } from "./context-settings";
 
-/** The compaction policy in force for `model`: the configured policy with its `compaction.modelThresholds` entry applied. */
+/**
+ * The compaction policy in force for `model`: the configured policy, its
+ * `compaction.modelThresholds` entry, then the matching `profiles` compaction
+ * overrides. A profile threshold replaces the other threshold basis, matching
+ * the global token-wins-over-percent precedence.
+ */
 export function resolveModelCompactionSettings(
 	scope: ScopeLike,
 	model: { provider: string; id: string } | null | undefined,
@@ -30,7 +37,21 @@ export function resolveModelCompactionSettings(
 	const thresholds = cfgCompactionModelThresholdsEnabled.get(scope)
 		? cfgCompactionModelThresholds.get(scope)
 		: undefined;
-	return applyModelCompactionThreshold(cfgCompaction.get(scope), thresholds, model);
+	const configured = applyModelCompactionThreshold(cfgCompaction.get(scope), thresholds, model);
+	const profile = model ? matchModelProfile(cfgModelProfiles.get(scope), model)?.profile.compaction : undefined;
+	if (!profile) return configured;
+	let settings = configured;
+	// Token-first, like the global precedence: a fixed token trigger overrides
+	// the percentage.
+	if (profile.thresholdTokens !== undefined) {
+		settings = { ...settings, thresholdTokens: profile.thresholdTokens, thresholdPercent: -1 };
+	} else if (profile.thresholdPercent !== undefined) {
+		settings = { ...settings, thresholdPercent: profile.thresholdPercent, thresholdTokens: -1 };
+	}
+	if (profile.methodOrder !== undefined) {
+		settings = { ...settings, methodOrder: profile.methodOrder };
+	}
+	return settings;
 }
 
 /** Where auto-compaction triggers for `model` and which setting decides it, for the model hub preview. */
@@ -40,13 +61,18 @@ export function describeModelCompactionPoint(scope: ScopeLike, model: Model): Mo
 		? cfgCompactionModelThresholds.get(scope)
 		: undefined;
 	const match = matchModelCompactionThreshold(thresholds, model);
-	const settings = applyModelCompactionThreshold(configured, thresholds, model);
+	const profile = matchModelProfile(cfgModelProfiles.get(scope), model);
+	const settings = resolveModelCompactionSettings(scope, model);
 	const contextWindow = model.contextWindow ?? 0;
 	const trigger = settings.enabled && contextWindow > 0 ? resolveTrigger(settings, contextWindow) : undefined;
 	return {
 		tokens: trigger?.tokens,
 		basis: trigger && formatBasis(trigger),
-		source: match?.key ?? (configured.thresholdTokens > 0 || configured.thresholdPercent > 0 ? "global" : "default"),
+		source:
+			profile?.profile.compaction !== undefined
+				? `profile:${profile.key}`
+				: (match?.key ??
+					(configured.thresholdTokens > 0 || configured.thresholdPercent > 0 ? "global" : "default")),
 		draft: match?.key === `${model.provider}/${model.id}` ? formatCompactionPointInput(match.threshold) : undefined,
 	};
 }

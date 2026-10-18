@@ -1,0 +1,220 @@
+#!/bin/sh
+# llama-manager — the one entry point for the V100 llama.cpp system.
+#
+#   llama-manager          start the model server and the manager here (default)
+#   llama-manager open     same, and open the manager page in Firefox
+#   llama-manager stop     stop the manager and the model server
+#   llama-manager status   what is listening, which engine owns the port, and which model is loaded
+#   llama-manager logs     follow the manager's and the server's logs
+#
+# The manager ($APP_DIR/manager.py) owns the model server: it starts `llama-server`
+# in router mode with --no-models-autoload and models.ini's `load-on-startup = false`,
+# so nothing enters VRAM until a card is dragged onto the page, and it stops that
+# server again on its own way out.  This script therefore stays in the foreground:
+# the terminal window is the lifetime of the system, and closing it (SIGHUP) or
+# pressing Ctrl-C takes both halves down and frees the V100.
+#
+# The manager page lists every model in models.ini; `~/models` holds the weights.
+# Desktop shortcut: ~/Desktop/Start Llama Server.desktop -> `llama-manager open`.
+
+set -eu
+
+APP_DIR="${LLAMA_V100_DIR:-$HOME/.local/share/llama-v100}"
+MANAGER="$APP_DIR/manager.py"
+LOG="$APP_DIR/logs/manager.log"
+UI_PORT=8090
+SERVER_PORT=8080
+UI="http://localhost:$UI_PORT"
+BROWSER=firefox
+
+program=$(basename "$0")
+child=
+
+die() {
+	printf '%s: %s\n' "$program" "$*" >&2
+	if [ -t 0 ]; then	# desktop launch: keep the window open to be read
+		printf 'Press Enter to close.' >&2
+		read -r _ || :
+	fi
+	exit 1
+}
+
+usage() {
+	cat <<EOF
+usage: $program [start|open|stop|status|logs]
+
+  start    start the model server and the manager here (default)
+  open     the same, then open $UI in Firefox
+  stop     stop the manager and the model server
+  status   what is listening, and which model is loaded
+  logs     follow the manager's and the server's logs
+
+Nothing is loaded automatically: not at startup, and not because a client asked for
+a model that is not on the V100.  Drag a card onto the page to load one.
+EOF
+}
+
+listening() { [ -n "$(ss -H -ltn "sport = :$1" 2>/dev/null)" ]; }
+
+# True only once the manager is answering *and* its model server is up.  The UI socket
+# is bound before the router is started — deliberately, so a busy UI port fails before
+# anything touches the GPU — so a listening port on its own proves nothing.
+ready() {
+	curl -s --max-time 2 "http://127.0.0.1:$UI_PORT/api/state" 2>/dev/null |
+		python3 -c 'import json, sys
+try:
+    up = json.load(sys.stdin).get("server", {}).get("up")
+except Exception:
+    sys.exit(1)
+sys.exit(0 if up else 1)' 2>/dev/null
+}
+
+# Ctrl-C, `kill`, or the terminal window closing.  The manager stops llama-server on
+# its own way out — INT first, because this build ignores TERM for far longer than a
+# shutdown should take — so signalling the manager is enough; the wait keeps this
+# window here until it has finished rather than leaving the V100 held by an orphan.
+cleanup() {
+	trap - INT TERM HUP
+	if [ -n "$child" ]; then
+		printf '\n%s: stopping…\n' "$program" >&2
+		kill -INT "$child" 2>/dev/null || :
+		wait "$child" 2>/dev/null || :
+	fi
+	exit 0
+}
+trap cleanup INT TERM HUP
+
+open_page() {
+	if command -v "$BROWSER" >/dev/null 2>&1; then
+		"$BROWSER" --new-tab "$UI" >/dev/null 2>&1 &
+	elif command -v xdg-open >/dev/null 2>&1; then
+		xdg-open "$UI" >/dev/null 2>&1 &
+	else
+		printf '%s: no browser found — open %s\n' "$program" "$UI" >&2
+	fi
+}
+
+stop_manager() {
+	# Ask the manager to stop the model server first: it started that server and knows
+	# the INT-first wind-down it needs (§10 of local-qwen-on-v100.md).
+	if listening "$UI_PORT"; then
+		curl -s -X POST "http://127.0.0.1:$UI_PORT/api/server/stop" >/dev/null 2>&1 || :
+	fi
+	pids=$(pgrep -f "manager.py --ui-port $UI_PORT" || :)
+	[ -n "$pids" ] || return 0
+	kill -INT $pids 2>/dev/null || :
+	i=0
+	while listening "$UI_PORT" && [ "$i" -lt 40 ]; do
+		sleep 0.25
+		i=$((i + 1))
+	done
+	if listening "$UI_PORT"; then
+		kill -9 $pids 2>/dev/null || :
+		sleep 0.5
+	fi
+	printf '%s: manager stopped (pid %s)\n' "$program" "$pids"
+}
+
+stop_server() {
+	# Anything left is a server the manager never got to stop: it was killed hard, or
+	# it was started outside the manager.  Either way it holds the port and the VRAM.
+	pids=$(pgrep -x llama-server || :)
+	[ -n "$pids" ] || return 0
+	kill -INT $pids 2>/dev/null || :
+	i=0
+	while pgrep -x llama-server >/dev/null && [ "$i" -lt 30 ]; do
+		sleep 0.5
+		i=$((i + 1))
+	done
+	if pgrep -x llama-server >/dev/null; then
+		printf '%s: still up after 15s, sending TERM\n' "$program" >&2
+		kill -TERM $pids 2>/dev/null || :
+		i=0
+		while pgrep -x llama-server >/dev/null && [ "$i" -lt 20 ]; do
+			sleep 0.5
+			i=$((i + 1))
+		done
+	fi
+	pgrep -x llama-server >/dev/null && die "llama-server (pid $pids) is still up — kill -9 it"
+	printf '%s: model server stopped (pid %s)\n' "$program" "$pids"
+}
+
+case "${1:-start}" in
+	start | open | stop | status | logs) cmd=${1:-start} ;;
+	-h | --help | help)
+		usage
+		exit 0
+		;;
+	*) usage >&2; exit 2 ;;
+esac
+
+case "$cmd" in
+	stop)
+		stop_manager
+		stop_server
+		printf '%s: stopped\n' "$program"
+		exit 0
+		;;
+	status)
+		if listening "$UI_PORT"; then
+			printf 'model manager  %s   up\n' "$UI"
+		else
+			printf 'model manager  %s   down\n' "$UI"
+		fi
+		if ! listening "$SERVER_PORT"; then
+			printf 'model server   http://localhost:%s   down\n' "$SERVER_PORT"
+			exit 0
+		fi
+		# The manager knows which preset is loaded; ask it rather than guessing.
+		# The manager knows which preset is loaded and which engine owns the port;
+		# ask it rather than guessing from the port.
+		state=$(curl -s --max-time 3 "http://127.0.0.1:$UI_PORT/api/state" 2>/dev/null |
+			python3 -c 'import json,sys; d=json.load(sys.stdin); print("%s|%s" % (d.get("server",{}).get("engine") or "down", d.get("active") or "none"))' \
+			2>/dev/null || :)
+		engine=${state%%|*}
+		loaded=${state##*|}
+		printf 'model server   http://localhost:%s   %s up, loaded: %s\n' \
+			"$SERVER_PORT" "${engine:-unknown}" "${loaded:-unknown}"
+		exit 0
+		;;
+	logs)
+		mkdir -p "$APP_DIR/logs"
+		: >>"$LOG"
+		: >>"$APP_DIR/logs/router.log"
+		: >>"$APP_DIR/logs/1cat.log"
+	exec tail -n 40 -f "$LOG" "$APP_DIR/logs/router.log" "$APP_DIR/logs/1cat.log"
+		;;
+esac
+
+if listening "$UI_PORT"; then
+	printf '%s: already running — %s\n' "$program" "$UI"
+else
+	[ -f "$MANAGER" ] || die "no manager at $MANAGER"
+	mkdir -p "$APP_DIR/logs"
+	printf '%s: starting the model server and the manager…\n' "$program"
+	python3 "$MANAGER" --ui-port "$UI_PORT" --router-port "$SERVER_PORT" >>"$LOG" 2>&1 &
+	child=$!
+	i=0
+	while ! ready && [ "$i" -lt 180 ]; do
+		kill -0 "$child" 2>/dev/null || die "the manager exited — see $LOG"
+		sleep 0.5
+		i=$((i + 1))
+	done
+	ready || die "the manager did not come up — see $LOG"
+fi
+
+printf 'llama server   http://localhost:%s\n' "$SERVER_PORT"
+printf 'model manager  %s\n' "$UI"
+printf 'nothing loaded — drag a card onto the page to put a model on the V100\n'
+
+if [ "$cmd" = open ]; then
+	open_page
+fi
+
+# Stay attached: this window is the lifetime of the model server.
+if [ -n "$child" ]; then
+	printf 'Ctrl-C, or close this window, stops both.  Log: %s\n' "$LOG"
+	wait "$child" || :
+	printf '%s: the manager exited; the model server went with it\n' "$program"
+fi
+exit 0

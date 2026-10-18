@@ -16,6 +16,7 @@ const COMPACTION_METHOD_LABELS: Record<string, string> = {
 	remote: "remote-compacted",
 	soft: "soft-compacted",
 	handoff: "handed-off",
+	slm: "slm-compacted",
 	snapcompact: "snap-compacted",
 	shake: "shaken",
 };

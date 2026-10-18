@@ -7,6 +7,39 @@ import type { LoopConditionConfig, LoopLimitRuntime } from "./loop";
 
 export type { ContextLineMode, StatusLinePreset, StatusLineSegmentId, StatusLineSeparatorStyle };
 
+/** Maintenance method whose archive/offload pass is running. */
+export type CompactionRummageAction = "context-full" | "remote" | "handoff" | "shake" | "snapcompact";
+
+/** Where the archive → rewrite pipeline is. */
+export type CompactionRummagePhase = "scanning" | "offloading" | "summarizing" | "rewriting";
+
+/**
+ * Live ledger for one context-maintenance pass, rendered above the status bar:
+ * what the archive is doing, how much it moved out, and the context percentage
+ * before → after. See `AgentSession.getCompactionRummage`.
+ */
+export interface CompactionRummageStatus {
+	action: CompactionRummageAction;
+	phase: CompactionRummagePhase;
+	/** Epoch ms when the pass started. */
+	startedAt: number;
+	/** Epoch ms when the pass finished; unset while it runs. */
+	endedAt?: number;
+	scannedEntries?: number;
+	regions?: number;
+	archivedTokens?: number;
+	archivedBytes?: number;
+	/** Recovery artifact holding the offloaded originals (tmpfs or disk). */
+	archivePath?: string;
+	tokensBefore?: number;
+	tokensAfter?: number;
+	contextWindow?: number;
+	tokensFreed?: number;
+	aborted?: boolean;
+	skipped?: boolean;
+	error?: string;
+}
+
 /** Context-window occupancy shown by the status line and exposed to extensions. */
 export interface ContextUsage {
 	/** Estimated context tokens. */

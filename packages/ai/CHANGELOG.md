@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added `reasoning_budget_tokens` to local llama.cpp Chat Completions requests: the selected thinking level's budget now caps the server-side reasoning sampler, where OpenAI's `reasoning.max_tokens` never reached it; cloud endpoints are unchanged
 - Added `prewarmAnthropicConnection(model)`, which opens the official Anthropic API connection for a first-party `anthropic` model ahead of a request, using the same transport and TLS settings so the request reuses it instead of paying the connection handshake ([#16044](https://github.com/can1357/oh-my-pi/pull/16044) by [@H4vC](https://github.com/H4vC))
 
 ### Changed

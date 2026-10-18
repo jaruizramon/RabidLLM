@@ -112,7 +112,7 @@ describe("AgentSession manual snapcompact text-only fallback", () => {
 
 		const result = await harness.session.compact();
 
-		expect(result.summary).toBe("llm summary");
+		expect(result.summary).toContain("llm summary");
 		// The preference resolver skips snapcompact and tries the active model for soft compaction.
 		expect(compactSpy).toHaveBeenCalled();
 		const [, firstCandidate] = compactSpy.mock.calls[0]!;
@@ -121,7 +121,7 @@ describe("AgentSession manual snapcompact text-only fallback", () => {
 		);
 		expect(harness.sessionManager.getBranch().find(entry => entry.type === "compaction")).toMatchObject({
 			type: "compaction",
-			summary: "llm summary",
+			summary: expect.stringContaining("llm summary"),
 		});
 	});
 

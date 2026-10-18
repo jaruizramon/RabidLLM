@@ -62,6 +62,7 @@ import { cfgDisabledExtensions, cfgSkills, type SkillsSettings } from "../extens
 import { cfgExternalThinking, cfgIncludeModelInPrompt, cfgInlineToolDescriptors, cfgSkillful } from "./settings";
 import { cfgStartupQuiet } from "../modes/settings";
 import { cfgToolsApproval, cfgToolsApprovalMode, cfgToolsXdevDocs, cfgToolsXdevInlineDevices } from "../tools/settings";
+import { resolveDisabledToolNames } from "./model-profile-settings";
 
 /** Capabilities borrowed from the owning AgentSession. */
 export interface SessionToolsHost {
@@ -107,6 +108,12 @@ export interface SettingsGatedToolDelta {
 interface SessionToolsOptions {
 	autoApprove?: boolean;
 	toolRegistry?: Map<string, AgentTool>;
+	/**
+	 * Construction slate before the disabled-tool filter. Defaults to the
+	 * agent's initial tools; the SDK passes the unfiltered selection so hidden
+	 * names survive a model switch that lifts the policy.
+	 */
+	selectedToolNames?: readonly string[];
 	createVibeTools?: () => AgentTool[];
 	/** Creates the private `think` scratchpad tool for runtime setting changes. */
 	createThinkTool?: () => Promise<AgentTool | null>;
@@ -367,6 +374,13 @@ export class SessionTools {
 	/** Full enabled set, including tools demoted from the model-visible surface. */
 	#enabledToolNames = new Set<string>();
 	/**
+	 * `tools.disabled` (plus the active model profile's list) as of the last
+	 * apply. Slate entries stay in {@link #enabledToolNames} while hidden so a
+	 * model switch that lifts the policy restores them; this key lets
+	 * {@link reconcileDisabledToolNames} no-op when nothing changed.
+	 */
+	#appliedDisabledToolNames: readonly string[] = [];
+	/**
 	 * `xd://` device names the current base system prompt renders in its catalog
 	 * (the last rebuild's {@link BuildSystemPromptResult.xdevCatalogNames}). Consulted
 	 * when a pending mount notice is delivered: a device the outgoing prompt already
@@ -484,8 +498,15 @@ export class SessionTools {
 		// landing while the live set is transiently narrow
 		// commits that narrow set as the sticky slate — the session keeps almost
 		// no tools and the prompt rebuild without `read` empties the skill list.
-		for (const tool of host.agent.state.tools) this.#enabledToolNames.add(tool.name);
+		// `selectedToolNames` keeps tools hidden by the model's disabled list on
+		// the slate, so a later model switch can restore them.
+		if (options.selectedToolNames) {
+			for (const name of options.selectedToolNames) this.#enabledToolNames.add(name);
+		} else {
+			for (const tool of host.agent.state.tools) this.#enabledToolNames.add(tool.name);
+		}
 		for (const name of this.#xdev?.mountedNames ?? []) this.#enabledToolNames.add(name);
+		this.#appliedDisabledToolNames = resolveDisabledToolNames(host.settings, host.model());
 		this.#promptModelKey = this.#currentPromptModelKey();
 	}
 
@@ -613,14 +634,15 @@ export class SessionTools {
 	getActiveToolNames(): string[] {
 		return this.#host.agent.state.tools.map(t => t.name);
 	}
-	/** Enabled top-level and `xd://` tool names. */
+	/** Enabled top-level and `xd://` tool names, minus the model's disabled tools. */
 	getEnabledToolNames(): string[] {
 		// Union live xd:// mounts so devices mounted out-of-band (plugins writing
 		// to xdev state directly) survive the next apply.
 		const mountedNames = this.#xdev?.mountedNames;
 		const base = this.#enabledToolNames.size > 0 ? [...this.#enabledToolNames] : this.getActiveToolNames();
-		if (!mountedNames || mountedNames.size === 0) return base;
-		return [...new Set([...base, ...mountedNames])];
+		const union = !mountedNames || mountedNames.size === 0 ? base : [...new Set([...base, ...mountedNames])];
+		const disabled = resolveDisabledToolNames(this.#host.settings, this.#host.model());
+		return disabled.length === 0 ? union : union.filter(name => !disabled.includes(name));
 	}
 
 	/** Names currently presented as `xd://` devices. */
@@ -859,8 +881,26 @@ export class SessionTools {
 		return `delegation-bias:${resolveDelegationBias(activeModel)}|inline-descriptors:${inlineDescriptors}`;
 	}
 
+	/**
+	 * Re-applies the enabled slate after the model-scoped disabled-tool policy
+	 * changes (model switch or a `tools.disabled` edit). Hidden slate entries
+	 * return to the active set when the policy no longer covers them; newly
+	 * hidden entries leave both the request and the system prompt.
+	 */
+	async reconcileDisabledToolNames(): Promise<void> {
+		const disabled = resolveDisabledToolNames(this.#host.settings, this.#host.model());
+		if (
+			disabled.length === this.#appliedDisabledToolNames.length &&
+			disabled.every((name, index) => name === this.#appliedDisabledToolNames[index])
+		) {
+			return;
+		}
+		await this.setActiveToolsByName([...this.#enabledToolNames]);
+	}
+
 	/** Rebuilds model-dependent tool prompts after a model change. */
 	async syncAfterModelChange(previousEditMode: EditMode): Promise<void> {
+		await this.reconcileDisabledToolNames();
 		const currentEditMode = this.resolveActiveEditMode();
 		const editModeChanged = previousEditMode !== currentEditMode && this.getActiveToolNames().includes("edit");
 		// The system prompt selects model-specific policy even when it does not display the model id.
@@ -1027,8 +1067,11 @@ export class SessionTools {
 	async #applyActiveToolsByName(toolNames: string[], forcePromptRefresh = false, signal?: AbortSignal): Promise<void> {
 		signal?.throwIfAborted();
 		toolNames = normalizeToolNames(toolNames);
+		const disabledToolNames = resolveDisabledToolNames(this.#host.settings, this.#host.model());
+		const writeDisabled = disabledToolNames.includes("write");
 		let builtInWriteAvailable = this.#builtInToolNames.has("write");
 		const fullWriteSelected =
+			!writeDisabled &&
 			toolNames.includes("write") &&
 			(this.#presentationPinnedToolNames?.has("write") === true ||
 				this.#runtimeSelectedToolNames?.has("write") === true);
@@ -1049,16 +1092,18 @@ export class SessionTools {
 		// registry without `goal`. Register it before resolving the selection so
 		// `#enterGoalMode`'s `[...tools, "goal"]` request is honored instead of
 		// silently dropped (issue #9444).
-		if (toolNames.includes("goal") && !this.#toolRegistry.has("goal")) {
+		if (toolNames.includes("goal") && !disabledToolNames.includes("goal") && !this.#toolRegistry.has("goal")) {
 			const goalRegistration = this.#ensureGoalRegistered?.();
 			if (goalRegistration) await untilAborted(signal, goalRegistration);
 		}
 		const selectedTools = toolNames.flatMap(name => {
+			if (disabledToolNames.includes(name)) return [];
 			const tool = this.#toolRegistry.get(name);
 			return tool ? [{ name, tool }] : [];
 		});
 		const xdevReadAvailable = this.#builtInToolNames.has("read") && selectedTools.some(({ name }) => name === "read");
 		const xdevWriteAvailable =
+			!writeDisabled &&
 			builtInWriteAvailable &&
 			(selectedTools.some(({ name }) => name === "write") || this.#deviceOnlyWriteTransportAvailable);
 		const isPresentationPinned = (name: string): boolean =>
@@ -1088,7 +1133,7 @@ export class SessionTools {
 			builtInWriteAvailable = writeRegistration ? (await untilAborted(signal, writeRegistration)) === true : false;
 			if (builtInWriteAvailable) this.#builtInToolNames.add("write");
 		}
-		if (transportNeeded && builtInWriteAvailable) {
+		if (transportNeeded && builtInWriteAvailable && !writeDisabled) {
 			const write = this.#toolRegistry.get("write");
 			if (write && !validToolNames.includes("write")) {
 				tools.push(this.#wrapToolForAcpPermission(write));
@@ -1124,7 +1169,16 @@ export class SessionTools {
 		const previousMounted = new Set(this.#xdev?.mountedNames ?? []);
 		const previousActiveToolNames = this.getActiveToolNames();
 		const previousEnabledToolNames = this.#enabledToolNames;
-		this.#enabledToolNames = new Set([...validToolNames, ...mountNames]);
+		const previousAppliedDisabledToolNames = this.#appliedDisabledToolNames;
+		// Hidden names stay on the slate so lifting the policy on a model switch
+		// restores the user's selection instead of silently forgetting it.
+		const hiddenSlateToolNames = new Set(
+			[...previousEnabledToolNames, ...toolNames].filter(
+				name => disabledToolNames.includes(name) && this.#toolRegistry.has(name),
+			),
+		);
+		this.#enabledToolNames = new Set([...validToolNames, ...hiddenSlateToolNames, ...mountNames]);
+		this.#appliedDisabledToolNames = disabledToolNames;
 		this.#setMountedNames(mountNames);
 		this.#setActiveToolNames?.(validToolNames);
 
@@ -1192,6 +1246,7 @@ export class SessionTools {
 			this.#setMountedNames(previousMounted);
 			this.#setActiveToolNames?.(previousActiveToolNames);
 			this.#enabledToolNames = previousEnabledToolNames;
+			this.#appliedDisabledToolNames = previousAppliedDisabledToolNames;
 			throw error;
 		}
 
@@ -1201,6 +1256,7 @@ export class SessionTools {
 			this.#setMountedNames(previousMounted);
 			this.#setActiveToolNames?.(previousActiveToolNames);
 			this.#enabledToolNames = previousEnabledToolNames;
+			this.#appliedDisabledToolNames = previousAppliedDisabledToolNames;
 			return;
 		}
 

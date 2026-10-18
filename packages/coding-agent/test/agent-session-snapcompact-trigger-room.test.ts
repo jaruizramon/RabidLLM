@@ -469,7 +469,7 @@ describe("snapcompact archive sized by the compaction trigger", () => {
 		expect(summarize).toHaveBeenCalledTimes(1);
 		const compactions = session.sessionManager.getBranch().filter(entry => entry.type === "compaction");
 		expect(compactions).toHaveLength(1);
-		expect(compactions[0]).toMatchObject({ summary: "summarized" });
+		expect(compactions[0]).toMatchObject({ summary: expect.stringContaining("summarized") });
 		expect(snapcompact.getPreservedArchive(compactions[0]?.preserveData)).toBeUndefined();
 	});
 
@@ -668,7 +668,7 @@ describe("snapcompact archive sized by the compaction trigger", () => {
 		// The request went out on the next method's summary, not on the snapcompact archive.
 		expect(requests[0]?.compactions).toBe(1);
 		const compaction = session.sessionManager.getBranch().find(entry => entry.type === "compaction");
-		expect(compaction).toMatchObject({ summary: "summarized" });
+		expect(compaction).toMatchObject({ summary: expect.stringContaining("summarized") });
 		expect(
 			snapcompact.getPreservedArchive(compaction?.type === "compaction" ? compaction.preserveData : undefined),
 		).toBeUndefined();

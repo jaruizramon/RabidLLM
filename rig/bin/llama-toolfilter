@@ -1,0 +1,13 @@
+#!/bin/sh
+# llama-toolfilter — the loopback request filter in front of the V100 router.
+#
+# llama-server has no tool deny-list, and its tool-call grammar is generated from
+# the request's `tools` array. This relay is therefore the only place a tool can be
+# hard-disabled for every client: it removes entries whose function name is in
+# toolfilter.json's "strip" set (default: task) and forwards everything else.
+#
+#   llama-toolfilter            start in the foreground (config: toolfilter.json)
+#   llama-toolfilter --strip task,agent
+#
+# Point a harness at http://127.0.0.1:<port>/v1 — see ~/.omp/agent/models.yml.
+exec python3 "$HOME/.local/share/llama-v100/toolfilter.py" "$@"

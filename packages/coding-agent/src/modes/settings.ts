@@ -144,7 +144,7 @@ export const cfgComposerTokenRate = register({
 		group: "Composer",
 		label: "Generation Rate",
 		description:
-			"Show a live generation tok/s readout: on the working row next to the session title, or in the native composer bar right after the thinking level, where the last reading stays between turns. Estimated from streamed deltas and corrected by the provider's billed output count as each message completes.",
+			"Show a live generation tok/s readout in a dedicated row above the input (directly above the archive panel), where the last reading stays between turns; the native composer bar shows it after the thinking level. Estimated from streamed deltas and corrected by the provider's billed output count as each message completes.",
 	},
 });
 

@@ -580,6 +580,35 @@ export const cfgSampling = combine(
 	}),
 );
 
+/** Per-prompt episodic cards distilled after each turn (archive only). */
+export const cfgTurnCardsEnabled = register({
+	id: "turnCards.enabled",
+	type: "boolean",
+	default: false,
+	ui: {
+		tab: "context",
+		group: "Turn cards",
+		label: "Turn Cards",
+		description:
+			"After each completed prompt, distill a small card (prompt, touched files, pointer + summary per operation) into <agent>/turn-cards/. Uses the compaction model; archive only, never injected into context.",
+	},
+});
+
+export const cfgTurnCardsMaxTokens = register({
+	id: "turnCards.maxTokens",
+	type: "number",
+	default: 1024,
+});
+
+export const cfgTurnCardsSummaryWords = register({
+	id: "turnCards.summaryWords",
+	type: "number",
+	default: 50,
+});
+
+/** Agent sampling defaults, as resolved from global sampling settings and a model profile. */
+export type SamplingSettings = SettingValueOf<typeof cfgSampling>;
+
 export const cfgTextVerbosity = register({
 	id: "textVerbosity",
 	type: "enum",
@@ -1471,6 +1500,9 @@ export const cfgThinkingBudgetsHigh = register({ id: "thinkingBudgets.high", typ
 export const cfgThinkingBudgetsXhigh = register({ id: "thinkingBudgets.xhigh", type: "number", default: 32768 });
 
 export const cfgThinkingBudgetsMax = register({ id: "thinkingBudgets.max", type: "number", default: 32768 });
+
+/** Token budget per thinking level, as resolved from `thinkingBudgets.*` and a model profile. */
+export type ThinkingBudgetsSettings = SettingValueOf<typeof cfgThinkingBudgets>;
 
 /** Token budget per thinking level (`thinkingBudgets.*`) on transports that accept reasoning token budgets. */
 export const cfgThinkingBudgets = combine({

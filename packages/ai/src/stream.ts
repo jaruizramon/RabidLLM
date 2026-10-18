@@ -2055,6 +2055,7 @@ function mapOptionsForApi<TApi extends Api>(
 				openrouterVariant: options?.openrouterVariant,
 				maxTokensExplicit: rawOptions?.maxTokens !== undefined,
 				promptCache: options?.promptCache,
+				thinkingBudgets: options?.thinkingBudgets,
 			});
 		}
 
@@ -2069,6 +2070,7 @@ function mapOptionsForApi<TApi extends Api>(
 				openrouterVariant: options?.openrouterVariant,
 				maxTokensExplicit: rawOptions?.maxTokens !== undefined,
 				promptCache: options?.promptCache,
+				thinkingBudgets: options?.thinkingBudgets,
 			});
 
 		case "openai-responses":

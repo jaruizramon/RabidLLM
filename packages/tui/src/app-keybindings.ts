@@ -30,6 +30,7 @@ interface AppKeybindings {
 	"app.suspend": true;
 	"app.display.reset": true;
 	"app.thinking.cycle": true;
+	"app.preset.select": true;
 	"app.thinking.toggle": true;
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
@@ -111,6 +112,11 @@ export const KEYBINDINGS = {
 	"app.thinking.cycle": {
 		defaultKeys: "shift+tab",
 		description: "Cycle thinking level",
+	},
+	"app.preset.select": {
+		// Alt+Q, not Alt+Shift+Tab: desktops grab Alt+Tab for window switching.
+		defaultKeys: "alt+q",
+		description: "Select a RabidAI llama-server preset",
 	},
 	"app.thinking.toggle": {
 		defaultKeys: "ctrl+t",

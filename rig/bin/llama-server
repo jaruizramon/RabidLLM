@@ -1,0 +1,18 @@
+#!/bin/sh
+# Inference pinning: only the Tesla V100 (PCI 01:00.0) is visible to CUDA, leaving
+# the RTX 3070 (02:00.0) for display only. PCI_BUS_ID ordering makes visible
+# device 0 = 01:00.0; without it CUDA orders the 3070 first and inference would
+# land on the display GPU. Override with CUDA_VISIBLE_DEVICES=<n> if ever needed.
+#
+# This is the PrismML fork build (0.2.0-dev, prism-b10709) rather than the stock
+# b11026 install: the manager's router spawns every model child with this binary, and
+# Bonsai 2's ternary packs (PQ2_0 / PTQ1_0 + the Hadamard runtime they declare) load in
+# no other build — stock rejects them with "failed to read tensor info".  The fork is
+# also a superset for everything else this rig serves; the stock build is kept intact
+# and is one line away in llama-server-stock (see §21).
+export CUDA_DEVICE_ORDER="${CUDA_DEVICE_ORDER:-PCI_BUS_ID}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+# The fork ships libggml-* but not cuBLAS/cuDART, so it borrows the CUDA 12.8 libraries
+# the stock install carries (both directories are needed).
+export LD_LIBRARY_PATH=@HOME@/.local/opt/llama-prism:@HOME@/.local/opt/llama.cpp${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+exec @HOME@/.local/opt/llama-prism/llama-server "$@"

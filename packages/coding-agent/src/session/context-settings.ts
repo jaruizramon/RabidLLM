@@ -1,3 +1,5 @@
+import * as os from "node:os";
+import * as path from "node:path";
 import {
 	type AgentCompactionThresholdOverride,
 	validateModelCompactionThresholds,
@@ -285,6 +287,55 @@ export const cfgCompactionKeepRecentTokens = register({
 	default: 20000,
 });
 
+/**
+ * Speed-floor trigger: compact when generation sits below `speedFloorTps` for
+ * `speedConsecutive` completed turns, above `speedMinTokens` live context.
+ * `0` disables it. This catches the "slow but not full" regime that token and
+ * percentage thresholds never see.
+ */
+/**
+ * Deterministic compaction: use the session's chained turn cards as the
+ * summary instead of calling the compaction model. Falls back to the LLM when
+ * the chain does not cover the summarized prompts.
+ */
+export const cfgCompactionTurnCardChain = register({
+	id: "compaction.turnCardChain",
+	type: "boolean",
+	default: false,
+	ui: {
+		tab: "context",
+		group: "Compaction",
+		label: "Turn-Card Chain Summary",
+		description:
+			"Use the cumulative turn cards as the compaction summary (no summary model call). Deterministic concatenation with a token cap; falls back to the LLM when the chain does not cover the summarized prompts.",
+	},
+});
+
+export const cfgCompactionSpeedFloorTps = register({
+	id: "compaction.speedFloorTps",
+	type: "number",
+	default: 0,
+	ui: {
+		tab: "context",
+		group: "Compaction",
+		label: "Speed Floor (tok/s)",
+		description:
+			"Compact when measured generation stays below this many tokens/second. 0 disables the trigger. The floor is ignored below the minimum context; a slow server on a small prompt is not contextual.",
+	},
+});
+
+export const cfgCompactionSpeedConsecutive = register({
+	id: "compaction.speedConsecutive",
+	type: "number",
+	default: 2,
+});
+
+export const cfgCompactionSpeedMinTokens = register({
+	id: "compaction.speedMinTokens",
+	type: "number",
+	default: 20000,
+});
+
 export const cfgCompactionAutoContinue = register({ id: "compaction.autoContinue", type: "boolean", default: true });
 
 export const cfgCompactionRemoteEndpoint = register({
@@ -380,6 +431,176 @@ export const cfgCompactionDropUseless = register({
 	},
 });
 
+// Background SLM handoff (`compaction.methodOrder` entry `slm`): a CPU
+// llama-server maintains a rolling handoff document so compaction never sends
+// the overflowing context to a model. Inert until `slm` is selected.
+export const cfgSlmHandoffModelPath = register({
+	id: "compaction.slmHandoff.modelPath",
+	type: "string",
+	default: path.join(os.homedir(), "models", "SmolLM3-Q4_K_M.gguf"),
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Model",
+		description: "GGUF path for the CPU worker that maintains the background handoff document",
+	},
+});
+
+export const cfgSlmHandoffServerPath = register({
+	id: "compaction.slmHandoff.serverPath",
+	type: "string",
+	default: "",
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Server",
+		description: "llama-server binary for the CPU worker; empty auto-resolves llama-server-stock, then llama-server",
+	},
+});
+
+export const cfgSlmHandoffThreads = register({
+	id: "compaction.slmHandoff.threads",
+	type: "number",
+	default: 0,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Threads",
+		description: "CPU threads for the worker; 0 = 25% of logical CPUs (at least 1)",
+	},
+});
+
+export const cfgSlmHandoffReasoningBudgetTokens = register({
+	id: "compaction.slmHandoff.reasoningBudgetTokens",
+	type: "number",
+	default: 1024,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Reasoning Budget",
+		description:
+			"Maximum tokens the worker may spend thinking per run; 0 disables thinking. A full 4096 spent ~38s on a 200-word merge",
+	},
+});
+
+export const cfgSlmHandoffMaxInputTokens = register({
+	id: "compaction.slmHandoff.maxInputTokens",
+	type: "number",
+	default: 16384,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Input Budget",
+		description: "Maximum tokens fed to one worker run; larger turn batches are split into several runs",
+	},
+});
+
+export const cfgSlmHandoffMaxHandoffTokens = register({
+	id: "compaction.slmHandoff.maxHandoffTokens",
+	type: "number",
+	default: 2048,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Output Budget",
+		description: "Maximum size of the handoff document the worker may emit",
+	},
+});
+
+export const cfgSlmHandoffMaxContextTokens = register({
+	id: "compaction.slmHandoff.maxContextTokens",
+	type: "number",
+	default: 16384,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Context Cap",
+		description:
+			"Upper bound on the main model's context window copied as the worker's --ctx-size. One run only sees the turns since the last handoff, so a large copy costs RAM and prefill for nothing",
+	},
+});
+
+export const cfgSlmHandoffAwaitMs = register({
+	id: "compaction.slmHandoff.awaitMs",
+	type: "number",
+	default: 180000,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Wait",
+		description:
+			"Maximum milliseconds compaction waits for a stale or in-flight handoff before falling back to the next method",
+	},
+});
+
+export const cfgSlmHandoffDevice = register({
+	id: "compaction.slmHandoff.device",
+	type: "string",
+	default: "cpu",
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Device",
+		description:
+			"cpu keeps the worker off every GPU; cuda lets the driver pick, cuda:N pins the Nth GPU in PCI_BUS_ID order (nvidia-smi order here). Never the inference card by default",
+	},
+	validate: raw => {
+		if (raw === undefined) return;
+		if (typeof raw !== "string" || !/^(cpu|cuda(:\d+)?)$/i.test(raw.trim())) {
+			throw new Error('compaction.slmHandoff.device must be "cpu", "cuda", or "cuda:N"');
+		}
+	},
+});
+
+export const cfgSlmHandoffGpuLayers = register({
+	id: "compaction.slmHandoff.gpuLayers",
+	type: "number",
+	default: -1,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff GPU Layers",
+		description: "Layers offloaded to the selected device; -1 = all of them on a GPU, none on the CPU",
+	},
+});
+
+export const cfgSlmHandoffDetail = register({
+	id: "compaction.slmHandoff.detail",
+	type: "string",
+	default: "detailed",
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff Detail",
+		description:
+			"Prose depth in the handoff document: concise (bullets only), standard (one line per item), detailed (a short paragraph per item, with commands and reasons). Detail costs successor context",
+		options: [
+			{ value: "concise", label: "Concise — bullets only" },
+			{ value: "standard", label: "Standard — one sentence per item" },
+			{ value: "detailed", label: "Detailed — paths, commands, and reasons per item" },
+		],
+	},
+	validate: raw => {
+		if (raw === undefined) return;
+		if (typeof raw !== "string" || !["concise", "standard", "detailed"].includes(raw.trim())) {
+			throw new Error('compaction.slmHandoff.detail must be "concise", "standard", or "detailed"');
+		}
+	},
+});
+
+export const cfgSlmHandoffGpuFreeMiB = register({
+	id: "compaction.slmHandoff.gpuFreeMiB",
+	type: "number",
+	default: 2048,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Handoff GPU Headroom",
+		description:
+			"VRAM (MiB) to leave free on a GPU worker's card; llama.cpp then offloads only the layers that fit. -1 disables auto-fit and offloads exactly gpuLayers",
+	},
+});
+
 /** Every `compaction.*` setting as one memoized snapshot (the configured compaction policy). */
 export const cfgCompaction = combine({
 	enabled: cfgCompactionEnabled,
@@ -401,6 +622,18 @@ export const cfgCompaction = combine({
 	idleTimeoutSeconds: cfgCompactionIdleTimeoutSeconds,
 	supersedeReads: cfgCompactionSupersedeReads,
 	dropUseless: cfgCompactionDropUseless,
+	slmHandoffModelPath: cfgSlmHandoffModelPath,
+	slmHandoffServerPath: cfgSlmHandoffServerPath,
+	slmHandoffThreads: cfgSlmHandoffThreads,
+	slmHandoffReasoningBudgetTokens: cfgSlmHandoffReasoningBudgetTokens,
+	slmHandoffMaxInputTokens: cfgSlmHandoffMaxInputTokens,
+	slmHandoffMaxHandoffTokens: cfgSlmHandoffMaxHandoffTokens,
+	slmHandoffMaxContextTokens: cfgSlmHandoffMaxContextTokens,
+	slmHandoffAwaitMs: cfgSlmHandoffAwaitMs,
+	slmHandoffDevice: cfgSlmHandoffDevice,
+	slmHandoffGpuLayers: cfgSlmHandoffGpuLayers,
+	slmHandoffGpuFreeMiB: cfgSlmHandoffGpuFreeMiB,
+	slmHandoffDetail: cfgSlmHandoffDetail,
 });
 
 /**

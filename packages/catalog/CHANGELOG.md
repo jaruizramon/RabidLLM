@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added the `reasoning-budget-field` compat axis (assigned to `llama.cpp`) so a Chat Completions host can receive its thinking-token budget in a top-level field
+
 ## [18.11.3] - 2026-10-16
 
 ### Changed

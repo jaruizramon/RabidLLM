@@ -18,6 +18,60 @@ Start a new omp chat with cwd **`/home/pipo/Documents/RabidAI`**, then paste:
 - The root `package.json` name is still `omp`; `bun.lock` records it. Do not rename
   until Bun is installed and `bun install` regenerates cleanly (stage 2).
 
+## Progress on `rabid` (2026-10-17)
+
+- Bun 1.4.3 installed; `bun install` clean; natives built with `bun --cwd=packages/natives run build`
+  (needs `ninja` on PATH — fetched to `~/.local/bin/ninja` here).
+- **OMP-4 done:** `tools.disabled` (array) + `profiles` tool lists. Hidden tools leave the request
+  and the system prompt, stay on the session slate, and return when the model no longer disables them
+  (model switch or settings edit). Files: `src/tools/settings.ts`,
+  `src/session/session-tools.ts`, `src/sdk.ts`, `src/session/agent-session.ts`.
+- **OMP-1 done:** `profiles` record keyed by `provider/model-id` or a `…*` prefix (`src/config/model-profiles.ts`,
+  `src/config/model-settings.ts`). Per model: `compaction.thresholdPercent|thresholdTokens|methodOrder`,
+  `thinkingBudgets`, `tools.disabled`, `sampling.*`. Wider prefixes layer first; the exact key wins
+  field by field; unmatched models keep the globals. Resolution seams: `session/model-profile-settings.ts`,
+  `session/model-compaction-threshold.ts`, `session/agent-session.ts` (sampling re-apply).
+- **OMP-5 done:** `reasoning-budget-field` compat axis + `llama.cpp` KDL rule; local OpenAI-compatible
+  hosts resolve `reasoning_budget_tokens` and `thinkingBudgets` is now forwarded through
+  `mapOptionsForApi` (`src/stream.ts`) and written in `applyChatCompletionsReasoningParams`.
+- **Archive panel:** a two-row panel above the status bar (`modes/compaction-rummage-panel.ts`, mounted in
+  `interactive-mode.ts`) reads `AgentSession.getCompactionRummage()`. Headline: phase/outcome + method + context
+  percentage (`75% → …` live, `75% → 21% (−54 pts)` done). Detail row: entries/regions/tokens/bytes and the archive
+  path (`ramdisk` under `/dev/shm`), or tokens reclaimed and elapsed. Fades after 8 s. The ledger is written
+  centrally in `SessionMaintenance.#emitLifecycleEvent` (auto passes), instrumented inside `shake()`, and
+  opened/closed around the owning frame of manual `compact()`.
+- **Generation rate row:** `modes/token-rate-panel.ts`, mounted in `rummageContainer` above the archive panel and before
+  the input; gated by `composer.tokenRate` (enabled in `~/.rabid/agent/config.yml`). The working-row/idle-HUD t/s copy was
+  removed so there is one readout; the native composer bar keeps its own.
+- **Preset routing:** `/preset` (source) talks to llama-manager `:8090` — mode (`fast`/`balanced`/`deep`) then model,
+  confirm, apply; unload; `reload` re-reads omp's models.yml only (resident model stays in VRAM); `restart` re-reads
+  models.ini (confirmed; the only path that evicts the model). The `rabid-*` server sections were added to
+  `~/.local/share/llama-v100/models.ini` (balanced/fast use the Q5 text-only P0-B fallback); the running router
+  predates them, so `/preset restart` is needed once before they can load.
+- **Separate harness root:** `~/.local/bin/rabid` exports `PI_CONFIG_DIR=.rabid`, so the fork's config, models,
+  sessions, logs, skills, and credentials live under `~/.rabid` — nothing under `~/.omp`/`~/.pi` is read or written.
+  `~/.rabid/agent` has the fork `config.yml` (`composer.tokenRate`, preset `profiles`, `llama-rabid` default role),
+  `models.yml` (`local-llama` + `llama-rabid` + preset ids), copied `AGENTS.md`/`skills`/`mcp.json`, and a serialized
+  copy of `agent.db` for auth. The old `~/.omp/profiles/rabid` is a stale pre-migration copy (safe to delete after
+  the running pane restarts).
+- **Turn cards:** `turnCards.enabled: true` (max 1024 tokens, 50 words/op). After each completed prompt the
+  compaction model (deepseek-flash via `compactionModel`) distills prompt + files + pointers into
+  `~/.rabid/agent/turn-cards/<session>.jsonl|.md`. Archive-only, not injected. Pure helpers in
+  `session/turn-cards.ts`; hook at `agent_end` (aborted turns included; the next prompt awaits the in-flight card). `compaction.turnCardChain: true` makes handoff/soft use the
+  cumulative `<session>.chain.md` as a deterministic summary (coverage-checked; LLM fallback).
+- **Speed floor:** `compaction.speedFloorTps: 20`, `speedConsecutive: 3`, `speedMinTokens: 20000` in the fork config.
+  After a sustained sub-20 t/s streak at contextual size, the normal maintenance order runs; summaries currently use
+  `compactionModel: deepseek/deepseek-flash` (the SLM swap hook is still pending).
+- **Modes vs models:** `/preset`/`Alt+Q` now picks `fast`/`balanced`/`deep` (request-side budgets + sampling + task
+  hiding, `rabid.mode` setting) and then the local model to apply it to; applying a mode does not unload anything.
+- Fork config lives in `~/.rabid/agent/`: `models.yml` has `local-llama` + `llama-rabid` (8101 tool filter) and the
+  three preset ids; `config.yml` has `composer.tokenRate` + the preset `profiles`; the old test overlay is
+  `config.rabid-test.yml`. The shared `~/.omp/agent` and `~/.pi/agent` are pre-fork and untouched.
+- Tests added: `coding-agent/test/disabled-tools.test.ts`, `coding-agent/test/model-profiles.test.ts`,
+  `coding-agent/test/compaction-rummage-panel.test.ts`, `ai/test/llama-cpp-reasoning-budget.test.ts`;
+  ledger assertions in `test/shake.test.ts`. Narrow suites green (coding-agent 279, ai 83,
+  catalog 183, plus compaction panel/shake). Rig and installed binary untouched.
+
 ## Prerequisite: Bun
 
 Bun is not installed. The installed `omp` is a compiled binary, not a build of this tree.

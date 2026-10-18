@@ -25,6 +25,7 @@ const NEW_COMPAT_FIELDS = new Set([
 	"nativeKimiK3Reasoning",
 	"zaiReasoningEffortDialect",
 	"clampOutputToModelMax",
+	"reasoningBudgetField",
 	"supportsAllTurnsReasoningContext",
 	"supportsFunctionPartId",
 	"requiresSkipThoughtSignature",

@@ -296,6 +296,9 @@ export type OpenAIReasoningDisableMode =
 
 export type OpenAIStreamMarkupHealingPattern = "kimi" | "dsml" | "qwen" | "thinking";
 
+/** Top-level Chat Completions field carrying a thinking-token budget (llama.cpp). */
+export type OpenAIReasoningBudgetField = "reasoning_budget_tokens" | "thinking_budget_tokens";
+
 /**
  * Compatibility settings for openai-completions API.
  * Use this to override URL-based auto-detection for custom providers.
@@ -593,6 +596,13 @@ export interface OpenAICompat {
 	zaiReasoningEffortDialect?: boolean;
 	/** Clamp the requested max output tokens to the model's advertised ceiling. */
 	clampOutputToModelMax?: boolean;
+	/**
+	 * Top-level request field carrying the thinking-token budget on Chat
+	 * Completions. llama.cpp reads `reasoning_budget_tokens` (and the legacy
+	 * `thinking_budget_tokens`) and caps the reasoning sampler with it; OpenAI's
+	 * `reasoning.max_tokens` is not understood there. Unset: no budget field.
+	 */
+	reasoningBudgetField?: OpenAIReasoningBudgetField;
 	/** Strip image inputs before encoding (text-only serving of a multimodal id). */
 	stripImageInput?: boolean;
 	/** Thinking-loop watchdog guard family applied to streamed reasoning. */
@@ -981,6 +991,8 @@ export interface ResolvedOpenAISharedCompat {
 	alwaysSendMaxTokens: boolean;
 	/** Clamp a requested output-token count to the model's advertised ceiling. */
 	clampOutputToModelMax: boolean;
+	/** See {@link OpenAICompat.reasoningBudgetField}. */
+	reasoningBudgetField?: OpenAIReasoningBudgetField;
 	openRouterRouting?: OpenAICompat["openRouterRouting"];
 	/** Provider-specific wire model-id transform applied to the base id. */
 	wireModelIdMode: "raw" | "cline-pass" | "firepass" | "fireworks" | "openrouter";
@@ -1056,6 +1068,7 @@ export type ResolvedOpenAICompat = ResolvedOpenAISharedCompat &
 			| "supportsLongPromptCacheRetention"
 			| "alwaysSendMaxTokens"
 			| "clampOutputToModelMax"
+			| "reasoningBudgetField"
 			| "wireModelIdMode"
 			| "vercelGatewayRouting"
 			| "extraBody"

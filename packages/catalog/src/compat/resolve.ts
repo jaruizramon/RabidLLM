@@ -609,6 +609,10 @@ function detectOpenAICompat(
 		nativeKimiK3Reasoning: false,
 		zaiReasoningEffortDialect: false,
 		clampOutputToModelMax: d.isLocalOpenAICompatBackend,
+		// llama.cpp reads this top-level budget; custom local providers
+		// (`local-llama`) share the openai-completions surface. Cloud hosts keep
+		// no budget field unless their provider rule assigns one.
+		reasoningBudgetField: d.isLocalOpenAICompatBackend ? "reasoning_budget_tokens" : undefined,
 		stripImageInput: false,
 		thinkingLoopGuard: undefined,
 		rejectRootObjectUnion: false,

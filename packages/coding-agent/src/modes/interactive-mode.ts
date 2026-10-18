@@ -257,6 +257,8 @@ import { SessionInfoOverlay } from "@oh-my-pi/pi-tui/overlays/session-info-overl
 import { JobsSheet } from "@oh-my-pi/pi-tui/overlays/jobs-panel";
 import { SkillMessageComponent } from "@oh-my-pi/pi-tui/chat/skill-message";
 import { StatusLineComponent } from "@oh-my-pi/pi-tui/status-line";
+import { CompactionRummagePanel } from "./compaction-rummage-panel";
+import { TokenRatePanel } from "./token-rate-panel";
 import { statusLineHost } from "./status-line-host";
 import { stopSharedSpinnerTicker, type ToolExecutionHandle } from "@oh-my-pi/pi-tui/chat/tool-execution";
 import { TranscriptContainer } from "@oh-my-pi/pi-tui/chrome/transcript-container";
@@ -414,6 +416,9 @@ import {
 	cfgCompactionIdleTimeoutSeconds,
 	cfgCompactionMethodOrder,
 } from "../session/context-settings";
+import { cfgRabidMode, RABID_MODE_POLICIES } from "../session/rabid-modes";
+import { resolveModelCompactionSettings } from "../session/model-compaction-threshold";
+import { resolveModelThinkingBudgets } from "../session/model-profile-settings";
 
 /**
  * Settings with live interactive-UI side effects, keyed by id. One coalesced listener applies
@@ -1201,6 +1206,10 @@ export class InteractiveMode implements InteractiveModeContext {
 	/** Judge-batch and automatic-download progress rows above the working line. */
 	progressHudContainer: Container;
 	statusContainer: Container;
+	/** Generation-rate row plus the archive/offload panel, directly above the editor's status bar. */
+	rummageContainer: Container;
+	readonly #tokenRatePanel: TokenRatePanel;
+	readonly #rummagePanel: CompactionRummagePanel;
 	/** Whether {@link statusContainer} rendered lines in the latest frame; the band composer's editor top gap collapses only then. */
 	statusRowOccupied = false;
 	todoContainer: Container;
@@ -1329,24 +1338,48 @@ export class InteractiveMode implements InteractiveModeContext {
 	get tokenRate(): TokenRateMeter {
 		return this.viewSession.tokenRate;
 	}
-	/** Generation tok/s: live while streaming, the last reading between
-	 * turns, blank until a run has produced enough tokens to measure. */
-	#tokenRateLabel(): string | undefined {
-		if (!cfgComposerTokenRate.get(settings)) return undefined;
-		const rate = this.tokenRate.rate();
-		if (rate === null) return undefined;
-		return theme.fg("dim", `${theme.icon.throughput} ${rate.toFixed(1)} tok/s`);
+	/** Rate for the dedicated row above the archive panel; gated by `composer.tokenRate`. */
+	#tokenRateForPanel(): number | null {
+		if (!cfgComposerTokenRate.get(settings)) return null;
+		return this.tokenRate.rate();
 	}
-	/** Right-docked suffix of the working row: the tok/s readout, then the band-mode title. */
+	/** Active rabid mode + its budget; shown even before a rate exists. */
+	#rabidModeForPanel(): { name: string; budget: number } | undefined {
+		const mode = cfgRabidMode.get(settings);
+		if (mode !== "fast" && mode !== "balanced" && mode !== "deep") return undefined;
+		return { name: mode, budget: RABID_MODE_POLICIES[mode].thinkingBudgets.high };
+	}
+	/** Streamed reasoning estimate against the budget sent for the active level. */
+	#reasoningForPanel(): { tokens: number; budget: number } | undefined {
+		const session = this.viewSession;
+		const level = session.thinkingLevel;
+		if (level === undefined || level === "inherit" || level === "off") return undefined;
+		const budget = resolveModelThinkingBudgets(settings, session.model)[level];
+		if (budget === undefined || budget <= 0) return undefined;
+		return { tokens: session.getReasoningUsage().tokens, budget };
+	}
+	/** Context occupancy plus the threshold that starts maintenance. */
+	#contextForPanel(): { tokens: number; contextWindow: number; thresholdTokens?: number } | undefined {
+		const usage = this.viewSession.getContextUsage();
+		if (!usage) return undefined;
+		const compaction = resolveModelCompactionSettings(settings, this.viewSession.model);
+		// Scale the gauge to the trigger, not the whole window: a 40K trigger on a
+		// 164K model would otherwise sit at 24% and look like there is room left.
+		const thresholdTokens = !compaction.enabled
+			? undefined
+			: compaction.thresholdTokens > 0
+				? compaction.thresholdTokens
+				: compaction.thresholdPercent > 0 && usage.contextWindow > 0
+					? (compaction.thresholdPercent / 100) * usage.contextWindow
+					: undefined;
+		return { tokens: usage.tokens, contextWindow: usage.contextWindow, thresholdTokens };
+	}
+	/** Right-docked suffix of the working row: the band-mode title. */
 	#workingRowTrailer(): string | undefined {
-		const rate = this.#tokenRateLabel();
-		const title = this.#workingTitleTrailer();
-		if (rate && title) return `${rate}  ${title}`;
-		return rate ?? title;
+		return this.#workingTitleTrailer();
 	}
-	/** Idle stand-in for the working row: the last tok/s reading and the
-	 * band-mode title stay readable between turns, docked where the loader's
-	 * trailer was. */
+	/** Idle stand-in for the working row: the band-mode title stays readable
+	 * between turns, docked where the loader's trailer was. */
 	renderIdleStatusHud(width: number): readonly string[] | undefined {
 		const trailer = this.#workingRowTrailer();
 		if (!trailer) return undefined;
@@ -1865,6 +1898,19 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.progressHudContainer.addChild(this.#downloadActivityHud);
 		this.#eventBusUnsubscribers.push(onDownloadActivity(activity => this.#downloadActivityHud.update(activity)));
 		this.statusContainer = new StatusHudContainer(this);
+		this.rummageContainer = new Container();
+		this.#tokenRatePanel = new TokenRatePanel({
+			rate: () => this.#tokenRateForPanel(),
+			mode: () => this.#rabidModeForPanel(),
+			reasoning: () => this.#reasoningForPanel(),
+			context: () => this.#contextForPanel(),
+		});
+		this.#rummagePanel = new CompactionRummagePanel({
+			status: () => this.session.getCompactionRummage?.(),
+			requestRender: () => this.ui.requestRender(),
+		});
+		this.rummageContainer.addChild(this.#tokenRatePanel);
+		this.rummageContainer.addChild(this.#rummagePanel);
 		this.todoContainer = new TodoHudContainer(this);
 		this.subagentContainer = new AnchoredLiveContainer();
 		this.btwContainer = new AnchoredLiveContainer();
@@ -2208,6 +2254,7 @@ export class InteractiveMode implements InteractiveModeContext {
 				// composer collapses that gap so its status band sits flush).
 				this.statusContainer,
 				this.attachmentChipsContainer,
+				this.rummageContainer,
 				this.hookWidgetContainerAbove,
 				this.editorContainer,
 				this.hookWidgetContainerBelow,
@@ -2223,6 +2270,7 @@ export class InteractiveMode implements InteractiveModeContext {
 				transientChrome: [
 					this.editorContainer,
 					this.attachmentChipsContainer,
+					this.rummageContainer,
 					this.reportContainer,
 					this.pendingMessagesContainer,
 					this.btwContainer,
@@ -2253,6 +2301,7 @@ export class InteractiveMode implements InteractiveModeContext {
 					this.progressHudContainer,
 					this.statusContainer,
 					this.pendingMessagesContainer,
+					this.rummageContainer,
 					this.hookWidgetContainerAbove,
 					this.editorContainer,
 					this.hookWidgetContainerBelow,
@@ -7108,6 +7157,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#eventController.dispose();
 		this.#codexResetFireworksController.dispose();
 		this.statusLine.dispose();
+		this.#rummagePanel.dispose();
 		if (this.#resizeHandler) {
 			process.stdout.removeListener("resize", this.#resizeHandler);
 			this.#resizeHandler = undefined;

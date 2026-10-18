@@ -2,7 +2,7 @@ import type { AgentMessage, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Tool, UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import type { Model } from "@oh-my-pi/pi-catalog/types";
 import type { CompactionBoundaries } from "./context-usage";
-import type { StatusLineSettings, StatusResetExpiry } from "./types";
+import type { CompactionRummageStatus, StatusLineSettings, StatusResetExpiry } from "./types";
 
 export interface StatusAccountIdentity {
 	accountId?: string;
@@ -53,6 +53,8 @@ export interface StatusLineSession {
 		isUsingOAuth(model: Model): boolean;
 	};
 	getContextUsage(): { tokens: number; contextWindow: number; percent: number | null } | undefined;
+	/** Archive/offload ledger for the current or last-finished maintenance pass. */
+	getCompactionRummage?(): CompactionRummageStatus | undefined;
 	autoResolvedThinkingLevel(): string | undefined;
 	isFastModeActive(): boolean;
 	/** Anthropic usage-limit label (`limit reached · wrapping up · resets 14:30`, `low priority until 14:30 · 62% left`). */

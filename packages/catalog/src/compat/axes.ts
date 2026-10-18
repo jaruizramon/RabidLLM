@@ -149,6 +149,10 @@ export const AXES: Readonly<Record<string, AxisDef>> = {
 	"reject-root-object-union": wire("rejectRootObjectUnion", OAI),
 	"retry-without-strict-on-grammar-error": wire("retryWithoutStrictOnGrammarError", OAI),
 	"session-header": wire("sessionHeader", OAI, "scalar", ["x-litellm-session-id"]),
+	"reasoning-budget-field": wire("reasoningBudgetField", ["openai"], "scalar", [
+		"reasoning_budget_tokens",
+		"thinking_budget_tokens",
+	]),
 	"reasoning-content-field": wire("reasoningContentField", OAI, "scalar", [
 		"reasoning_content",
 		"reasoning",

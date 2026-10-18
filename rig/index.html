@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V100 model manager</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1c232c; --line: #2a323d;
+    --fg: #e6edf3; --dim: #8b949e; --accent: #76b900; --accent-dim: #3f5f0a;
+    --warn: #d29922; --err: #f85149; --blue: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel); flex: none;
+  }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  h1 span { color: var(--dim); font-weight: 400; }
+  .pill {
+    font-size: 12px; padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line);
+    color: var(--dim); white-space: nowrap;
+  }
+  .pill.router { color: var(--accent); border-color: var(--accent-dim); }
+  .pill.down { color: var(--err); border-color: #5c2320; }
+  .pill.warn { color: var(--warn); border-color: #5c4a12; }
+  .spacer { flex: 1; }
+  button {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 11px; font-size: 13px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--dim); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { border-color: var(--accent-dim); color: var(--accent); }
+  button.danger { border-color: #5c2320; color: #ffb4ae; }
+  button.danger:hover:not(:disabled) { border-color: var(--err); }
+
+  /* ---- SLM worker + load meters ---- */
+  .slm { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .slm-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .slm-spec { color: var(--dim); font-size: 12px; }
+  .slm-form { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .slm-form select, .slm-form input {
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 7px; font-size: 12px;
+  }
+  .slm-form input { width: 78px; }
+  .meters { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+  .meter { display: grid; grid-template-columns: 168px 1fr 52px 150px; gap: 8px; align-items: center; font-size: 12px; }
+  .meter span { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meter b { text-align: right; font-variant-numeric: tabular-nums; }
+  .meter em { color: var(--dim); font-style: normal; text-align: right; font-variant-numeric: tabular-nums; }
+  .meter .bar { height: 7px; background: var(--panel2); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; background: var(--accent); }
+  .meter.gpu-row .bar i { background: var(--blue); }
+
+  main { flex: 1; display: grid; grid-template-columns: minmax(320px, 1fr) minmax(380px, 1.05fr); min-height: 0; }
+  .col { min-height: 0; overflow: auto; padding: 14px 16px; }
+  .col.left { border-right: 1px solid var(--line); }
+  .col h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--dim);
+    margin: 0 0 10px; font-weight: 600;
+  }
+
+  /* ---- model cards ---- */
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--line);
+    border-radius: 8px; padding: 10px 12px; cursor: grab; position: relative;
+  }
+  .card:active { cursor: grabbing; }
+  .card.dragging { opacity: .4; }
+  .card.loaded { border-left-color: var(--accent); }
+  .card.loading { border-left-color: var(--warn); }
+  .card.failed { border-left-color: var(--err); }
+  .card.missing { border-left-color: var(--err); opacity: .7; }
+  .card .top { display: flex; align-items: baseline; gap: 8px; }
+  .card .id { font-weight: 600; }
+  .card .size { color: var(--dim); font-size: 12px; }
+  .card .tags { margin: 5px 0 0; display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag {
+    font-size: 11px; color: var(--dim); background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 6px;
+  }
+  .card .meta { margin-top: 6px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+  .card .actions { position: absolute; top: 8px; right: 10px; }
+  .card .actions button { padding: 2px 8px; font-size: 12px; }
+  .state { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .state.unloaded { color: var(--dim); }
+  .state.loading { color: var(--warn); }
+  .state.loaded { color: var(--accent); }
+  .state.sleeping { color: var(--blue); }
+  .state.failed { color: var(--err); }
+  .bar { height: 4px; border-radius: 2px; background: var(--panel2); overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .card.loading .bar > i { background: var(--warn); width: 40% !important; animation: slide 1.1s infinite ease-in-out; }
+  @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+
+  /* ---- gpu box ---- */
+  .gpu {
+    border: 2px dashed var(--line); border-radius: 12px; background: var(--panel);
+    padding: 16px; min-height: 260px; display: flex; flex-direction: column; gap: 12px;
+    transition: border-color .15s, background .15s;
+  }
+  .gpu.over { border-color: var(--accent); background: #17200c; }
+  .gpu.busy { border-style: solid; border-color: var(--accent-dim); }
+  .gpu-head { display: flex; align-items: baseline; gap: 10px; }
+  .gpu-name { font-weight: 600; }
+  .gpu-spec { color: var(--dim); font-size: 12px; }
+  .vram { display: flex; flex-direction: column; gap: 4px; }
+  .vram .track {
+    height: 22px; border-radius: 5px; background: var(--panel2); display: flex;
+    overflow: hidden; border: 1px solid var(--line);
+  }
+  .vram .seg { height: 100%; }
+  .vram .seg.base { background: #39424e; }
+  .vram .seg.model { background: linear-gradient(180deg, #8ad10a, #57870a); }
+  .vram .legend { display: flex; gap: 14px; font-size: 12px; color: var(--dim); flex-wrap: wrap; }
+  .vram .legend b { color: var(--fg); font-weight: 600; }
+  .slot {
+    flex: 1; border-radius: 8px; border: 1px dashed var(--line); display: flex;
+    align-items: center; justify-content: center; text-align: center; color: var(--dim);
+    padding: 18px; min-height: 110px;
+  }
+  .slot.filled { border-style: solid; border-color: var(--accent-dim); color: var(--fg); text-align: left; }
+  .slot .big { font-size: 17px; font-weight: 600; }
+  .slot .sub { font-size: 12px; color: var(--dim); margin-top: 4px; }
+  .slot .row { display: flex; align-items: center; gap: 10px; }
+  .gpu-foot { display: flex; gap: 8px; align-items: center; }
+  .gpu-foot .hint { font-size: 12px; color: var(--dim); }
+
+  /* ---- log ---- */
+  details { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+  pre {
+    background: #0b0e13; border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+    max-height: 260px; overflow: auto; font-size: 11.5px; color: #9fb0c0; margin: 8px 0 0;
+  }
+  .toast {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 14px; font-size: 13px; max-width: 70vw; display: none; z-index: 5;
+  }
+  .toast.err { border-color: #5c2320; color: #ffb4ae; }
+  .toast.ok { border-color: var(--accent-dim); color: var(--accent); }
+  .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--warn);
+          border-right-color: transparent; border-radius: 50%; animation: rot .7s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>V100 model manager <span id="subtitle"></span></h1>
+  <span class="pill" id="serverPill">…</span>
+  <span class="spacer"></span>
+  <button id="serverBtn"></button>
+</header>
+
+<main>
+  <section class="col left">
+    <h2>Models — drag one onto the V100</h2>
+    <div class="cards" id="cards"></div>
+    <details>
+      <summary>router log</summary>
+      <pre id="log">—</pre>
+    </details>
+    <details>
+      <summary>1cat-vllm log</summary>
+      <pre id="catlog">—</pre>
+    </details>
+  </section>
+
+  <section class="col right">
+    <h2>Target GPU</h2>
+    <div class="gpu" id="gpuBox">
+      <div class="gpu-head">
+        <span class="gpu-name" id="gpuName">GPU</span>
+        <span class="gpu-spec" id="gpuSpec"></span>
+      </div>
+      <div class="vram">
+        <div class="track" id="vramTrack"></div>
+        <div class="legend">
+          <span>used <b id="usedTxt">—</b></span>
+          <span>free <b id="freeTxt">—</b></span>
+          <span>other (desktop) <b id="baseTxt">—</b></span>
+          <span>this model <b id="modelTxt">—</b></span>
+        </div>
+      </div>
+      <div class="slot" id="slot"></div>
+      <div class="gpu-foot">
+        <button id="unloadBtn" disabled>Unload (free VRAM)</button>
+        <button id="forceBtn" class="danger" title="Stop every model engine — strays included — and bring the router back empty">Force clear VRAM</button>
+        <span class="hint" id="hint">drop a card here to load it</span>
+      </div>
+    </div>
+
+    <h2 style="margin-top:16px">SLM handoff worker</h2>
+    <div class="slm" id="slmBox">
+      <div class="slm-head">
+        <span class="pill" id="slmPill">stopped</span>
+        <span class="slm-spec" id="slmSpec">not running</span>
+      </div>
+      <div class="slm-form">
+        <select id="slmModel"></select>
+        <select id="slmDevice">
+          <option value="cuda:1">GPU 1 · 3070</option>
+          <option value="cuda:0">GPU 0 · V100</option>
+          <option value="cpu">CPU only</option>
+        </select>
+        <input id="slmCtx" type="number" value="8192" min="2048" step="1024" title="ctx size">
+        <input id="slmFree" type="number" value="2048" min="-1" step="512" title="VRAM to leave free (MiB); -1 offloads everything">
+        <button id="slmLoadBtn" class="primary">Load</button>
+        <button id="slmUnloadBtn" class="danger" disabled>Stop</button>
+      </div>
+      <div class="meters" id="slmMeters"></div>
+    </div>
+
+    <h2 style="margin-top:16px">Load — CPU / GPU</h2>
+    <div class="meters" id="loadMeters"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+let state = null;
+let dragId = null;
+let sig = "";
+let toastTimer = null;
+
+function toast(msg, isErr) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.className = "toast " + (isErr ? "err" : "ok");
+  el.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = "none"; }, isErr ? 8000 : 3000);
+}
+
+function gib(bytes) {
+  if (bytes == null) return "—";
+  return (bytes / 1073741824).toFixed(2) + " GiB";
+}
+function mib(v) {
+  if (v == null) return "—";
+  return (v / 1024).toFixed(2) + " GiB";
+}
+/* state.active is the model id of the single loaded model; the card object is here. */
+function activeModel() {
+  return state ? (state.models.find(m => m.id === state.active) || null) : null;
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {})
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* keep {} */ }
+  if (!res.ok || data.ok === false) throw new Error(data.error || (path + " failed: " + res.status));
+  return data;
+}
+
+/* ------------------------------------------------------------------ rendering */
+
+function cardHtml(m) {
+  const pct = state.gpu.target && m.vram_peak_mib
+    ? Math.min(100, (m.vram_peak_mib / state.gpu.target.total_mib) * 100) : 0;
+  const tags = (m.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+  const engine = `<span class="tag">${m.engine || "llama"}</span>`;
+  const cost = m.vram_peak_mib ? `measured ${mib(m.vram_peak_mib)}` : "not measured yet";
+  const ctx = m.context ? `${(m.context / 1024).toFixed(0)}K ctx` : "";
+  const stateWord = m.failed ? "failed" : m.status;
+  const busy = m.status === "loading";
+  const loadable = m.exists && !m.active && m.status !== "loading";
+  return `
+  <div class="card ${m.status} ${m.exists ? "" : "missing"}" draggable="${loadable}" data-id="${m.id}">
+    <div class="top">
+      <span class="id">${m.id}</span>
+      <span class="size">${gib(m.size_bytes)}</span>
+    </div>
+    <div class="tags">${engine}${tags}</div>
+    <div class="meta">
+      <span class="state ${m.failed ? "failed" : m.status}">${busy ? '<span class="spin"></span> ' : ""}${stateWord}</span>
+      <span>${cost}</span>
+      ${ctx ? `<span>${ctx}</span>` : ""}
+      ${m.mmproj ? "<span>vision</span>" : ""}
+    </div>
+    ${m.exists ? "" : `<div class="meta" style="color:#f85149">missing: ${m.path}</div>`}
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="actions"><button data-load="${m.id}" ${loadable ? "" : "disabled"}>load</button></div>
+  </div>`;
+}
+
+function slotHtml() {
+  const active = activeModel();
+  if (!active) {
+    const loading = state.models.find(m => m.status === "loading");
+    if (loading) {
+      return `<div><div class="big"><span class="spin"></span> ${loading.id} loading…</div>
+        <div class="sub">weights + KV cache are being written to the V100</div></div>`;
+    }
+    return `<div><div class="big">nothing loaded</div>
+      <div class="sub">drop a model card here — the V100 stays empty until you do</div></div>`;
+  }
+  const t = state.gpu.target || {};
+  return `
+    <div style="width:100%">
+      <div class="row">
+        <span class="state ${active.status}">${active.status === "loading" ? '<span class="spin"></span> ' : ""}${active.status}</span>
+        <span class="big">${active.id}</span>
+      </div>
+      <div class="sub">${active.file} · ${gib(active.size_bytes)}${active.context ? " · " + (active.context / 1024).toFixed(0) + "K ctx" : ""}</div>
+      <div class="sub">VRAM at peak: ${mib(active.vram_peak_mib)} of ${mib(t.total_mib)}${active.mmproj ? " · vision projector loaded" : ""}</div>
+    </div>`;
+}
+
+function vramSegments() {
+  const t = state.gpu.target || { total_mib: 1, used_mib: 0 };
+  const total = t.total_mib || 1;
+  const used = t.used_mib || 0;
+  const base = Math.min(state.baseline_mib || 0, used);
+  const model = Math.max(0, used - base);
+  const seg = (cls, val) => `<div class="seg ${cls}" style="width:${(Math.min(val, total) / total) * 100}%"></div>`;
+  $("vramTrack").innerHTML = seg("base", base) + seg("model", model);
+  $("usedTxt").textContent = mib(used) + " / " + mib(total);
+  $("freeTxt").textContent = mib(total - used);
+  $("baseTxt").textContent = mib(base);
+  $("modelTxt").textContent = mib(model);
+}
+
+function serverUi() {
+  const s = state.server;
+  const pill = $("serverPill");
+  pill.className = "pill " + (s.up ? "router" : "down");
+  pill.textContent = s.up ? `router :${s.router_port}` : "server down";
+  $("subtitle").textContent = `loads nothing on its own · ui :${s.ui_port}`;
+
+  const btn = $("serverBtn");
+  btn.className = s.up ? "" : "primary";
+  btn.textContent = s.up ? "Stop server" : "Start router";
+  btn.disabled = false;
+}
+
+function render() {
+  if (!state) return;
+  serverUi();
+  const g = state.gpu.target;
+  if (g) {
+    $("gpuName").textContent = g.name;
+    $("gpuSpec").textContent = `${mib(g.total_mib)} · ${mib(g.used_mib)} used · ${g.util}% util`;
+  } else {
+    $("gpuName").textContent = "no GPU visible";
+    $("gpuSpec").textContent = state.gpu.error || "";
+  }
+  const others = (state.gpu.devices || []).filter(d => !g || d.index !== g.index)
+    .map(d => `${d.name} ${mib(d.used_mib)}/${mib(d.total_mib)}`).join(" · ");
+  if (others && g) $("gpuSpec").textContent += "   (other: " + others + ")";
+
+  vramSegments();
+  $("cards").innerHTML = state.models.map(cardHtml).join("");
+  $("slot").innerHTML = slotHtml();
+
+  const active = activeModel();
+  const busy = state.models.some(m => m.status === "loading");
+  $("gpuBox").className = "gpu" + (active ? " busy" : "");
+  $("unloadBtn").disabled = !state.server.up || !active;
+  $("hint").textContent = !state.server.up
+    ? "start the server to load models"
+    : (busy ? "loading…" : "drop a card here to load it · drag it back to the shelf to unload");
+  wireDrag();
+  slmUi();
+  $("loadMeters").innerHTML = metersHtml();
+  $("slmMeters").innerHTML = workerMetersHtml();
+}
+
+function wireDrag() {
+  document.querySelectorAll(".card").forEach(card => {
+    card.addEventListener("dragstart", ev => {
+      document.querySelectorAll(".card.dragging").forEach(c => c.classList.remove("dragging"));
+      dragId = card.dataset.id;
+      card.classList.add("dragging");
+      ev.dataTransfer.setData("text/plain", dragId);
+      ev.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", () => { card.classList.remove("dragging"); dragId = null; });
+  });
+  document.querySelectorAll("[data-load]").forEach(btn => {
+    btn.addEventListener("click", ev => { ev.stopPropagation(); doLoad(btn.dataset.load); });
+  });
+}
+
+/* -------------------------------------------------------------------- actions */
+
+function extractId(ev) {
+  return dragId || ev.dataTransfer.getData("text/plain");
+}
+
+async function doLoad(id) {
+  if (!id) return;
+  try {
+    toast("loading " + id + " — the previous model is unloaded first");
+    await api("/api/load", { model: id });
+  } catch (e) { toast(e.message, true); }
+  refresh();
+}
+
+async function doUnload() {
+  const active = activeModel();
+  if (!active) return;
+  try {
+    toast("unloading " + active.id);
+    await api("/api/unload", { model: active.id });
+  } catch (e) { toast(e.message, true); }
+  refresh();
+}
+
+async function serverAction() {
+  const s = state.server;
+  const action = s.up ? "stop" : "start";
+  try {
+    toast(action === "stop" ? "stopping the server" : "starting the router…");
+    const r = await api("/api/server/" + action);
+    toast(r.detail || "ok");
+  } catch (e) { toast(e.message, true); }
+  refresh();
+}
+
+async function forceClearVram() {
+  try {
+    toast("forcing the V100 empty…");
+    const r = await api("/api/vram/force-clear", {});
+    toast(r.detail || "V100 cleared");
+  } catch (e) { toast(e.message, true); }
+  refresh();
+}
+
+/* ------------------------------------------------------------- SLM + load UI */
+
+function slmUi() {
+  const s = (state && state.slm) || {};
+  const pill = $("slmPill");
+  pill.className = "pill " + (s.loaded ? "router" : s.running ? "warn" : "down");
+  pill.textContent = s.loaded ? "worker ready" : s.running ? "starting…" : "stopped";
+  $("slmSpec").textContent = s.running
+    ? [s.file, s.device, s.ctx ? s.ctx + " ctx" : null, s.threads ? s.threads + " thr" : null,
+       "pid " + s.pid, s.cpu_pct != null ? s.cpu_pct + "% cpu" : null,
+       s.rss_mib ? mib(s.rss_mib) + " rss" : null, s.uptime_s + "s"]
+        .filter(Boolean).join(" · ")
+    : "not running";
+  const sel = $("slmModel");
+  if (sel.options.length === 0 && (s.choices || []).length) {
+    sel.innerHTML = s.choices.map(c =>
+      `<option value="${c.id}"${c.exists ? "" : " disabled"}>${c.id}${c.exists ? "" : " (missing)"}</option>`
+    ).join("");
+    const spark = s.choices.find(c => c.id.startsWith("Spark"));
+    if (spark) sel.value = spark.id;
+  }
+  $("slmLoadBtn").disabled = !!s.running;
+  $("slmUnloadBtn").disabled = !s.running;
+  $("slmCtx").disabled = !!s.running;
+  $("slmFree").disabled = !!s.running;
+  $("slmDevice").disabled = !!s.running;
+  sel.disabled = !!s.running;
+}
+
+function workerMetersHtml() {
+  const s = (state && state.slm) || {};
+  if (!s.running) return "";
+  const cpu = s.cpu_pct == null ? 0 : s.cpu_pct;
+  const rss = s.rss_mib || 0;
+  const rssPct = rss ? Math.min(100, (rss / 4096) * 100) : 0;  // against a 4 GiB reference
+  return `<div class="meter"><span>worker cpu</span>` +
+    `<div class="bar"><i style="width:${Math.min(100, cpu)}%"></i></div>` +
+    `<b>${s.cpu_pct == null ? "—" : cpu + "%"}</b><em>of ${4} threads</em></div>` +
+    `<div class="meter"><span>worker rss</span>` +
+    `<div class="bar"><i style="width:${rssPct}%"></i></div>` +
+    `<b>${rss ? mib(rss) : "—"}</b><em>resident</em></div>`;
+}
+
+function metersHtml() {
+  const rows = [];
+  const c = (state && state.cpu) || {};
+  const busy = c.busy_pct == null ? 0 : c.busy_pct;
+  const load = (c.loadavg || []).map(v => (v == null ? "—" : v.toFixed(2))).join(" / ");
+  rows.push(`<div class="meter"><span>CPU · ${c.cores || "?"} cores</span>` +
+    `<div class="bar"><i style="width:${Math.min(100, busy)}%"></i></div>` +
+    `<b>${c.busy_pct == null ? "—" : Math.round(c.busy_pct) + "%"}</b><em>load ${load}</em></div>`);
+  for (const d of ((state && state.gpu && state.gpu.devices) || [])) {
+    const memPct = d.total_mib ? Math.min(100, (d.used_mib / d.total_mib) * 100) : 0;
+    rows.push(`<div class="meter gpu-row"><span>GPU ${d.index} · ${d.name}</span>` +
+      `<div class="bar"><i style="width:${Math.min(100, d.util)}%"></i></div>` +
+      `<b>${d.util}%</b><em>${mib(d.used_mib)} / ${mib(d.total_mib)} (${memPct.toFixed(0)}%)</em></div>`);
+  }
+  return rows.join("");
+}
+
+async function doSlmLoad() {
+  try {
+    toast("starting the SLM worker…");
+    const r = await api("/api/slm/load", {
+      model: $("slmModel").value,
+      device: $("slmDevice").value,
+      ctx: Number($("slmCtx").value) || 8192,
+      gpuFreeMiB: Number($("slmFree").value),
+      threads: 4,
+    });
+    toast(r.detail || "worker starting");
+  } catch (e) { toast(e.message, true); }
+  refresh();
+}
+
+async function doSlmUnload() {
+  try {
+    const r = await api("/api/slm/unload", {});
+    toast(r.detail || "worker stopped");
+  } catch (e) { toast(e.message, true); }
+  refresh();
+}
+
+/* ----------------------------------------------------------------- data loop */
+
+async function refresh() {
+  try {
+    const res = await fetch("/api/state");
+    state = await res.json();
+  } catch (e) {
+    $("serverPill").className = "pill down";
+    $("serverPill").textContent = "manager unreachable";
+    return;
+  }
+  const next = JSON.stringify([state.server, state.models.map(m => m.status + m.vram_peak_mib),
+                               state.active, state.baseline_mib,
+                               state.gpu.target && [state.gpu.target.used_mib, state.gpu.target.util],
+                               state.slm && [state.slm.running, state.slm.loaded, state.slm.cpu_pct, state.slm.uptime_s],
+                               (state.gpu.devices || []).map(d => [d.util, d.used_mib]),
+                               state.cpu && [state.cpu.busy_pct, state.cpu.loadavg]]);
+  if (next !== sig) { sig = next; render(); }
+}
+
+async function refreshLog() {
+  if ($("log").parentElement.open) {
+    try {
+      const r = await (await fetch("/api/log")).json();
+      $("log").textContent = r.log || "—";
+      $("log").scrollTop = $("log").scrollHeight;
+    } catch (e) { /* ignore */ }
+  }
+  if ($("catlog").parentElement.open) {
+    try {
+      const r = await (await fetch("/api/log?engine=1cat")).json();
+      $("catlog").textContent = r.log || "—";
+      $("catlog").scrollTop = $("catlog").scrollHeight;
+    } catch (e) { /* ignore */ }
+  }
+}
+
+/* ------------------------------------------------------------------- wiring */
+
+const box = $("gpuBox");
+box.addEventListener("dragover", ev => { ev.preventDefault(); box.classList.add("over"); });
+box.addEventListener("dragleave", () => box.classList.remove("over"));
+box.addEventListener("drop", ev => {
+  ev.preventDefault();
+  box.classList.remove("over");
+  doLoad(extractId(ev));
+});
+box.addEventListener("dblclick", () => doUnload());
+
+const shelf = $("gpuBox").closest("main").querySelector(".cards");
+shelf.addEventListener("dragover", ev => ev.preventDefault());
+shelf.addEventListener("drop", async ev => {
+  ev.preventDefault();
+  const id = extractId(ev);
+  if (id && state && state.active === id) doUnload();
+});
+
+$("unloadBtn").addEventListener("click", doUnload);
+$("forceBtn").addEventListener("click", forceClearVram);
+$("serverBtn").addEventListener("click", serverAction);
+$("slmLoadBtn").addEventListener("click", doSlmLoad);
+$("slmUnloadBtn").addEventListener("click", doSlmUnload);
+$("log").parentElement.addEventListener("toggle", refreshLog);
+
+refresh().then(render);
+setInterval(refresh, 1500);
+setInterval(refreshLog, 3000);
+</script>
+</body>
+</html>
