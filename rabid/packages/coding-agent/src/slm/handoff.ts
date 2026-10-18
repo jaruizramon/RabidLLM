@@ -39,7 +39,7 @@ import {
 import { resolveCompactionMethodOrder } from "../session/compaction-methods";
 import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
 import { messageText, renderFileActions } from "../rabid/turn-cards";
-import { boundScratchpad, renderScratchpad } from "./scratchpad";
+import { boundScratchpad, countLogEchoes, renderScratchpad, stripLogEchoes } from "./scratchpad";
 import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
 export { ensureSlmModelDownloaded } from "./server";
@@ -752,6 +752,23 @@ export class SlmHandoffCoordinator {
 			let result: Awaited<ReturnType<SlmHandoffServer["complete"]>>;
 			try {
 				result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
+				// A small model asked to summarise a log will copy it, and the token cap does not
+				// prevent that — it only compresses the copy. Selection is checked, not assumed.
+				const echoes = countLogEchoes(result.document);
+				if (echoes >= 3) {
+					logger.warn("SLM handoff echoed the event log; retrying with a stricter instruction", {
+						echoedLines: echoes,
+					});
+					const stricter = `${userPrompt}\n\nYour previous answer copied THOUGHT/CALL/RESULT lines from the log. Do not transcribe events. Keep only what a successor needs: the objective, decisions with their reasons, binding constraints, verified facts, the next step, and the files that matter.`;
+					const second = await this.#completeWithRetry(config, systemPrompt, stricter);
+					if (countLogEchoes(second.document) < echoes) result = second;
+				}
+				if (countLogEchoes(result.document) >= 3) {
+					logger.warn("SLM handoff still transcribed the log; stripping the copied lines", {
+						document: result.document.length,
+					});
+					result = { ...result, document: stripLogEchoes(result.document) };
+				}
 			} catch (error) {
 				const text = String(error);
 				if (chunk.length > 1 && /exceeds the (?:available )?context|context size/i.test(text)) {

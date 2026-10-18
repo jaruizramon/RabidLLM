@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import { boundScratchpad, renderScratchpad } from "@oh-my-pi/pi-coding-agent/slm/scratchpad";
+import {
+	boundScratchpad,
+	countLogEchoes,
+	renderScratchpad,
+	stripLogEchoes,
+} from "@oh-my-pi/pi-coding-agent/slm/scratchpad";
 
 function user(text: string): AgentMessage {
 	return { role: "user", content: [{ type: "text", text }], timestamp: 1 } as unknown as AgentMessage;
@@ -64,5 +69,31 @@ describe("boundScratchpad", () => {
 
 	it("leaves a small pad untouched", () => {
 		expect(boundScratchpad("USER: hi", 1_000)).toBe("USER: hi");
+	});
+});
+
+describe("log transcription guard", () => {
+	const transcribed = [
+		"## Goal",
+		"Import the invasion helpers",
+		"## Progress",
+		"THOUGHT: I should read the modal first.",
+		"CALL read(src/scene/Targeting.js:26-438)",
+		"RESULT read: export function pickGlobePoint() { … }",
+	].join("\n");
+
+	it("counts copied log lines and ignores prose that merely mentions the words", () => {
+		expect(countLogEchoes(transcribed)).toBe(3);
+		expect(countLogEchoes("Call the loader before mounting; results are cached.")).toBe(0);
+	});
+
+	it("strips only the copied lines, keeping what the model selected", () => {
+		const cleaned = stripLogEchoes(transcribed);
+
+		expect(cleaned).toContain("## Goal");
+		expect(cleaned).toContain("Import the invasion helpers");
+		expect(cleaned).not.toContain("THOUGHT:");
+		expect(cleaned).not.toContain("CALL read(");
+		expect(cleaned).not.toContain("RESULT read:");
 	});
 });

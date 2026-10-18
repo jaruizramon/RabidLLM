@@ -103,3 +103,25 @@ export function boundScratchpad(pad: string, maxChars: number): string {
 	}
 	return `… [${lines.length - kept.length} earlier events omitted] …\n${kept.join("\n")}`;
 }
+
+/** Lines that are a verbatim echo of the event log rather than a selection from it. */
+const LOG_ECHO = /^(?:THOUGHT|CALL|RESULT)\b/;
+
+/** How many lines of `document` are copied log lines. */
+export function countLogEchoes(document: string): number {
+	return document.split("\n").filter(line => LOG_ECHO.test(line.trim())).length;
+}
+
+/**
+ * Drop copied log lines, keeping everything the model actually wrote.
+ *
+ * Used only after a retry failed to stop the transcription: a document with a few fewer
+ * lines is better than one that hands the successor the raw event log.
+ */
+export function stripLogEchoes(document: string): string {
+	const kept = document.split("\n").filter(line => !LOG_ECHO.test(line.trim()));
+	return kept
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}

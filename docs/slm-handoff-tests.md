@@ -598,6 +598,28 @@ not. Progress is "what a successor would otherwise redo or miss", not every acti
 **Conclusion.** The three layers now have distinct jobs: harness records exactly (requirements,
 file actions), the pad compresses events, the model selects. No layer duplicates another.
 
+---
+
+## 2026-10-18 — A token cap does not force selection; the echo check does
+
+**Observed.** The pad is ~16K tokens and the output cap 2048, so a model can transcribe the
+log compactly and stay inside the cap. Asking for selection in the prompt is necessary but not
+sufficient: nothing in the budget prevents a document made of copied `THOUGHT`/`CALL`/`RESULT`
+lines.
+
+**Change.**
+
+- Prompt: never copy a `THOUGHT:`/`CALL`/`RESULT` line or the log's labels.
+- Coordinator: count lines matching `^(THOUGHT|CALL|RESULT)\b`. Three or more triggers one
+  retry with an explicit "your previous answer transcribed the log" instruction; if the retry
+  is not better, the copied lines are stripped and the rest kept.
+- Stripping is the fallback, not the policy: it costs detail, never the contract, because the
+  requirement and file-action blocks are computed outside the document.
+
+**Conclusion.** Selection has a check and a consequence. The structural version of the same
+guarantee — a schema-constrained delta (done/decisions/next) that the harness renders — remains
+the stronger option if transcription persists at larger pads.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
