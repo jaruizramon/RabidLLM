@@ -30,8 +30,8 @@ that is expensive to lose. The rules that follow are measured, not stylistic:
 ## What is here
 
 ```
-RABIDAI.md                     this file
-NEXT-CHAT.md                   the first tasks for the implementation chat
+docs/rabid/RABIDAI.md           this file
+docs/rabid/NEXT-CHAT.md         the first tasks for the implementation chat
 docs/rabid/README.md           mechanism map + staged rename
 docs/rabid/PLAN-presets-and-omp.md
 docs/rabid/PLAN-dram-offload.md

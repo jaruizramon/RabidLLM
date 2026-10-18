@@ -45,10 +45,16 @@ say "  repo:    $repo_dir"
 say "  target:  $app_dir"
 [ "$dry" = 1 ] && say "  (dry run — nothing is written)"
 
-say "\n[1/4] manager, presets, proxy, tool filter"
-for f in manager.py index.html proxy.py toolfilter.py models.ini models-1cat.ini models-stock.ini; do
-	install_file "$rig/$f" "$app_dir/$f" 644
+say "\n[1/4] manager, router presets, gateway"
+# The repo splits by role; the runtime directory stays flat because manager.py reads
+# models.ini and index.html from its own directory.
+install_file "$rig/manager/manager.py" "$app_dir/manager.py" 644
+install_file "$rig/manager/index.html" "$app_dir/index.html" 644
+for f in models.ini models-1cat.ini models-stock.ini; do
+	install_file "$rig/router/$f" "$app_dir/$f" 644
 done
+install_file "$rig/gateway/proxy.py" "$app_dir/proxy.py" 644
+install_file "$rig/gateway/toolfilter.py" "$app_dir/toolfilter.py" 644
 
 say "\n[2/4] command wrappers"
 for f in llama-manager llama-server llama-server-stock llama-proxy llama-toolfilter; do

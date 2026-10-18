@@ -8,16 +8,17 @@ installer, install the weights by hand, start the manager.
 rig/
   install.sh          idempotent installer (templates @HOME@, backs up what it replaces)
   models.list         every GGUF the presets expect, with its hf repo
-  manager.py          HTTP server behind http://localhost:8090
-  index.html          manager page: model cards, VRAM, SLM worker, CPU/GPU load
-  proxy.py            tailnet front door (llama-proxy)
-  toolfilter.py       loopback relay that strips named tools (llama-toolfilter, :8101)
-  models.ini          router presets (llama.cpp engine)
-  models-1cat.ini     router presets (1cat vLLM engine)
-  models-stock.ini    fallback presets for the stock build
+  manager/            manager.py (HTTP server :8090) + index.html (model cards, VRAM,
+                      SLM worker panel, CPU/GPU load)
+  router/             models.ini, models-1cat.ini, models-stock.ini — one section = one model id
+  gateway/            proxy.py (tailnet front door) and toolfilter.py (:8101, strips tools)
   bin/                llama-manager, llama-server, llama-server-stock, llama-proxy, llama-toolfilter
   omp-profile/        config.yml + models.yml for `omp --profile rabid`
 ```
+
+The repo splits by role; `install.sh` flattens it on purpose: `manager.py` reads
+`models.ini` and serves `index.html` from its own directory, so all five Python/HTML files
+land side by side in `~/.local/share/llama-v100/`.
 
 The harness itself is this repository (`packages/coding-agent`); `rig/` only carries the
 serving stack around it.

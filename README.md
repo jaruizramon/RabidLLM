@@ -68,7 +68,7 @@ flowchart LR
 
 Every row below is a real run on the reference rig (V100 32 GB inference, RTX 3070 8 GB
 display, 16-thread i9-9900K), read from the session JSONL and the handoff metadata. The
-full notebook — setup, commands, defects found — is [`SLM-HANDOFF-TESTS.md`](SLM-HANDOFF-TESTS.md).
+full notebook — setup, commands, defects found — is [`docs/slm-handoff-tests.md`](docs/slm-handoff-tests.md).
 
 ### A. End-to-end compaction commits
 
@@ -196,9 +196,20 @@ packages/coding-agent/src/session/slm-handoff.ts   coordinator, handoff format, 
 packages/coding-agent/src/session/slm-server.ts    supervised worker + chat client
 packages/coding-agent/src/prompts/system/slm-handoff*.md   worker prompts (three registers)
 packages/coding-agent/src/slash-commands/builtin-worker-model.ts   /models-worker
-rig/                                               serving stack + installer
-SLM-HANDOFF-TESTS.md                               lab notebook: every run, measurement, defect
-docs/compaction.md                                 the method in context of the other methods
+
+rig/
+  manager/      manager.py (HTTP :8090) + index.html (cards, VRAM, worker panel, load meters)
+  router/       models.ini / models-1cat.ini / models-stock.ini presets
+  gateway/      proxy.py (tailnet front door) + toolfilter.py (:8101)
+  bin/          the five wrappers installed into ~/.local/bin
+  omp-profile/  config.yml + models.yml for `omp --profile rabid`
+  install.sh    flattens the above into ~/.local/share/llama-v100 + ~/.local/bin
+  models.list   what to fetch, with the exact hf command
+
+docs/
+  slm-handoff-tests.md   lab notebook: every run, measurement, defect found
+  compaction.md          the method in context of the other methods
+  rabid/                 fork charter (RABIDAI.md), plans, next tasks
 ```
 
 ## Upstream

@@ -136,15 +136,15 @@ Originally built on [Mario Zechner](https://github.com/mariozechner)'s wonderful
 
 Most harnesses give the agent a Python sandbox and call it done. Ours runs persistent Python and a Bun worker, and either kernel can call back into the agent's own tools — read, search, task — over a loopback bridge. The agent loads a CSV with tool.read from inside Python, charts it from JavaScript, and never leaves the cell.
 
-![omp TUI running Python code and rendering a chart.](assets/python.webp)
+![omp TUI running Python code and rendering a chart.](../assets/python.webp)
 
 ### 02 · LSP wired into every write
 
 Ask for a rename and you get a rename. The call goes through workspace/willRenameFiles, so re-exports, barrel files, and aliased imports update before the file moves. Everything your IDE knows, the agent knows.
 
-![omp TUI with TypeScript and Biome language servers active.](assets/lspv.webp)
+![omp TUI with TypeScript and Biome language servers active.](../assets/lspv.webp)
 
-_[Read the LSP config docs](docs/lsp-config.md)_
+_[Read the LSP config docs](../docs/lsp-config.md)_
 
 ### 03 · Drives a real debugger
 
@@ -170,7 +170,7 @@ Split a job across workers and get typed results back. task fans out into isolat
 
 _[Watch the capture ↗](https://omp.sh/clips/irc.mp4)_
 
-Watch the fan-out while it runs: `Alt+A` opens [Agent Hub](docs/agent-hub.md), where the roster shows current activity and usage for every subagent. Open one to read its live transcript, type a steering message, revive a parked worker, or kill a stuck one without aborting the parent session.
+Watch the fan-out while it runs: `Alt+A` opens [Agent Hub](../docs/agent-hub.md), where the roster shows current activity and usage for every subagent. Open one to read its live transcript, type a steering message, revive a parked worker, or kill a stuck one without aborting the parent session.
 
 ### 06 · A second model, watching every turn.
 
@@ -322,13 +322,13 @@ Three standalone, lowercase words opt a turn into specialized agent behavior:
 - `orchestrate` — run substantial independent work through parallel subagents and verify each phase.
 - `workflowz` — build a deterministic multi-subagent workflow with the active `task` tool.
 
-They trigger only in prose, not inside code spans, fenced code blocks, XML/HTML sections, identifiers, or paths. See [Magic keywords](docs/magic-keywords.md) for exact matching rules and configuration.
+They trigger only in prose, not inside code spans, fenced code blocks, XML/HTML sections, identifiers, or paths. See [Magic keywords](../docs/magic-keywords.md) for exact matching rules and configuration.
 
 ### Session controls
 
 Slash commands shift how a whole session runs:
 
-- `/vibe` — enter [Vibe mode](docs/vibe-mode.md): act as a director driving persistent `fast`/`good` worker sessions with a `read`-only toolset.
+- `/vibe` — enter [Vibe mode](../docs/vibe-mode.md): act as a director driving persistent `fast`/`good` worker sessions with a `read`-only toolset.
 - `/fresh` — reset the provider stream state (stale prompt cache, wedged stream) without changing the local transcript. See [Session operations](docs/session-operations-export-share-fork-resume.md#fresh).
 
 ## Sixty-plus providers, a thousand models, _one /model away_.
@@ -505,7 +505,7 @@ The TUI is the default surface. Tool calls render as cards, edits preview before
 
 The same prompt cards surface over ACP, so editors get the picker without writing one.
 
-![omp TUI showing a multi-select question from the ask tool.](assets/ask.webp)
+![omp TUI showing a multi-select question from the ask tool.](../assets/ask.webp)
 
 ### SDK — embed in Node
 
@@ -642,7 +642,7 @@ bun dev -- --version
 
 `/debug` opens tools for debugging, reporting, and profiling.
 
-For architecture and contribution guidelines, see [packages/coding-agent/DEVELOPMENT.md](packages/coding-agent/DEVELOPMENT.md).
+For architecture and contribution guidelines, see [packages/coding-agent/DEVELOPMENT.md](../packages/coding-agent/DEVELOPMENT.md).
 
 ---
 
@@ -650,49 +650,49 @@ For architecture and contribution guidelines, see [packages/coding-agent/DEVELOP
 
 | Package                                                                       | Description                                                                 |
 | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **[@oh-my-pi/collab-web](packages/collab-web)**                               | Browser guest client, mock host, and local relay for collab live sessions   |
-| **[@oh-my-pi/pi-ai](packages/ai)**                                            | Multi-provider LLM client with streaming and model/provider integration     |
-| **[@oh-my-pi/pi-catalog](packages/catalog)**                                  | Model catalog: bundled model database, provider descriptors, and identity   |
-| **[@oh-my-pi/pi-agent-core](packages/agent)**                                 | Agent runtime with tool calling and state management                        |
-| **[@oh-my-pi/pi-coding-agent](packages/coding-agent)**                        | Interactive coding agent CLI and SDK                                        |
-| **[@oh-my-pi/pi-tui](packages/tui)**                                          | Terminal UI library with differential rendering                             |
-| **[@oh-my-pi/pi-natives](packages/natives)**                                  | N-API bindings for grep, shell, image, text, syntax highlighting, and more  |
-| **[@oh-my-pi/omp-stats](packages/stats)**                                     | Local observability dashboard for AI usage statistics                       |
-| **[@oh-my-pi/omptype](packages/omptype)**                                     | ArkType-compatible schema validation with lazy JIT compilation              |
-| **[@oh-my-pi/pi-utils](packages/utils)**                                      | Shared utilities (logging, streams, dirs/env/process helpers)               |
-| **[@oh-my-pi/pi-wire](packages/wire)**                                        | Shared collab live-session protocol types and relay constants               |
-| **[@oh-my-pi/pi-mnemopi](packages/mnemopi)**                                  | Local SQLite memory engine for omp agents                                   |
-| **[@oh-my-pi/snapcompact](packages/snapcompact)**                             | Bitmap-frame context compression package and SQuAD eval suite               |
-| **[@oh-my-pi/browser-relay](packages/browser-relay)**                         | Chrome extension that lets the Eval browser API drive your existing tabs    |
-| **[@oh-my-pi/pi-metaharness](packages/metaharness)**                          | Unified benchmark runners, Harbor run storage, REST/SSE API, live dashboard |
-| **[@oh-my-pi/typescript-edit-benchmark](packages/typescript-edit-benchmark)** | Edit benchmark suite built on TypeScript source mutations                   |
+| **[@oh-my-pi/collab-web](../packages/collab-web)**                               | Browser guest client, mock host, and local relay for collab live sessions   |
+| **[@oh-my-pi/pi-ai](../packages/ai)**                                            | Multi-provider LLM client with streaming and model/provider integration     |
+| **[@oh-my-pi/pi-catalog](../packages/catalog)**                                  | Model catalog: bundled model database, provider descriptors, and identity   |
+| **[@oh-my-pi/pi-agent-core](../packages/agent)**                                 | Agent runtime with tool calling and state management                        |
+| **[@oh-my-pi/pi-coding-agent](../packages/coding-agent)**                        | Interactive coding agent CLI and SDK                                        |
+| **[@oh-my-pi/pi-tui](../packages/tui)**                                          | Terminal UI library with differential rendering                             |
+| **[@oh-my-pi/pi-natives](../packages/natives)**                                  | N-API bindings for grep, shell, image, text, syntax highlighting, and more  |
+| **[@oh-my-pi/omp-stats](../packages/stats)**                                     | Local observability dashboard for AI usage statistics                       |
+| **[@oh-my-pi/omptype](../packages/omptype)**                                     | ArkType-compatible schema validation with lazy JIT compilation              |
+| **[@oh-my-pi/pi-utils](../packages/utils)**                                      | Shared utilities (logging, streams, dirs/env/process helpers)               |
+| **[@oh-my-pi/pi-wire](../packages/wire)**                                        | Shared collab live-session protocol types and relay constants               |
+| **[@oh-my-pi/pi-mnemopi](../packages/mnemopi)**                                  | Local SQLite memory engine for omp agents                                   |
+| **[@oh-my-pi/snapcompact](../packages/snapcompact)**                             | Bitmap-frame context compression package and SQuAD eval suite               |
+| **[@oh-my-pi/browser-relay](../packages/browser-relay)**                         | Chrome extension that lets the Eval browser API drive your existing tabs    |
+| **[@oh-my-pi/pi-metaharness](../packages/metaharness)**                          | Unified benchmark runners, Harbor run storage, REST/SSE API, live dashboard |
+| **[@oh-my-pi/typescript-edit-benchmark](../packages/typescript-edit-benchmark)** | Edit benchmark suite built on TypeScript source mutations                   |
 
 ### Rust Crates
 
 | Crate                                              | Description                                                                                         |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **[pi-natives](crates/pi-natives)**                | Core Rust native addon (N-API `cdylib`) used by `@oh-my-pi/pi-natives`; aggregates the crates below |
-| **[pi-shell](crates/pi-shell)**                    | Embedded shell / PTY / process management split out of `pi-natives` (wraps `brush-*`)               |
-| **[pi-ast](crates/pi-ast)**                        | tree-sitter-based code summarizer and AST utilities (50+ language grammars)                         |
-| **[pi-iso](crates/pi-iso)**                        | Task isolation backend resolver: APFS clones, btrfs/zfs reflinks, overlayfs, projfs, rcopy          |
-| **[pi-voice](crates/pi-voice)**                    | Audio capture/playback, Opus codecs, and live WebRTC streaming primitives                           |
-| **[pi-walker](crates/pi-walker)**                  | Parallel ignore-aware filesystem walker with the scan cache shared by grep, glob, and workspace     |
-| **[pi-edit](crates/pi-edit)**                      | Edit engine behind the `edit` tool: line-anchored patch/hashline modes, streaming previews, atomic apply |
-| **[brush-core](crates/vendor/brush-core)**         | Vendored fork of [brush-shell](https://github.com/reubeno/brush) for embedded bash execution        |
-| **[pi-builtins](crates/pi-builtins)**              | Bash builtins (cd, echo, test, printf, read, export, …) plus 67 in-process command-line utilities |
+| **[pi-natives](../crates/pi-natives)**                | Core Rust native addon (N-API `cdylib`) used by `@oh-my-pi/pi-natives`; aggregates the crates below |
+| **[pi-shell](../crates/pi-shell)**                    | Embedded shell / PTY / process management split out of `pi-natives` (wraps `brush-*`)               |
+| **[pi-ast](../crates/pi-ast)**                        | tree-sitter-based code summarizer and AST utilities (50+ language grammars)                         |
+| **[pi-iso](../crates/pi-iso)**                        | Task isolation backend resolver: APFS clones, btrfs/zfs reflinks, overlayfs, projfs, rcopy          |
+| **[pi-voice](../crates/pi-voice)**                    | Audio capture/playback, Opus codecs, and live WebRTC streaming primitives                           |
+| **[pi-walker](../crates/pi-walker)**                  | Parallel ignore-aware filesystem walker with the scan cache shared by grep, glob, and workspace     |
+| **[pi-edit](../crates/pi-edit)**                      | Edit engine behind the `edit` tool: line-anchored patch/hashline modes, streaming previews, atomic apply |
+| **[brush-core](../crates/vendor/brush-core)**         | Vendored fork of [brush-shell](https://github.com/reubeno/brush) for embedded bash execution        |
+| **[pi-builtins](../crates/pi-builtins)**              | Bash builtins (cd, echo, test, printf, read, export, …) plus 67 in-process command-line utilities |
 
 ## Contributing
 
 Issues and pull requests are open to everyone. Open PRs are currently a
 **trial** — the previous vouch requirement is lifted while we evaluate how it
-goes, and it may return. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for
+goes, and it may return. See **[CONTRIBUTING.md](../CONTRIBUTING.md)** for
 guidelines on contributing.
 
 ---
 
 ## License
 
-OMP is licensed under the [MIT License](LICENSE).
+OMP is licensed under the [MIT License](../LICENSE).
 
 Third-party and vendored code, including `crates/vendor/brush-core` and the
 third-party portions identified in `crates/pi-builtins/LICENSE`, remains under
