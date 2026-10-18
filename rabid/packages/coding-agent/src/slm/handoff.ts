@@ -38,7 +38,7 @@ import {
 } from "../session/context-settings";
 import { resolveCompactionMethodOrder } from "../session/compaction-methods";
 import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
-import { messageText, renderFileActions, renderTurnTranscript } from "../rabid/turn-cards";
+import { clipMiddle, messageText, renderFileActions, renderTurnTranscript } from "../rabid/turn-cards";
 import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
 export { ensureSlmModelDownloaded } from "./server";
@@ -710,9 +710,13 @@ export class SlmHandoffCoordinator {
 		const queue: AgentMessage[][] = chunkByRenderedLength(batch, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN);
 		while (queue.length > 0) {
 			const chunk = queue.shift()!;
+			const transcript = clipMiddle(
+				renderTurnTranscript(chunk),
+				Math.floor(config.maxInputTokens * CHUNK_CHARS_PER_TOKEN),
+			);
 			const userPrompt = prompt.render(slmHandoffInputPrompt, {
 				previousHandoff: previous?.document || "(none)",
-				turnTranscript: renderTurnTranscript(chunk),
+				turnTranscript: transcript,
 				actionLog: renderFileActions(chunk) || "(none)",
 				maxHandoffTokens: config.maxHandoffTokens,
 			});

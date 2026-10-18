@@ -507,6 +507,28 @@ Verified live: adopted port 37921, no third worker spawned, `unload()` left it r
 (it adopts that worker) but its smaller context splits runs more. For full speed, let the
 session own the card: unload the panel's worker and restart.
 
+---
+
+## 2026-10-18 — A single oversized message could still overflow a run
+
+**Setup.** Review of the chunker after the 22 141-token rejection.
+
+**Observed.** `chunkByRenderedLength` splits *between* messages, and the split-on-overflow
+retry halves the message list. A single message that renders larger than one run's budget —
+an assistant turn with dozens of tool calls, or a tool result the renderer could not shorten
+below its own limit — becomes a one-message chunk that cannot be split, so the worker would
+reject it and compaction would fall back again. Each rendered part is already capped at
+1 500 chars, so this is a many-parts-per-message case, not a giant paste.
+
+**Fix.** The transcript for a run is middle-clipped to the run budget: 60 % head, 40 % tail,
+with `… [N chars omitted] …` where it cuts. Head keeps the task statement, tail keeps the
+latest state. The worker therefore always receives a prompt that fits, and the split-retry
+stays for multi-message chunks. Unit test: a 5 000-char transcript clipped to 1 000 keeps
+both ends, reports the omission, and never exceeds the limit.
+
+**Conclusion.** Two independent guarantees now: chunks fit by construction (middle clip), and
+if the estimate still undershoots, the server's own rejection halves the chunk.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

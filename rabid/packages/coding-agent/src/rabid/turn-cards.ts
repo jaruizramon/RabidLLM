@@ -43,6 +43,26 @@ function clip(text: string, limit = TRANSCRIPT_PART_LIMIT): string {
 	return trimmed.length <= limit ? trimmed : `${trimmed.slice(0, limit)}… [${trimmed.length - limit} chars omitted]`;
 }
 
+/**
+ * Middle-clip a rendered transcript to `limit` characters, keeping the head and the
+ * tail and marking what was dropped.
+ *
+ * A single message can be larger than one worker run — an assistant message with
+ * dozens of tool calls, or a tool result the renderer could not shorten further — and
+ * a message cannot be split by the chunker, so the transcript itself must fit.
+ * Head and tail are kept because the opening states the task and the tail holds the
+ * latest state.
+ */
+export function clipMiddle(text: string, limit: number): string {
+	if (text.length <= limit) return text;
+	const markerFor = (omitted: number) => `\n… [${omitted} chars omitted] …\n`;
+	const headShare = 0.6;
+	const budget = Math.max(0, limit - markerFor(0).length - 8);
+	const head = text.slice(0, Math.floor(budget * headShare));
+	const tail = text.slice(text.length - (budget - head.length));
+	return `${head}${markerFor(text.length - head.length - tail.length)}${tail}`;
+}
+
 /** One thing the turn did, reduced to a path or a command. */
 export interface FileAction {
 	kind: "edit" | "write" | "read" | "search" | "bash" | "other";

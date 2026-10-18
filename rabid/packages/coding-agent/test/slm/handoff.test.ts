@@ -19,7 +19,7 @@ import {
 import { normalizeSlmOutput } from "@oh-my-pi/pi-coding-agent/slm/server";
 import slmHandoffSystemPrompt from "../../src/prompts/system/slm-handoff.md" with { type: "text" };
 import { prompt } from "@oh-my-pi/pi-utils";
-import { extractFileActions, renderFileActions } from "@oh-my-pi/pi-coding-agent/rabid/turn-cards";
+import { clipMiddle, extractFileActions, renderFileActions } from "@oh-my-pi/pi-coding-agent/rabid/turn-cards";
 
 const TEMP_ROOT = await fs.mkdtemp(path.join(os.tmpdir(), "slm-handoff-test-"));
 const SESSION_IDS: string[] = [];
@@ -377,5 +377,21 @@ describe("isSlmHandoffConfigured", () => {
 				slmHandoffWorkerUrl: "",
 			}),
 		).toBe(true);
+	});
+});
+
+describe("clipMiddle", () => {
+	it("leaves a transcript that fits untouched", () => {
+		expect(clipMiddle("short transcript", 100)).toBe("short transcript");
+	});
+
+	it("keeps the head and the tail of an oversized transcript and says what it dropped", () => {
+		const text = `HEAD-${"x".repeat(5_000)}-TAIL`;
+		const clipped = clipMiddle(text, 1_000);
+
+		expect(clipped.length).toBeLessThanOrEqual(1_000);
+		expect(clipped.startsWith("HEAD-")).toBe(true);
+		expect(clipped.endsWith("-TAIL")).toBe(true);
+		expect(clipped).toContain("chars omitted");
 	});
 });
