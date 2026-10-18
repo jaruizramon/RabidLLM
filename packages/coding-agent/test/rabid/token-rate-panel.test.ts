@@ -1,6 +1,6 @@
 /** The generation-rate row above the archive panel: one decimal, hidden until measured. */
 import { beforeAll, describe, expect, it } from "bun:test";
-import { TokenRatePanel } from "@oh-my-pi/pi-coding-agent/modes/token-rate-panel";
+import { TokenRatePanel } from "@oh-my-pi/pi-coding-agent/rabid/token-rate-panel";
 import { visibleWidth } from "@oh-my-pi/pi-tui";
 import { initTheme } from "@oh-my-pi/pi-tui/theme";
 

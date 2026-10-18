@@ -446,7 +446,7 @@ import {
 	SessionMaintenance,
 	type SessionMaintenanceHost,
 } from "./session-maintenance";
-import { CompactionRummageTracker, type CompactionRummageState } from "./compaction-rummage";
+import { CompactionRummageTracker, type CompactionRummageState } from "../rabid/compaction-rummage";
 import {
 	cleanupEmptyMoveSession,
 	copySessionArtifacts,
@@ -524,10 +524,10 @@ import {
 	type ResetAutoRedeemMode,
 } from "./settings";
 import { type AnthropicSlowModeController, anthropicSlowModeLanes, formatUsageLimitLabel } from "./anthropic-slow-mode";
-import { resolveModelSampling } from "./model-profile-settings";
-import { cfgRabidMode } from "./rabid-modes";
+import { resolveModelSampling } from "../rabid/model-profile-settings";
+import { cfgRabidMode } from "../rabid/rabid-modes";
 import { SlmHandoffCoordinator } from "../slm/handoff";
-import { writeTurnCard } from "./turn-cards";
+import { writeTurnCard } from "../rabid/turn-cards";
 import { cfgModelProfiles } from "../config/model-settings";
 import type { UsageLimitState } from "./usage-limit";
 import { cfgInterruptMode } from "../modes/settings";

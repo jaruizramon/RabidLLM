@@ -1,5 +1,5 @@
 import { isRecord } from "@oh-my-pi/pi-utils";
-import { checkModelSelectorKey, matchModelSelector } from "./model-selectors";
+import { checkModelSelectorKey, matchModelSelector } from "../rabid/model-selectors";
 
 /**
  * One `task.agentCompactionThresholdOverrides` or `compaction.modelThresholds`

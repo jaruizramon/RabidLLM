@@ -5,7 +5,7 @@
  * server preset that chooses the weights: switching a mode never unloads a
  * model, and changing the budget works on an already-loaded model.
  */
-import type { ModelProfileSampling, ModelProfileThinkingBudgets } from "../config/model-profiles";
+import type { ModelProfileSampling, ModelProfileThinkingBudgets } from "./model-profiles";
 import { register } from "../config/registry";
 
 export const RABID_MODE_VALUES = ["off", "fast", "balanced", "deep"] as const;

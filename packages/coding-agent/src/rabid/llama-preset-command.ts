@@ -9,15 +9,15 @@
  * always leaves the loaded model untouched.
  */
 import { logger } from "@oh-my-pi/pi-utils";
-import { cfgRabidMode } from "../session/rabid-modes";
-import { commandConsumed, errorMessage } from "./helpers/parse";
+import { cfgRabidMode } from "./rabid-modes";
+import { commandConsumed, errorMessage } from "../slash-commands/helpers/parse";
 import type {
 	ParsedSlashCommand,
 	SlashCommandResult,
 	SlashCommandRuntime,
 	SlashCommandSpec,
 	TuiSlashCommandRuntime,
-} from "./types";
+} from "../slash-commands/types";
 
 const PROVIDER = "llama-rabid";
 /** Modes the Alt+Q / `/preset` picker offers, in display order. */

@@ -14,7 +14,7 @@ import {
 } from "./builtin-completions";
 import { BUILTIN_CONTROL_SLASH_COMMANDS } from "./builtin-control";
 import { BUILTIN_LIFECYCLE_SLASH_COMMANDS } from "./builtin-lifecycle";
-import { BUILTIN_LLAMA_PRESET_SLASH_COMMANDS } from "./builtin-llama-preset";
+import { BUILTIN_LLAMA_PRESET_SLASH_COMMANDS } from "../rabid/llama-preset-command";
 import { BUILTIN_MARKETPLACE_SLASH_COMMANDS, reloadTuiPluginState } from "./builtin-marketplace";
 import { BUILTIN_MODE_SLASH_COMMANDS } from "./builtin-modes";
 import { BUILTIN_SESSION_SLASH_COMMANDS } from "./builtin-session";

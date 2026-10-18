@@ -20,7 +20,7 @@ import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { cfgToolsDisabled } from "@oh-my-pi/pi-coding-agent/tools/settings";
 import { TempDir } from "@oh-my-pi/pi-utils";
-import { createAssistantMessage } from "./helpers/agent-session-setup";
+import { createAssistantMessage } from "../helpers/agent-session-setup";
 
 function tool(name: string): AgentTool {
 	return {

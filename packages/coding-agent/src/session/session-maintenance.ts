@@ -69,9 +69,9 @@ import { modelsAreEqual } from "@oh-my-pi/pi-catalog/models";
 import { isRecord, logger, prompt, Snowflake } from "@oh-my-pi/pi-utils";
 import * as snapcompact from "@oh-my-pi/snapcompact";
 import { writeArtifact } from "./artifacts";
-import type { CompactionRummageTracker } from "./compaction-rummage";
+import type { CompactionRummageTracker } from "../rabid/compaction-rummage";
 import { getAgentDir } from "@oh-my-pi/pi-utils";
-import { advanceSpeedTrigger, type SpeedTriggerState } from "./compaction-speed";
+import { advanceSpeedTrigger, type SpeedTriggerState } from "../rabid/compaction-speed";
 import {
 	parseTurnCard,
 	readTurnCardChain,
@@ -79,7 +79,7 @@ import {
 	renderTurnTranscript,
 	trimTurnCard,
 	type TurnCard,
-} from "./turn-cards";
+} from "../rabid/turn-cards";
 import type { ModelRegistry } from "../config/model-registry";
 import { CHAT_MODEL_ROLE_IDS } from "../config/model-roles";
 import type { Settings } from "../config/settings";

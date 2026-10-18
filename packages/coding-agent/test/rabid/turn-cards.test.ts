@@ -11,7 +11,7 @@ import {
 	trimTurnCard,
 	writeTurnCard,
 	type TurnCard,
-} from "@oh-my-pi/pi-coding-agent/session/turn-cards";
+} from "@oh-my-pi/pi-coding-agent/rabid/turn-cards";
 import { TempDir } from "@oh-my-pi/pi-utils";
 
 function turnMessages(): AgentMessage[] {

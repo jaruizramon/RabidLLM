@@ -5,15 +5,15 @@
 import { describe, expect, it } from "bun:test";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
 import type { ModelSpec } from "@oh-my-pi/pi-catalog/types";
-import { normalizeModelProfiles } from "@oh-my-pi/pi-coding-agent/config/model-profiles";
+import { normalizeModelProfiles } from "@oh-my-pi/pi-coding-agent/rabid/model-profiles";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { resolveModelCompactionSettings } from "@oh-my-pi/pi-coding-agent/session/model-compaction-threshold";
-import { cfgRabidMode } from "@oh-my-pi/pi-coding-agent/session/rabid-modes";
+import { cfgRabidMode } from "@oh-my-pi/pi-coding-agent/rabid/rabid-modes";
 import {
 	resolveDisabledToolNames,
 	resolveModelSampling,
 	resolveModelThinkingBudgets,
-} from "@oh-my-pi/pi-coding-agent/session/model-profile-settings";
+} from "@oh-my-pi/pi-coding-agent/rabid/model-profile-settings";
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 

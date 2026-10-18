@@ -19,7 +19,7 @@ import {
 import { normalizeSlmOutput } from "@oh-my-pi/pi-coding-agent/slm/server";
 import slmHandoffSystemPrompt from "../../src/prompts/system/slm-handoff.md" with { type: "text" };
 import { prompt } from "@oh-my-pi/pi-utils";
-import { extractFileActions, renderFileActions } from "@oh-my-pi/pi-coding-agent/session/turn-cards";
+import { extractFileActions, renderFileActions } from "@oh-my-pi/pi-coding-agent/rabid/turn-cards";
 
 const TEMP_ROOT = await fs.mkdtemp(path.join(os.tmpdir(), "slm-handoff-test-"));
 const SESSION_IDS: string[] = [];

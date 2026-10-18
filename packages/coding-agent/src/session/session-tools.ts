@@ -62,7 +62,7 @@ import { cfgDisabledExtensions, cfgSkills, type SkillsSettings } from "../extens
 import { cfgExternalThinking, cfgIncludeModelInPrompt, cfgInlineToolDescriptors, cfgSkillful } from "./settings";
 import { cfgStartupQuiet } from "../modes/settings";
 import { cfgToolsApproval, cfgToolsApprovalMode, cfgToolsXdevDocs, cfgToolsXdevInlineDevices } from "../tools/settings";
-import { resolveDisabledToolNames } from "./model-profile-settings";
+import { resolveDisabledToolNames } from "../rabid/model-profile-settings";
 
 /** Capabilities borrowed from the owning AgentSession. */
 export interface SessionToolsHost {

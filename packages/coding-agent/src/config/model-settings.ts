@@ -4,7 +4,7 @@
  */
 import { register, type SettingValueOf } from "./registry";
 import type { AuthAccountPolicies } from "@oh-my-pi/pi-ai/auth-storage";
-import { type ModelProfile, normalizeModelProfiles } from "./model-profiles";
+import { type ModelProfile, normalizeModelProfiles } from "../rabid/model-profiles";
 import type { cfgDefaultThinkingLevel } from "../session/settings";
 
 /** Display metadata for one model tag. */

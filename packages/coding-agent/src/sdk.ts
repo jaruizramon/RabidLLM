@@ -337,7 +337,7 @@ import {
 	resolveDisabledToolNames,
 	resolveModelSampling,
 	resolveModelThinkingBudgets,
-} from "./session/model-profile-settings";
+} from "./rabid/model-profile-settings";
 import { cfgAutolearnEnabled } from "./autolearn/settings";
 import { cfgBrowserEnabled } from "./tools/browser/settings";
 import {

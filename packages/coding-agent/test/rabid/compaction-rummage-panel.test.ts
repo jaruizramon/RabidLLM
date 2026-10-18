@@ -4,8 +4,8 @@
  * then disappears; tmpfs archives read as `ramdisk`.
  */
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { CompactionRummagePanel } from "@oh-my-pi/pi-coding-agent/modes/compaction-rummage-panel";
-import { CompactionRummageTracker } from "@oh-my-pi/pi-coding-agent/session/compaction-rummage";
+import { CompactionRummagePanel } from "@oh-my-pi/pi-coding-agent/rabid/compaction-rummage-panel";
+import { CompactionRummageTracker } from "@oh-my-pi/pi-coding-agent/rabid/compaction-rummage";
 import type { CompactionRummageStatus } from "@oh-my-pi/pi-tui/status-line/types";
 import { initTheme } from "@oh-my-pi/pi-tui/theme";
 

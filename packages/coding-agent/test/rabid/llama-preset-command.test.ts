@@ -5,8 +5,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { cfgRabidMode } from "@oh-my-pi/pi-coding-agent/session/rabid-modes";
-import { BUILTIN_LLAMA_PRESET_SLASH_COMMANDS } from "@oh-my-pi/pi-coding-agent/slash-commands/builtin-llama-preset";
+import { cfgRabidMode } from "@oh-my-pi/pi-coding-agent/rabid/rabid-modes";
+import { BUILTIN_LLAMA_PRESET_SLASH_COMMANDS } from "@oh-my-pi/pi-coding-agent/rabid/llama-preset-command";
 import type {
 	ParsedSlashCommand,
 	SlashCommandRuntime,

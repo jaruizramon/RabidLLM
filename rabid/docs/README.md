@@ -1,5 +1,8 @@
 # RabidAI docs
 
+- [FORK.md](FORK.md) — **what this fork changes in the harness**: added modules, rewired
+  upstream modules, and the boundary kept for upstream merges.
+
 - [PLAN-presets-and-omp.md](PLAN-presets-and-omp.md) — the three coherence presets, the CPU/VRAM
   discipline, and the OMP mechanism roadmap. **Read this first.**
 - [PLAN-dram-offload.md](PLAN-dram-offload.md) — the DDR4/PCIe substrate, the per-token law, and the

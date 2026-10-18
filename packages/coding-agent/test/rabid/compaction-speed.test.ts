@@ -4,7 +4,7 @@ import {
 	advanceSpeedTrigger,
 	type SpeedTriggerConfig,
 	type SpeedTriggerState,
-} from "@oh-my-pi/pi-coding-agent/session/compaction-speed";
+} from "@oh-my-pi/pi-coding-agent/rabid/compaction-speed";
 
 const CONFIG: SpeedTriggerConfig = { floorTps: 20, consecutive: 2, minContextTokens: 20_000 };
 const IDLE: SpeedTriggerState = { slowTurns: 0, cooldown: 0 };

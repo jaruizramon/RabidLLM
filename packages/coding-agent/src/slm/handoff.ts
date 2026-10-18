@@ -38,7 +38,7 @@ import {
 } from "../session/context-settings";
 import { resolveCompactionMethodOrder } from "../session/compaction-methods";
 import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
-import { messageText, renderFileActions, renderTurnTranscript } from "../session/turn-cards";
+import { messageText, renderFileActions, renderTurnTranscript } from "../rabid/turn-cards";
 import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
 export { ensureSlmModelDownloaded } from "./server";

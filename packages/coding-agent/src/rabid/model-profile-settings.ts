@@ -4,11 +4,16 @@
  * it, so a model without a profile keeps the global behavior.
  */
 import { cfgModelProfiles } from "../config/model-settings";
-import { matchModelProfile } from "../config/model-profiles";
+import { matchModelProfile } from "./model-profiles";
 import type { ScopeLike } from "../config/registry";
 import { cfgToolsDisabled } from "../tools/settings";
 import { cfgRabidMode, rabidModePolicy } from "./rabid-modes";
-import { cfgSampling, cfgThinkingBudgets, type SamplingSettings, type ThinkingBudgetsSettings } from "./settings";
+import {
+	cfgSampling,
+	cfgThinkingBudgets,
+	type SamplingSettings,
+	type ThinkingBudgetsSettings,
+} from "../session/settings";
 
 type ModelLike = { provider: string; id: string } | null | undefined;
 

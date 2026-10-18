@@ -257,8 +257,8 @@ import { SessionInfoOverlay } from "@oh-my-pi/pi-tui/overlays/session-info-overl
 import { JobsSheet } from "@oh-my-pi/pi-tui/overlays/jobs-panel";
 import { SkillMessageComponent } from "@oh-my-pi/pi-tui/chat/skill-message";
 import { StatusLineComponent } from "@oh-my-pi/pi-tui/status-line";
-import { CompactionRummagePanel } from "./compaction-rummage-panel";
-import { TokenRatePanel } from "./token-rate-panel";
+import { CompactionRummagePanel } from "../rabid/compaction-rummage-panel";
+import { TokenRatePanel } from "../rabid/token-rate-panel";
 import { statusLineHost } from "./status-line-host";
 import { stopSharedSpinnerTicker, type ToolExecutionHandle } from "@oh-my-pi/pi-tui/chat/tool-execution";
 import { TranscriptContainer } from "@oh-my-pi/pi-tui/chrome/transcript-container";
@@ -416,9 +416,9 @@ import {
 	cfgCompactionIdleTimeoutSeconds,
 	cfgCompactionMethodOrder,
 } from "../session/context-settings";
-import { cfgRabidMode, RABID_MODE_POLICIES } from "../session/rabid-modes";
+import { cfgRabidMode, RABID_MODE_POLICIES } from "../rabid/rabid-modes";
 import { resolveModelCompactionSettings } from "../session/model-compaction-threshold";
-import { resolveModelThinkingBudgets } from "../session/model-profile-settings";
+import { resolveModelThinkingBudgets } from "../rabid/model-profile-settings";
 
 /**
  * Settings with live interactive-UI side effects, keyed by id. One coalesced listener applies

@@ -1,6 +1,9 @@
 # RabidAI
 
-A fork of [oh-my-pi](https://github.com/can1357/oh-my-pi) whose purpose is one mechanism:
+A heavily modified fork of [oh-my-pi](https://github.com/can1357/oh-my-pi) tuned for one box:
+a single inference GPU, a gaming card, and local models. The harness itself diverges —
+maintenance, compaction, the token meter, the TUI, the provider layer and the catalog — not
+just a config profile ([inventory](rabid/docs/FORK.md)). The centrepiece is one mechanism:
 **compacting a long session without making the inference model re-read a saturated context.**
 
 A small model, running on the CPU or on a second GPU, maintains a rolling handoff document
@@ -68,7 +71,7 @@ flowchart LR
 
 Every row below is a real run on the reference rig (V100 32 GB inference, RTX 3070 8 GB
 display, 16-thread i9-9900K), read from the session JSONL and the handoff metadata. The
-full notebook — setup, commands, defects found — is [`docs/slm-handoff-tests.md`](docs/slm-handoff-tests.md).
+full notebook — setup, commands, defects found — is [`rabid/docs/slm-handoff-tests.md`](rabid/docs/slm-handoff-tests.md).
 
 ### A. End-to-end compaction commits
 
@@ -175,7 +178,7 @@ omp --profile rabid
 ## The rig
 
 `rig/` — manager page, router presets, proxy, tool filter, wrappers, installer, and the
-model checklist — is documented in [`rig/README.md`](rig/README.md).
+model checklist — is documented in [`rabid/rig/README.md`](rabid/rig/README.md).
 
 | Port | Owner |
 |---|---|
@@ -193,31 +196,26 @@ memory).
 
 ```
 packages/coding-agent/
-  src/slm/                 the whole feature: handoff.ts (coordinator, format, isolation),
-                           server.ts (supervised worker + chat client), worker-command.ts
-                           (/models-worker)
-  src/prompts/system/
-    slm-handoff*.md        worker prompts (three prose registers)
-  test/slm/                unit + integration tests for the component
+  src/slm/                 handoff.ts (coordinator, format, isolation), server.ts (supervised
+                           worker), worker-command.ts (/models-worker)
+  src/rabid/               the rest of the fork: turn cards, compaction rummage, speed floor,
+                           rabid modes, model profiles, llama presets, TUI panels
+  src/prompts/system/      slm-handoff*.md (three prose registers), turn-card.md
+  test/slm/, test/rabid/   tests for both components
 
-rig/
-  manager/      manager.py (HTTP :8090) + index.html (cards, VRAM, worker panel, load meters)
-  router/       models.ini / models-1cat.ini / models-stock.ini presets
-  gateway/      proxy.py (tailnet front door) + toolfilter.py (:8101)
-  bin/          the five wrappers installed into ~/.local/bin
-  omp-profile/  config.yml + models.yml for `omp --profile rabid`
-  install.sh    flattens the above into ~/.local/share/llama-v100 + ~/.local/bin
-  models.list   what to fetch, with the exact hf command
+rabid/
+  rig/                     serving stack — see rabid/rig/README.md
+    manager/ router/ gateway/ bin/ omp-profile/ install.sh models.list
+  docs/                    RABIDAI.md (charter), NEXT-CHAT.md, PLAN-*.md,
+                           FORK.md (harness-divergence inventory), slm-handoff-tests.md
 
-docs/
-  slm-handoff-tests.md   lab notebook: every run, measurement, defect found
-  compaction.md          the method in context of the other methods
-  rabid/                 fork charter (RABIDAI.md), plans, next tasks
+docs/                      upstream documentation (compaction.md, settings.md, …)
 ```
 
 ## Upstream
 
-RabidAI is a fork; the harness, tools, providers and docs above `rig/` are oh-my-pi's work.
+RabidAI is a fork; the harness, tools, providers and most docs are oh-my-pi's work, with the
+divergences inventoried in [`rabid/docs/FORK.md`](rabid/docs/FORK.md).
 The upstream README is kept at [`docs/upstream-readme.md`](docs/upstream-readme.md);
 upstream project and releases live at [can1357/oh-my-pi](https://github.com/can1357/oh-my-pi)
 ([omp.sh](https://omp.sh)). Sync with `git fetch upstream && git merge upstream/main` —

@@ -12,7 +12,7 @@ import {
 	parseModelCompactionEntry,
 } from "../config/compaction-threshold";
 import { cfgModelProfiles } from "../config/model-settings";
-import { matchModelProfile } from "../config/model-profiles";
+import { matchModelProfile } from "../rabid/model-profiles";
 import type { ContextWindowTiers } from "../config/model-registry";
 import type { ScopeLike } from "../config/registry";
 import type { Settings } from "../config/settings";
