@@ -166,6 +166,8 @@ records; missing cells are unmeasured, not zero.
 # ~/.rabid/agent/config.yml   (the `rabid` launcher's agent dir)
 compaction:
   methodOrder: [slm, shake, handoff, soft]   # slm first, real fallbacks behind it
+  modelThresholds:
+    llama-rabid/*: f88000                    # fixed context target (overrides thresholdPercent)
   speedFloorTps: 20                          # also compact when decode decays below this
   slmHandoff:
     modelPath: ~/models/Spark-X2.5-4B-Q4_0.gguf

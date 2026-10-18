@@ -39,7 +39,7 @@ dev:
 compaction:
   thresholdPercent: 75
   modelThresholds:
-    llama-rabid/*: f40000
+    llama-rabid/*: f88000
   asyncEnabled: false
   methodOrder:
     - slm
