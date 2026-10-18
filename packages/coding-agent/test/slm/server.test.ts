@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-import { requestSlmCompletion, type SlmCompletionRequest } from "@oh-my-pi/pi-coding-agent/session/slm-server";
+import { requestSlmCompletion, type SlmCompletionRequest } from "@oh-my-pi/pi-coding-agent/slm/server";
 
 interface WorkerReply {
 	content: string;

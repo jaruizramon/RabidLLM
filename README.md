@@ -192,10 +192,13 @@ memory).
 ## Layout
 
 ```
-packages/coding-agent/src/session/slm-handoff.ts   coordinator, handoff format, isolation
-packages/coding-agent/src/session/slm-server.ts    supervised worker + chat client
-packages/coding-agent/src/prompts/system/slm-handoff*.md   worker prompts (three registers)
-packages/coding-agent/src/slash-commands/builtin-worker-model.ts   /models-worker
+packages/coding-agent/
+  src/slm/                 the whole feature: handoff.ts (coordinator, format, isolation),
+                           server.ts (supervised worker + chat client), worker-command.ts
+                           (/models-worker)
+  src/prompts/system/
+    slm-handoff*.md        worker prompts (three prose registers)
+  test/slm/                unit + integration tests for the component
 
 rig/
   manager/      manager.py (HTTP :8090) + index.html (cards, VRAM, worker panel, load meters)

@@ -35,13 +35,13 @@ import {
 	cfgSlmHandoffThreads,
 	cfgSlmHandoffWorkerUrl,
 	type CompactionSettings,
-} from "./context-settings";
-import { resolveCompactionMethodOrder } from "./compaction-methods";
-import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./slm-server";
-import { messageText, renderFileActions, renderTurnTranscript } from "./turn-cards";
-import { sessionMessagePersistenceKey } from "./turn-persistence";
+} from "../session/context-settings";
+import { resolveCompactionMethodOrder } from "../session/compaction-methods";
+import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
+import { messageText, renderFileActions, renderTurnTranscript } from "../session/turn-cards";
+import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
-export { ensureSlmModelDownloaded } from "./slm-server";
+export { ensureSlmModelDownloaded } from "./server";
 
 /** Provenance for one written handoff document. */
 export interface SlmHandoffMetadata {

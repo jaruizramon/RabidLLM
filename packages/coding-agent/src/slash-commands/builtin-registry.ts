@@ -19,7 +19,7 @@ import { BUILTIN_MARKETPLACE_SLASH_COMMANDS, reloadTuiPluginState } from "./buil
 import { BUILTIN_MODE_SLASH_COMMANDS } from "./builtin-modes";
 import { BUILTIN_SESSION_SLASH_COMMANDS } from "./builtin-session";
 import { BUILTIN_SKILLS_SLASH_COMMANDS } from "./builtin-skills";
-import { BUILTIN_WORKER_MODEL_SLASH_COMMANDS } from "./builtin-worker-model";
+import { BUILTIN_WORKER_MODEL_SLASH_COMMANDS } from "../slm/worker-command";
 import { parseSlashCommand } from "./helpers/parse";
 import type {
 	BuiltinSlashCommand,

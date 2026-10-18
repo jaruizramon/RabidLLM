@@ -12,8 +12,8 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { type CompactionMethod, withSlmFirst } from "@oh-my-pi/pi-coding-agent/session/compaction-methods";
 import { SessionMaintenance, type SessionMaintenanceHost } from "@oh-my-pi/pi-coding-agent/session/session-maintenance";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
-import { coversOperatorTurns, type SlmHandoffRecord } from "@oh-my-pi/pi-coding-agent/session/slm-handoff";
-import { parseSlmDevice, slmOffloadArgs } from "@oh-my-pi/pi-coding-agent/session/slm-server";
+import { coversOperatorTurns, type SlmHandoffRecord } from "@oh-my-pi/pi-coding-agent/slm/handoff";
+import { parseSlmDevice, slmOffloadArgs } from "@oh-my-pi/pi-coding-agent/slm/server";
 
 const CONTEXT_WINDOW = 100_000;
 const THRESHOLD = 50_000;

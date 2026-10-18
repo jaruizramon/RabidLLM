@@ -147,7 +147,7 @@ import {
 	isSlmHandoffConfigured,
 	renderVerbatimUserRequirements,
 	type SlmHandoffRecord,
-} from "./slm-handoff";
+} from "../slm/handoff";
 
 /**
  * Output tokens a turn must produce before its rate counts as evidence for the

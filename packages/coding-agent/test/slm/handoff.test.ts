@@ -15,9 +15,9 @@ import {
 	writeSlmHandoff,
 	type SlmHandoffMetadata,
 	type SlmHandoffRecord,
-} from "@oh-my-pi/pi-coding-agent/session/slm-handoff";
-import { normalizeSlmOutput } from "@oh-my-pi/pi-coding-agent/session/slm-server";
-import slmHandoffSystemPrompt from "../src/prompts/system/slm-handoff.md" with { type: "text" };
+} from "@oh-my-pi/pi-coding-agent/slm/handoff";
+import { normalizeSlmOutput } from "@oh-my-pi/pi-coding-agent/slm/server";
+import slmHandoffSystemPrompt from "../../src/prompts/system/slm-handoff.md" with { type: "text" };
 import { prompt } from "@oh-my-pi/pi-utils";
 import { extractFileActions, renderFileActions } from "@oh-my-pi/pi-coding-agent/session/turn-cards";
 

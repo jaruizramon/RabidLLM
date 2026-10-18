@@ -526,7 +526,7 @@ import {
 import { type AnthropicSlowModeController, anthropicSlowModeLanes, formatUsageLimitLabel } from "./anthropic-slow-mode";
 import { resolveModelSampling } from "./model-profile-settings";
 import { cfgRabidMode } from "./rabid-modes";
-import { SlmHandoffCoordinator } from "./slm-handoff";
+import { SlmHandoffCoordinator } from "../slm/handoff";
 import { writeTurnCard } from "./turn-cards";
 import { cfgModelProfiles } from "../config/model-settings";
 import type { UsageLimitState } from "./usage-limit";

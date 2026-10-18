@@ -31,11 +31,16 @@ import {
 	resolveSlmServerConfig,
 	resolveSlmThreads,
 	slmHandoffFilePaths,
-} from "../session/slm-handoff";
-import { SlmHandoffServer, type SlmServerStatus } from "../session/slm-server";
+} from "./handoff";
+import { SlmHandoffServer, type SlmServerStatus } from "./server";
 import { expandTilde } from "../tools/path-utils";
-import { commandConsumed } from "./helpers/parse";
-import type { ParsedSlashCommand, SlashCommandResult, SlashCommandSpec, TuiSlashCommandRuntime } from "./types";
+import { commandConsumed } from "../slash-commands/helpers/parse";
+import type {
+	ParsedSlashCommand,
+	SlashCommandResult,
+	SlashCommandSpec,
+	TuiSlashCommandRuntime,
+} from "../slash-commands/types";
 
 interface ModelsWorkerDeps {
 	session: AgentSession;
