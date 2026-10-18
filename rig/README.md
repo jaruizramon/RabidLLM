@@ -13,7 +13,7 @@ rig/
   router/             models.ini, models-1cat.ini, models-stock.ini — one section = one model id
   gateway/            proxy.py (tailnet front door) and toolfilter.py (:8101, strips tools)
   bin/                llama-manager, llama-server, llama-server-stock, llama-proxy, llama-toolfilter
-  omp-profile/        config.yml + models.yml for `omp --profile rabid`
+  omp-profile/        config.yml + models.yml for `rabid`
 ```
 
 The repo splits by role; `install.sh` flattens it on purpose: `manager.py` reads
@@ -40,11 +40,11 @@ git clone https://github.com/jaruizramon/RabidLLM.git && cd RabidLLM
 ./rig/install.sh            # --dry-run first if you want to see it
 hf download ggml-org/SmolLM3-3B-GGUF SmolLM3-Q4_K_M.gguf --local-dir ~/models
 llama-manager start         # http://localhost:8090
-omp --profile rabid
+rabid
 ```
 
 `install.sh` starts by reporting the prerequisites it cannot install — `bun`, `python3`, `hf`, `nvidia-smi`, the stock and PrismML `llama-server` binaries — then writes `~/.local/share/llama-v100/*`, the five `~/.local/bin` wrappers, and
-`~/.omp/profiles/rabid/agent/{config,models}.yml` **if absent**. It never overwrites a
+`~/.rabid/agent/{config,models}.yml` **if absent** — that is where the `rabid` launcher reads (`PI_CONFIG_DIR=.rabid`), not `~/.omp/profiles/rabid`. It never overwrites a
 config you already have; it leaves a timestamped `.bak-install-*` beside anything it does
 replace. It creates `~/models` and prints the exact `hf download` line for every weight
 `rig/models.list` is still missing from it.

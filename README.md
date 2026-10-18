@@ -163,7 +163,7 @@ records; missing cells are unmeasured, not zero.
 ## Configure
 
 ```yaml
-# ~/.omp/profiles/rabid/agent/config.yml
+# ~/.rabid/agent/config.yml   (the `rabid` launcher's agent dir)
 compaction:
   methodOrder: [slm, shake, handoff, soft]   # slm first, real fallbacks behind it
   speedFloorTps: 20                          # also compact when decode decays below this
@@ -190,7 +190,7 @@ git clone https://github.com/jaruizramon/RabidLLM.git && cd RabidLLM
 # llama.cpp stock + PrismML fork under ~/.local/opt, `bun`, `python3`, `hf`
 hf download …                   # the lines install.sh printed for missing weights
 llama-manager start             # http://localhost:8090
-omp --profile rabid
+rabid                        # the launcher: PI_CONFIG_DIR=.rabid → ~/.rabid
 ```
 
 ## The rig

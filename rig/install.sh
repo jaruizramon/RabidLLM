@@ -20,7 +20,9 @@ repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 rig="$repo_dir/rig"
 app_dir="$HOME/.local/share/llama-v100"
 bin_dir="$HOME/.local/bin"
-profile_dir="$HOME/.omp/profiles/rabid/agent"
+# The `rabid` launcher sets PI_CONFIG_DIR=.rabid, which resolves to $HOME/.rabid — not
+# $HOME/.omp/profiles/rabid. Install where the launcher actually reads.
+profile_dir="$HOME/.rabid/agent"
 models_dir="$HOME/models"
 
 say() { printf '%b\n' "$*"; }
@@ -80,7 +82,7 @@ for f in llama-manager llama-server llama-server-stock llama-proxy llama-toolfil
 	install_file "$rig/bin/$f" "$bin_dir/$f" 755
 done
 
-say "\n[3/5] rabid profile (omp)"
+say "\n[3/5] rabid agent dir ($HOME/.rabid)"
 if [ -f "$profile_dir/config.yml" ]; then
 	say "  config.yml exists — left untouched; template available at rig/omp-profile/config.yml"
 else
