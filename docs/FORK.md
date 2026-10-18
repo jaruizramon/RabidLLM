@@ -1,19 +1,19 @@
 # The rabid harness
 
 This repository's harness is built on **oh-my-pi** (MIT — attribution in
-[`../../CREDITS.md`](../../CREDITS.md)), and it is more than that harness plus a config
+[`../../CREDITS.md`](../CREDITS.md)), and it is more than that harness plus a config
 profile: compaction, maintenance, the token meter, the TUI, the provider layer and the model
 catalog all carry changes. This file is the inventory — what was added, what was rewired, and
 what stayed untouched — so a future merge with upstream has a boundary to check against.
 
-Upstream README: [`../docs/upstream-readme.md`](../../docs/upstream-readme.md). Sync:
+Upstream README: [`../docs/upstream-readme.md`](../rabid/docs/upstream-readme.md). Sync:
 `git fetch upstream && git merge upstream/main`.
 
 ## Modules this fork adds
 
 | Path | What it is |
 |---|---|
-| `packages/coding-agent/src/slm/` | the background handoff: `handoff.ts` (coordinator, document format, isolation), `server.ts` (supervised worker), `worker-command.ts` (`/models-worker`) |
+| `rabid/packages/coding-agent/src/slm/` | the background handoff: `handoff.ts` (coordinator, document format, isolation), `server.ts` (supervised worker), `worker-command.ts` (`/models-worker`) |
 | `src/rabid/turn-cards.ts` | per-prompt episodic cards: prompt, files touched, 50-word summary per operation |
 | `src/rabid/compaction-rummage.ts` | token reclamation over the discarded region (drop reads, supersede reads, drop useless) |
 | `src/rabid/compaction-rummage-panel.ts` | TUI panel for the rummage ledger |
@@ -24,10 +24,10 @@ Upstream README: [`../docs/upstream-readme.md`](../../docs/upstream-readme.md). 
 | `src/rabid/model-profile-settings.ts` | session-side resolution of a model's profile |
 | `src/rabid/token-rate-panel.ts` | token-rate / reasoning-budget panel |
 | `src/rabid/llama-preset-command.ts` | `/preset` for the local llama.cpp router (fast/balanced/deep, load/unload) |
-| `packages/utils/src/atomic-write.ts` | staged temp-file + rename publication |
+| `rabid/packages/utils/src/atomic-write.ts` | staged temp-file + rename publication |
 | `src/prompts/system/{slm-handoff,slm-handoff-input,turn-card}.md` | prompts for the above |
 
-Tests for these live in `packages/coding-agent/test/rabid/` and `test/slm/`.
+Tests for these live in `rabid/packages/coding-agent/test/rabid/` and `test/slm/`.
 
 ## Upstream modules this fork materially rewires
 
@@ -39,17 +39,17 @@ Tests for these live in `packages/coding-agent/test/rabid/` and `test/slm/`.
 | `session/settings.ts`, `session/session-tools.ts`, `session/agent-session-types.ts` | settings + tool policy plumbing for the above |
 | `config/compaction-threshold.ts`, `config/model-settings.ts`, `sdk.ts` | per-model thresholds, profile resolution, SDK surface |
 | `modes/interactive-mode.ts`, `modes/controllers/input-controller.ts` | panels, mode switching, status segments |
-| `packages/ai/src/providers/openai-{shared,completions}.ts`, `stream.ts` | llama.cpp reasoning budget (`reasoning_budget_tokens`, `chat_template_kwargs`) |
-| `packages/catalog/src/compat/{axes,resolve,types}.ts`, `rules/providers/llama.cpp.kdl` | local-model policy expressed in KDL, per the repo's rule that model policy never lives in TypeScript |
-| `packages/agent/src/compaction/messages.ts` | renders `handoff` / `slm` summaries as handoff context instead of a plain summary |
+| `rabid/packages/ai/src/providers/openai-{shared,completions}.ts`, `stream.ts` | llama.cpp reasoning budget (`reasoning_budget_tokens`, `chat_template_kwargs`) |
+| `rabid/packages/catalog/src/compat/{axes,resolve,types}.ts`, `rules/providers/llama.cpp.kdl` | local-model policy expressed in KDL, per the repo's rule that model policy never lives in TypeScript |
+| `rabid/packages/agent/src/compaction/messages.ts` | renders `handoff` / `slm` summaries as handoff context instead of a plain summary |
 
 ## Settings and commands that exist only here
 
 `compaction.speedFloorTps`, `speedConsecutive`, `speedMinTokens`, `compaction.methodOrder`
 including `slm`, the whole `compaction.slmHandoff.*` block, `compaction.rummage*`,
 `turnCards.*`, `profiles.*`, rabid modes; commands `/models-worker`, `/preset`; the rummage
-and token-rate panels. See [`../../docs/settings.md`](../../docs/settings.md) and
-[`../../docs/compaction.md`](../../docs/compaction.md).
+and token-rate panels. See [`../../docs/settings.md`](../rabid/docs/settings.md) and
+[`../../docs/compaction.md`](../rabid/docs/compaction.md).
 
 ## What stays upstream
 

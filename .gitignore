@@ -94,3 +94,12 @@ packages/coding-agent/bench/boot-baseline.json
 /.bazelrc.user
 
 .parity/
+
+# build outputs of the relocated harness
+/rabid/bazel-bin
+/rabid/bazel-out
+/rabid/result
+/rabid/result-*
+/rabid/runs/
+/rabid/verify-out/
+/rabid/.turbo/

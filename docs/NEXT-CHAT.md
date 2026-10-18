@@ -14,13 +14,13 @@ Start a new omp chat with cwd **`/home/pipo/Documents/RabidAI`**, then paste:
   The clone is `--filter=blob:none`; `rabid` is pushed and tracking `origin/rabid`.
 - Installed binary on the box is `omp/18.2.6`; behavior differences are expected.
 - `RABIDAI.md`, `NEXT-CHAT.md`, `docs/rabid/` added; `rabid` bin alias added in
-  `packages/coding-agent/package.json` (the `omp` alias stays).
+  `rabid/packages/coding-agent/package.json` (the `omp` alias stays).
 - The root `package.json` name is still `omp`; `bun.lock` records it. Do not rename
   until Bun is installed and `bun install` regenerates cleanly (stage 2).
 
 ## Progress on `rabid` (2026-10-17)
 
-- Bun 1.4.3 installed; `bun install` clean; natives built with `bun --cwd=packages/natives run build`
+- Bun 1.4.3 installed; `bun install` clean; natives built with `bun --cwd=rabid/packages/natives run build`
   (needs `ninja` on PATH — fetched to `~/.local/bin/ninja` here).
 - **OMP-4 done:** `tools.disabled` (array) + `profiles` tool lists. Hidden tools leave the request
   and the system prompt, stay on the session slate, and return when the model no longer disables them
@@ -92,8 +92,8 @@ narrow suites for the package you touch.
 
 - Goal: OMP stops advertising `task` to local llama.cpp models, so the system prompt
   and tool schema match the 8101 filter.
-- Start at `packages/coding-agent/src/task/settings.ts` (`cfgTaskDisabledAgents`) and
-  the tool registry under `packages/coding-agent/src/tools/`. Add a settings key that
+- Start at `rabid/packages/coding-agent/src/task/settings.ts` (`cfgTaskDisabledAgents`) and
+  the tool registry under `rabid/packages/coding-agent/src/tools/`. Add a settings key that
   can be scoped per model/provider (a list of tool names), and filter the tool list
   before the system prompt and request are built.
 - Acceptance: a session on a model with `disabledTools: [task]` sends no `task` entry
@@ -104,9 +104,9 @@ narrow suites for the package you touch.
 
 - Goal: `rabid-deep` (75%, 4096, handoff/shake/soft, no subagents), `rabid-balanced`
   (75%, 4096), `rabid-fast` (60–65%, 2048, temp 0.7/0.8) without reloading the model.
-- Start at `packages/coding-agent/src/session/context-settings.ts`,
-  `packages/coding-agent/src/session/settings.ts`,
-  `packages/coding-agent/src/config/settings-schema.ts`, and the model config shape.
+- Start at `rabid/packages/coding-agent/src/session/context-settings.ts`,
+  `rabid/packages/coding-agent/src/session/settings.ts`,
+  `rabid/packages/coding-agent/src/config/settings-schema.ts`, and the model config shape.
 - Prefer a `profiles:` record keyed by model id, resolved after model selection.
   Keep the global `compaction.*` keys as the fallback.
 - Acceptance: switching model ids changes the resolved threshold, method order,
@@ -116,9 +116,9 @@ narrow suites for the package you touch.
 
 - Goal: `thinkingBudgets` reaches llama.cpp as `reasoning_budget_tokens` (or
   `thinking_budget_tokens`) on the OpenAI-compatible chat/completions request.
-- Start at `packages/ai/src/providers/openai-shared.ts` (the existing mapping to
-  `reasoning.max_tokens` is OpenAI-style), `packages/ai/src/stream.ts`,
-  `packages/ai/src/types.ts`, `packages/coding-agent/src/session/settings.ts`.
+- Start at `rabid/packages/ai/src/providers/openai-shared.ts` (the existing mapping to
+  `reasoning.max_tokens` is OpenAI-style), `rabid/packages/ai/src/stream.ts`,
+  `rabid/packages/ai/src/types.ts`, `rabid/packages/coding-agent/src/session/settings.ts`.
 - Gate it on the provider/model (llama.cpp / local-llama), not on all OpenAI-compatible
   endpoints. Keep the OpenAI behavior unchanged elsewhere.
 - Acceptance: a request built for `local-llama` with a low budget contains

@@ -14,23 +14,23 @@ and that debt is the largest one here.** The license is unchanged.
   [@mariozechner](https://github.com/mariozechner)
 
 The complete MIT text with those notices is in [`LICENSE`](LICENSE), unmodified. The upstream
-README is preserved verbatim at [`docs/upstream-readme.md`](docs/upstream-readme.md).
+README is preserved verbatim at [`docs/upstream-readme.md`](rabid/docs/upstream-readme.md).
 
 What this repository changed is inventoried file by file in
-[`rabid/docs/FORK.md`](rabid/docs/FORK.md). **Everything not listed there is upstream work,
+[`docs/FORK.md`](docs/FORK.md). **Everything not listed there is upstream work,
 and upstream's documentation in `docs/` applies to it.** The changes are kept at upstream
 paths on purpose, so `git fetch upstream && git merge upstream/main` stays reviewable.
 
 ## Work that is this repository's own
 
-- **Rig** — `rabid/rig/`: `manager.py`, `index.html` (including the SLM worker panel and the
+- **Rig** — `rig/`: `manager.py`, `index.html` (including the SLM worker panel and the
   CPU/GPU load meters), `proxy.py`, `toolfilter.py`, the `models*.ini` presets, the five
   `bin/` wrappers, `install.sh`, `models.list`.
-- **Mechanism** — `packages/coding-agent/src/slm/`: coordinator, supervised worker,
+- **Mechanism** — `rabid/packages/coding-agent/src/slm/`: coordinator, supervised worker,
   `/models-worker`, and the handoff prompts under `src/prompts/system/slm-handoff*.md`.
-- **Harness changes** — `packages/coding-agent/src/rabid/` plus the rewired upstream modules
+- **Harness changes** — `rabid/packages/coding-agent/src/rabid/` plus the rewired upstream modules
   listed in `FORK.md`.
-- **Docs** — `rabid/docs/` (charter, plans, this repository's fork inventory, the test
+- **Docs** — `docs/` (charter, plans, this repository's fork inventory, the test
   notebook) and the root README.
 
 ## Third-party software used, not redistributed
@@ -44,7 +44,7 @@ paths on purpose, so `git fetch upstream && git merge upstream/main` stays revie
 
 ## Model weights
 
-None are distributed in this repository. `rabid/rig/models.list` names the files the presets
+None are distributed in this repository. `rig/models.list` names the files the presets
 expect and the Hub repository for each; fetch them yourself and check the license on the
 model's own page — the Spark, SmolLM, Qwen, Nemotron and Ornith cards each carry their own
 terms, which this repository cannot restate for you.

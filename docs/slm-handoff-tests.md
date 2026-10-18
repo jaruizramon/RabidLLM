@@ -420,8 +420,8 @@ Which side owns each defect the runs above found. Update when a new one appears.
 | `unload` left the injected `handoff` behind | harness | fixed: restores defaults |
 | Post-compaction run re-distilled our own summary | harness | fixed: `isOperatorTurn` gate + covered-leaf shortcut |
 | `coveredUserTurns` counted the agent-attributed summary | harness | fixed: counts operator turns only |
-| One-shot `omp -p` aborts the per-turn handoff | harness/design | known; only the compaction path awaits |
-| SIGKILLed harness leaks the worker | harness/design | known; `unload`/SIGINT are clean |
+| One-shot `omp -p` aborts the per-turn handoff | rabid/design | known; only the compaction path awaits |
+| SIGKILLed harness leaks the worker | rabid/design | known; `unload`/SIGINT are clean |
 
 Reading: **fidelity** failures are the model's, and the design assumes them — the
 deterministic block, not the worker, is what makes a commit safe. **Waste, metadata, and

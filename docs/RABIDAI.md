@@ -71,7 +71,7 @@ building:
 
 | stage | change | gate |
 |---|---|---|
-| 1 | `RABIDAI.md`, docs, branch, `rabid` bin alias in `packages/coding-agent/package.json` | this commit |
+| 1 | `RABIDAI.md`, docs, branch, `rabid` bin alias in `rabid/packages/coding-agent/package.json` | this commit |
 | 2 | root `package.json` name `omp` → `rabidai`; regenerate `bun.lock` | Bun installed, `bun install` clean |
 | 3 | CLI identity/help/version strings; optional `~/.omp` → `~/.rabid` with migration | tests + a real session |
 | 4 | package scope `@oh-my-pi/*` → `@rabidai/*` (large, optional) | only if worth the churn |

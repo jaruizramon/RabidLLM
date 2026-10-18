@@ -6,16 +6,16 @@ together — a single inference GPU, a gaming card, and local models.
 
 > The harness is built on [oh-my-pi](https://github.com/can1357/oh-my-pi) (MIT) and that debt
 > is the largest one here. Attribution, what is upstream and what is mine:
-> [`CREDITS.md`](CREDITS.md). Everything not listed in [`rabid/docs/FORK.md`](rabid/docs/FORK.md)
+> [`CREDITS.md`](CREDITS.md). Everything not listed in [`docs/FORK.md`](docs/FORK.md)
 > is upstream work, unmodified.
 
 | Pillar | What it is | Where |
 |---|---|---|
-| **1. The compaction mechanism** | A small model on the CPU (or the gaming card) keeps a rolling handoff document current, one stateless run per turn. Compaction commits that document instead of making the inference model re-read a saturated context. The parts that must never drift are written by the harness, not the model. | [`packages/coding-agent/src/slm/`](packages/coding-agent/src/slm), [`docs/compaction.md`](docs/compaction.md) |
-| **2. The harness that supports it** | A heavily modified fork of [oh-my-pi](https://github.com/can1357/oh-my-pi): maintenance, compaction, the token meter, the TUI, the provider layer and the catalog all diverge, not just a config profile. | [`packages/coding-agent/src/rabid/`](packages/coding-agent/src/rabid), [`rabid/docs/FORK.md`](rabid/docs/FORK.md) |
-| **3. The setup duplicator** | The serving stack for a new rig: manager web page, llama.cpp routers and presets, tool filter, wrappers, an idempotent installer, and the exact `hf download` line for every weight. | [`rabid/rig/`](rabid/rig), [`rabid/rig/README.md`](rabid/rig/README.md) |
+| **1. The compaction mechanism** | A small model on the CPU (or the gaming card) keeps a rolling handoff document current, one stateless run per turn. Compaction commits that document instead of making the inference model re-read a saturated context. The parts that must never drift are written by the harness, not the model. | [`rabid/packages/coding-agent/src/slm/`](rabid/packages/coding-agent/src/slm), [`docs/compaction.md`](rabid/docs/compaction.md) |
+| **2. The harness that supports it** | A heavily modified fork of [oh-my-pi](https://github.com/can1357/oh-my-pi): maintenance, compaction, the token meter, the TUI, the provider layer and the catalog all diverge, not just a config profile. | [`rabid/packages/coding-agent/src/rabid/`](rabid/packages/coding-agent/src/rabid), [`docs/FORK.md`](docs/FORK.md) |
+| **3. The setup duplicator** | The serving stack for a new rig: manager web page, llama.cpp routers and presets, tool filter, wrappers, an idempotent installer, and the exact `hf download` line for every weight. | [`rig/`](rig), [`rig/README.md`](rig/README.md) |
 
-Clone it on a new machine, run [`rabid/rig/install.sh`](rabid/rig/install.sh), install the
+Clone it on a new machine, run [`rig/install.sh`](rig/install.sh), install the
 weights it lists by name, and the harness plus the rig come up the same way they do here.
 The mechanism ships inside the harness, so the two are never out of step; the rig is what
 the harness talks to.
@@ -75,7 +75,7 @@ flowchart LR
 
 Every row below is a real run on the reference rig (V100 32 GB inference, RTX 3070 8 GB
 display, 16-thread i9-9900K), read from the session JSONL and the handoff metadata. The
-full notebook — setup, commands, defects found — is [`rabid/docs/slm-handoff-tests.md`](rabid/docs/slm-handoff-tests.md).
+full notebook — setup, commands, defects found — is [`docs/slm-handoff-tests.md`](docs/slm-handoff-tests.md).
 
 ### A. End-to-end compaction commits
 
@@ -182,7 +182,7 @@ omp --profile rabid
 ## The rig
 
 `rig/` — manager page, router presets, proxy, tool filter, wrappers, installer, and the
-model checklist — is documented in [`rabid/rig/README.md`](rabid/rig/README.md).
+model checklist — is documented in [`rig/README.md`](rig/README.md).
 
 | Port | Owner |
 |---|---|
@@ -199,22 +199,29 @@ memory).
 ## Layout
 
 ```
-packages/coding-agent/
-  src/slm/                 handoff.ts (coordinator, format, isolation), server.ts (supervised
-                           worker), worker-command.ts (/models-worker)
-  src/rabid/               the rest of the fork: turn cards, compaction rummage, speed floor,
-                           rabid modes, model profiles, llama presets, TUI panels
-  src/prompts/system/      slm-handoff*.md (three prose registers), turn-card.md
-  test/slm/, test/rabid/   tests for both components
+rabid/                      the modified oh-my-pi tree, self-contained
+  packages/coding-agent/
+    src/slm/                handoff.ts (coordinator, format, isolation), server.ts (supervised
+                            worker), worker-command.ts (/models-worker)
+    src/rabid/              fork-only modules: turn cards, compaction rummage, speed floor,
+                            rabid modes, model profiles, llama presets, TUI panels
+    src/prompts/system/     slm-handoff*.md (three prose registers), turn-card.md
+    test/{slm,rabid}/       tests for both components
+  packages/ crates/ scripts/ sdk/ python/ types/ assets/ infra/ nix/ bazel/ patches/
+  docs/                     upstream documentation (compaction.md, settings.md, …)
+  package.json bun.lock bunfig.toml tsconfig*.json Cargo.* rust-*.toml MODULE.bazel flake.nix
+  Dockerfile* .github/ .cargo/ .config/
 
-rabid/
-  rig/                     serving stack — see rabid/rig/README.md
-    manager/ router/ gateway/ bin/ omp-profile/ install.sh models.list
-  docs/                    RABIDAI.md (charter), NEXT-CHAT.md, PLAN-*.md,
-                           FORK.md (harness-divergence inventory), slm-handoff-tests.md
+rig/                        serving stack: manager/ router/ gateway/ bin/ omp-profile/
+                            install.sh models.list
+docs/                       our docs: RABIDAI.md, NEXT-CHAT.md, PLAN-*.md, FORK.md,
+                            slm-handoff-tests.md
 
-docs/                      upstream documentation (compaction.md, settings.md, …)
+README.md  CREDITS.md  LICENSE  AGENTS.md  .gitignore
 ```
+
+Three project folders, nothing else at the root. `bun install`, `bun check` and `bun test`
+run from `rabid/`; the rig and the docs are plain files.
 
 ## Credits and upstream
 
@@ -222,13 +229,13 @@ This repository's harness is a modified copy of [oh-my-pi](https://github.com/ca
 Copyright (c) 2025 Mario Zechner, (c) 2025–2026 Can Bölük, (c) 2026 Stencil Labs, Inc. —
 itself a fork of [Pi](https://github.com/badlogic/pi-mono) by @mariozechner. The license text
 in [`LICENSE`](LICENSE) is unchanged, the upstream README is preserved at
-[`docs/upstream-readme.md`](docs/upstream-readme.md), and the full attribution — including
+[`docs/upstream-readme.md`](rabid/docs/upstream-readme.md), and the full attribution — including
 third-party tools and the model weights this repo does *not* ship — is in
 [`CREDITS.md`](CREDITS.md).
 
 The harness keeps upstream paths on purpose: `git fetch upstream && git merge upstream/main`
-stays reviewable, and [`rabid/docs/FORK.md`](rabid/docs/FORK.md) is the inventory of what a
-merge has to reconcile. `rabid/rig/`, `src/slm/`, `src/rabid/` and the harness changes listed there are mine.
+stays reviewable, and [`docs/FORK.md`](docs/FORK.md) is the inventory of what a
+merge has to reconcile. `rig/`, `src/slm/`, `src/rabid/` and the harness changes listed there are mine.
 Profile, directory and binary names inside still say `rabid` — that is the setup's own name,
 not the repository's.
 

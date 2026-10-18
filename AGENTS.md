@@ -2,24 +2,24 @@
 
 ## Default Context
 
-This repo contains multiple packages, but **`packages/coding-agent/`** is the primary focus. Unless otherwise specified, assume work refers to this package.
+This repo contains multiple packages, but **`rabid/packages/coding-agent/`** is the primary focus. Unless otherwise specified, assume work refers to this package.
 
-**Terminology**: When the user says "agent" or asks "why is agent doing X", they mean the **coding-agent package implementation**, not you (the assistant). The coding-agent is a CLI tool — questions about its behavior refer to code in `packages/coding-agent/`, not your current session.
+**Terminology**: When the user says "agent" or asks "why is agent doing X", they mean the **coding-agent package implementation**, not you (the assistant). The coding-agent is a CLI tool — questions about its behavior refer to code in `rabid/packages/coding-agent/`, not your current session.
 
 ### Package Structure
 
 | Package                 | Description                                                                             |
 | ----------------------- | --------------------------------------------------------------------------------------- |
-| `packages/ai`           | Multi-provider LLM client with streaming support                                        |
-| `packages/catalog`      | Model catalog: bundled models.json, provider descriptors, model identity/classification |
-| `packages/agent`        | Agent runtime with tool calling and state management                                    |
-| `packages/coding-agent` | Main CLI application (primary focus)                                                    |
-| `packages/tui`          | Terminal UI library with differential rendering                                         |
-| `packages/natives`      | Bindings for native text/image/grep operations                                          |
-| `packages/stats`        | Local observability dashboard (`omp stats`)                                             |
-| `packages/omptype`      | ArkType-compatible schema validation with a lazy JIT runtime                            |
-| `packages/utils`        | Shared utilities (logger, streams, temp files)                                          |
-| `crates/pi-natives`     | Rust crate for performance-critical text/grep ops                                       |
+| `rabid/packages/ai`           | Multi-provider LLM client with streaming support                                        |
+| `rabid/packages/catalog`      | Model catalog: bundled models.json, provider descriptors, model identity/classification |
+| `rabid/packages/agent`        | Agent runtime with tool calling and state management                                    |
+| `rabid/packages/coding-agent` | Main CLI application (primary focus)                                                    |
+| `rabid/packages/tui`          | Terminal UI library with differential rendering                                         |
+| `rabid/packages/natives`      | Bindings for native text/image/grep operations                                          |
+| `rabid/packages/stats`        | Local observability dashboard (`omp stats`)                                             |
+| `rabid/packages/omptype`      | ArkType-compatible schema validation with a lazy JIT runtime                            |
+| `rabid/packages/utils`        | Shared utilities (logger, streams, temp files)                                          |
+| `rabid/crates/pi-natives`     | Rust crate for performance-critical text/grep ops                                       |
 
 **Catalog import convention**: code in this repo imports catalog _values_ (bundled models, model-thinking helpers, identity, descriptors, model manager/cache) from `@oh-my-pi/pi-catalog/<module>` — never via `@oh-my-pi/pi-ai`. The pi-ai barrel re-exports only the model/effort _types_ its own signatures use (`Model`, `Api`, `ThinkingConfig`, `Effort`, …); type-only imports of those from `@oh-my-pi/pi-ai` are fine.
 
@@ -60,11 +60,11 @@ When authorized to create or edit a contributor-submitted PR, follow the checkli
   ```
   When the process was started from the omp CLI — source `cli.ts`, npm-bundle `dist/cli.js`, or compiled binary — `workerHostEntry()` is `Bun.main` and the worker re-enters the single entry module, so no per-worker `--compile` entrypoints or bundle entries exist. Outside a CLI host (`bun test`, SDK embedding, standalone `omp-stats`) it returns `null` and the direct-module fallback loads the worker source. New worker kinds MUST add their selector to the dispatch table in `cli.ts` and keep the fallback branch.
   History: `with { type: "file" }` only copied the entry as a raw asset (workers crashed silently in compiled binaries — issues #1011, #1027), and the later literal-path + extra-entrypoint pattern required keeping spawn literals and two build scripts in sync (issue #1150). The smoke probe below is the live validation of this contract.
-  Validate any new worker with the dedicated smoke probe: `omp --smoke-test` spawns the stats sync worker and the tiny-model subprocess, pings them, and exits — it's wired into `ci:test:smoke` and `scripts/install-tests/run-ci.sh` so binary, source-link, and tarball installs all exercise it. Add a sibling smoke if the new worker is on a different module graph.
+  Validate any new worker with the dedicated smoke probe: `omp --smoke-test` spawns the stats sync worker and the tiny-model subprocess, pings them, and exits — it's wired into `ci:test:smoke` and `rabid/scripts/install-tests/run-ci.sh` so binary, source-link, and tarball installs all exercise it. Add a sibling smoke if the new worker is on a different module graph.
 
 ## Central Utilities
 
-Before writing a helper, check whether one already exists — `packages/coding-agent/src/utils/`, `@oh-my-pi/pi-utils`, `@oh-my-pi/pi-tui`, and the domain modules next to your callsite. This applies to **everything**: VCS wrappers, formatting/truncation/path-display helpers, image handling, clipboard, streams, temp files, caching. The central versions carry hardening a fresh copy always loses (timeouts, output caps, non-interactive env, lock avoidance, caching, TUI sanitization).
+Before writing a helper, check whether one already exists — `rabid/packages/coding-agent/src/utils/`, `@oh-my-pi/pi-utils`, `@oh-my-pi/pi-tui`, and the domain modules next to your callsite. This applies to **everything**: VCS wrappers, formatting/truncation/path-display helpers, image handling, clipboard, streams, temp files, caching. The central versions carry hardening a fresh copy always loses (timeouts, output caps, non-interactive env, lock avoidance, caching, TUI sanitization).
 
 - Search first: `grep` for the operation before implementing it. Two implementations of the same thing is a bug even when both work.
 - Examples of the pattern: `@oh-my-pi/pi-natives/vcs` and `src/utils/active-repo-context.ts` are the only sanctioned way to run git/jj (`import * as vcs from "@oh-my-pi/pi-natives/vcs"` — never hand-spawn via `$`/`Bun.spawn`); rendering goes through the helpers in TUI Sanitization below (`replaceTabs`, `truncateToWidth`, `shortenPath`, `PREVIEW_LIMITS`) rather than ad-hoc string math.
@@ -183,7 +183,7 @@ Manual reader loops only when the protocol requires it (SSE, streaming JSON-RPC)
 
 ## Model/Provider Policy Lives in KDL
 
-**NEVER hard-code model- or provider-conditional policy in TypeScript.** No `id.includes("claude")`, no model-name regexes, no per-model lookup tables (effort ladders, pricing, context windows, modalities, API routing, quirk flags). All of it belongs in the KDL rule tree at `packages/catalog/src/compat/rules/`, compiled by `bun run gen:compat` into the committed `rules.json` and resolved at build time via `resolveModelPolicy`/`buildModel`.
+**NEVER hard-code model- or provider-conditional policy in TypeScript.** No `id.includes("claude")`, no model-name regexes, no per-model lookup tables (effort ladders, pricing, context windows, modalities, API routing, quirk flags). All of it belongs in the KDL rule tree at `rabid/packages/catalog/src/compat/rules/`, compiled by `cd rabid && bun run gen:compat` into the committed `rules.json` and resolved at build time via `resolveModelPolicy`/`buildModel`.
 
 Ownership strata (see `src/compat/rules/README.md`):
 
@@ -198,20 +198,20 @@ Rules for TS code:
 - Discovery mappers map authoritative upstream fields as reported; seed neutral values only for fields the upstream omits or misreports **and** KDL explicitly owns via a correction axis (`input-modalities`, `cost-patch`, `limits-patch`, `context-window-floor`, thinking axes). Assert rule-owned corrections through `buildModel`; raw discovery specs remain the right assertion surface for parsing/normalization contracts.
 - An id that no selector can isolate gets an exact-id `models` residue rule with a comment — never a special case in TS.
 - Equal-rank rule overlaps throw `AmbiguousOverlapError` at resolve time; fix with an explicit `priority=` in KDL, not code.
-- After editing rules: `bun run gen:compat` and commit `rules.json` alongside the `.kdl` change.
+- After editing rules: `cd rabid && bun run gen:compat` and commit `rules.json` alongside the `.kdl` change.
 
 ## Generated Files
 
-**NEVER edit `packages/catalog/src/models.json` directly.** It is generated from upstream sources (stencil.so, provider catalog discovery, OpenCode docs) by `packages/catalog/scripts/generate-models.ts` and the descriptors/resolvers in `packages/catalog/src/provider-models/`. Hand-edits get overwritten on the next regen. The same applies to `packages/catalog/src/compat/rules.json`, compiled from the KDL tree by `bun run gen:compat`.
+**NEVER edit `rabid/packages/catalog/src/models.json` directly.** It is generated from upstream sources (stencil.so, provider catalog discovery, OpenCode docs) by `rabid/packages/catalog/scripts/generate-models.ts` and the descriptors/resolvers in `rabid/packages/catalog/src/provider-models/`. Hand-edits get overwritten on the next regen. The same applies to `rabid/packages/catalog/src/compat/rules.json`, compiled from the KDL tree by `cd rabid && bun run gen:compat`.
 
 To change an entry, fix the source:
 
-- **Model/provider policy** (identity, thinking ladders, wire quirks, modality/limit/pricing corrections, API routing, roster exclusions) → the KDL tree in `packages/catalog/src/compat/rules/` (see the section above).
-- **Provider catalog entries** (default model, discovery factory/flags) → the `CATALOG_PROVIDERS` table in `packages/catalog/src/provider-models/descriptors.ts`.
-- **Discovery/request plumbing** (endpoint shapes, auth, response parsing) → the mappers in `packages/catalog/src/provider-models/openai-compat.ts`.
-- **Generator wiring** (upstream merges, premium multipliers, post-processing order) → `packages/catalog/scripts/generate-models.ts`.
+- **Model/provider policy** (identity, thinking ladders, wire quirks, modality/limit/pricing corrections, API routing, roster exclusions) → the KDL tree in `rabid/packages/catalog/src/compat/rules/` (see the section above).
+- **Provider catalog entries** (default model, discovery factory/flags) → the `CATALOG_PROVIDERS` table in `rabid/packages/catalog/src/provider-models/descriptors.ts`.
+- **Discovery/request plumbing** (endpoint shapes, auth, response parsing) → the mappers in `rabid/packages/catalog/src/provider-models/openai-compat.ts`.
+- **Generator wiring** (upstream merges, premium multipliers, post-processing order) → `rabid/packages/catalog/scripts/generate-models.ts`.
 
-Regenerate with `bun run gen:compat` and/or `bun run gen:models` and commit the generated files alongside the source change. Add a regression test against the **rule/descriptor/mapper**, not the bundled JSON, so it survives upstream metadata shifts.
+Regenerate with `cd rabid && bun run gen:compat` and/or `bun run gen:models` and commit the generated files alongside the source change. Add a regression test against the **rule/descriptor/mapper**, not the bundled JSON, so it survives upstream metadata shifts.
 
 ## Logging and CLI Output
 
@@ -316,7 +316,7 @@ Test the contract the system exposes — not the easiest internal detail to asse
 
 ## Changelog
 
-Location: `packages/*/CHANGELOG.md` (per package).
+Location: `rabid/packages/*/CHANGELOG.md` (per package).
 
 **Format** — sections under `## [Unreleased]`:
 

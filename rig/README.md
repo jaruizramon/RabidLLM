@@ -20,7 +20,7 @@ The repo splits by role; `install.sh` flattens it on purpose: `manager.py` reads
 `models.ini` and serves `index.html` from its own directory, so all five Python/HTML files
 land side by side in `~/.local/share/llama-v100/`.
 
-The harness itself is this repository (`packages/coding-agent`); `rig/` only carries the
+The harness itself is this repository (`rabid/packages/coding-agent`); `rig/` only carries the
 serving stack around it.
 
 ## Install
