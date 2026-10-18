@@ -120,6 +120,25 @@ describe("decode throughput vs prompt prefill", () => {
 		expect(badTtft.rate()).toBeCloseTo(20, 0);
 	});
 
+	it("measures its own ttft when the provider reports none (local llama.cpp)", () => {
+		const meter = new TokenRateMeter(text => text.length);
+		meter.begin(0);
+		meter.push("answer", 8_000);
+		meter.end(200, 10_000);
+		meter.seed(200, 10_000); // no ttft argument
+		// 200 tokens in the 2s after the first delta, not 20 for the whole request.
+		expect(meter.rate()).toBeCloseTo(100, 0);
+	});
+
+	it("prefers the provider's ttft when it does report one", () => {
+		const meter = new TokenRateMeter(text => text.length);
+		meter.begin(0);
+		meter.push("answer", 8_000);
+		meter.end(200, 10_000);
+		meter.seed(200, 10_000, 6_000);
+		expect(meter.rate()).toBeCloseTo(50, 0);
+	});
+
 	it("reports the same decode rate on the display path", () => {
 		const message = assistantMessage({
 			usage: { ...assistantMessage().usage, output: 200 },

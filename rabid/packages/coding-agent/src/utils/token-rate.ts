@@ -170,6 +170,10 @@ export class TokenRateMeter {
 	readonly #inflight = METER_HALF_LIVES_MS.map(ms => new DecayedSums(ms));
 	/** Wall time the in-flight message started, or null between messages. */
 	#startedAt: number | null = null;
+	/** Wall time the first visible delta arrived; the end of the prompt prefill. */
+	#firstDeltaAt: number | null = null;
+	/** Prefill measured from a finished message, used when the provider reports no ttft. */
+	#measuredTtftMs: number | null = null;
 	/** Wall time the sums were last advanced to. */
 	#advancedTo = 0;
 	/** Local (visible) tokens of the in-flight message. */
@@ -192,6 +196,7 @@ export class TokenRateMeter {
 	begin(nowMs: number = Date.now()): void {
 		this.#clearInflight();
 		this.#startedAt = nowMs;
+		this.#firstDeltaAt = null;
 		this.#advancedTo = nowMs;
 		this.#inflightHiddenRate = Math.max(0, this.#hiddenTokens / (this.#hiddenSpanMs + METER_HIDDEN_PRIOR_MS));
 	}
@@ -200,6 +205,10 @@ export class TokenRateMeter {
 	push(text: string, nowMs: number = Date.now()): void {
 		if (text.length === 0) return;
 		if (this.#startedAt === null) this.begin(nowMs);
+		// The first visible delta is the end of the prompt prefill. Providers are not
+		// required to report ttft (the local llama.cpp path does not), and without it a
+		// large prompt reads as a slow model.
+		if (this.#firstDeltaAt === null) this.#firstDeltaAt = nowMs;
 		const index = Math.floor((nowMs - (this.#startedAt ?? nowMs)) / METER_BUCKET_MS);
 		if (index !== this.#pendingIndex) {
 			this.#flushPending(true, nowMs);
@@ -216,6 +225,10 @@ export class TokenRateMeter {
 	 */
 	end(outputTokens: number | undefined, nowMs: number = Date.now()): void {
 		if (this.#startedAt === null) return;
+		if (this.#firstDeltaAt !== null) {
+			const measured = this.#firstDeltaAt - this.#startedAt;
+			if (measured > 0) this.#measuredTtftMs = measured;
+		}
 		this.#flushPending(false, nowMs);
 		this.#advance(nowMs);
 		const spanMs = nowMs - this.#startedAt;
@@ -257,11 +270,12 @@ export class TokenRateMeter {
 	 * speed-floor trigger must compare against its floor.
 	 */
 	seed(outputTokens: number, durationMs: number, ttftMs?: number): void {
+		const reported = Number.isFinite(ttftMs) && ttftMs !== undefined ? ttftMs : this.#measuredTtftMs;
 		if (!Number.isFinite(outputTokens) || outputTokens <= 0 || !Number.isFinite(durationMs) || durationMs <= 0) {
 			this.reset();
 			return;
 		}
-		const prefillMs = Number.isFinite(ttftMs) && ttftMs !== undefined ? Math.max(0, ttftMs) : 0;
+		const prefillMs = reported !== null && Number.isFinite(reported) ? Math.max(0, reported) : 0;
 		// A ttft at or past the duration means the provider reported something odd;
 		// fall back to the full duration rather than inventing a tiny window.
 		const decodeMs = prefillMs > 0 && prefillMs < durationMs ? durationMs - prefillMs : durationMs;

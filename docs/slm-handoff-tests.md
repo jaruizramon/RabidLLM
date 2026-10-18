@@ -431,6 +431,28 @@ worker stops being a GPU worker. Docs and the README now show the curve instead 
 number, and the historic rows carry the crowded-card condition inline. Default stays 1024;
 2048 is right on an idle 8 GB card.
 
+---
+
+## 2026-10-18 — The speed floor still counted prefill: providers that report no ttft
+
+**Setup.** Live rabid session, Qwen3.8-27B local, context 29K/40K. Status bar showed
+19.4 tok/s while the model answered normally; the speed floor (20) tripped after three turns
+and auto-shake ran, then handoff.
+
+**Observed.** `seed()` subtracted `assistant.ttft`, but only some providers populate that
+field (cursor, gemini, azure); the llama.cpp path does not. With `ttft` undefined the meter
+fell back to the whole request duration — prefill included — so a 29K prompt plus a few
+hundred output tokens reads ~19 tok/s while decode is ~40.
+
+**Fix.** The meter now measures prefill itself: `begin()` records the message start,
+`push()` records the first visible delta, and `end()` stores the difference. `seed()` uses the
+provider's ttft when present and the measured value otherwise. Two tests: a provider with no
+ttft yields the decode rate (100 tok/s for 200 tokens in 2 s), and a reported ttft still wins.
+
+**Conclusion.** The floor now measures what its name says. With this session's numbers the
+context threshold (40K) is what should fire first; the floor should trip only where decode
+actually decays — the ~88K the user expected, not 29K.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
