@@ -259,6 +259,22 @@ export async function writeSlmNotes(agentDir: string, sessionId: string, record:
 	}
 }
 
+/**
+ * Output budget for one notes run.
+ *
+ * Measured: a turn with ~30 events produced 3 209 tokens of notes at the 4 096 cap —
+ * almost the size of its input, which would fill the accumulated budget in one turn.
+ * Notes are lines, not prose; 1 024 tokens is ~60 of them.
+ */
+const NOTES_PER_RUN_TOKENS = 1024;
+
+/**
+ * Tokens one notes line costs. Measured: 3 209 output tokens for ~60 lines. A run whose
+ * note lines exceed its cap is cut off at the end — which is the part of the turn that
+ * matters most — so the batch is split by line count, not only by rendered size.
+ */
+const NOTE_TOKENS_PER_LINE = 64;
+
 /** Stable identity for a live message, matching the persisted session's keys. */
 function messageKey(message: AgentMessage): string {
 	return sessionMessagePersistenceKey(message) ?? `${message.role}:${message.timestamp}`;
@@ -887,9 +903,10 @@ export class SlmHandoffCoordinator {
 		config: SlmServerConfig,
 		system: string,
 		user: string,
+		options?: { temperature?: number; maxTokens?: number },
 	): Promise<Awaited<ReturnType<SlmHandoffServer["complete"]>>> {
 		try {
-			return await this.#server.complete(config, system, user, this.#abort.signal);
+			return await this.#server.complete(config, system, user, this.#abort.signal, options);
 		} catch (error) {
 			if (this.#disposed || this.#abort.signal.aborted) throw error;
 			const text = String(error);
@@ -915,7 +932,24 @@ export class SlmHandoffCoordinator {
 		const notesBudget = Math.floor(config.maxNotesTokens * CHUNK_CHARS_PER_TOKEN);
 		let notes = existing?.text ?? "";
 		const systemPrompt = prompt.render(slmNotesSystemPrompt, {});
-		const queue: AgentMessage[][] = chunkByRenderedLength(batch, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN);
+		const perRunTokens = Math.min(NOTES_PER_RUN_TOKENS, config.maxNotesTokens);
+		const perRunLines = Math.max(8, Math.floor(perRunTokens / NOTE_TOKENS_PER_LINE));
+		// Split by note lines first, then by rendered size: a run that overruns its budget
+		// loses the turn's tail, and the tail is the newest work.
+		const queue: AgentMessage[][] = [];
+		let group: AgentMessage[] = [];
+		let groupLines = 0;
+		for (const message of batch) {
+			const lines = Math.max(1, renderScratchpad([message]).split("\n").length);
+			if (group.length > 0 && groupLines + lines > perRunLines) {
+				queue.push(...chunkByRenderedLength(group, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN));
+				group = [];
+				groupLines = 0;
+			}
+			group.push(message);
+			groupLines += lines;
+		}
+		if (group.length > 0) queue.push(...chunkByRenderedLength(group, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN));
 		while (queue.length > 0) {
 			const chunk = queue.shift()!;
 			// The worker reads the pad, not the turn: an 88K turn and a four-message turn
@@ -932,7 +966,12 @@ export class SlmHandoffCoordinator {
 			const startedAt = Date.now();
 			let result: Awaited<ReturnType<SlmHandoffServer["complete"]>>;
 			try {
-				result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
+				// Transcription, not generation: temperature 0 keeps identifiers intact, and a
+				// per-run cap keeps one turn's notes from consuming the whole accumulated budget.
+				result = await this.#completeWithRetry(config, systemPrompt, userPrompt, {
+					temperature: 0,
+					maxTokens: perRunTokens,
+				});
 			} catch (error) {
 				const text = String(error);
 				if (chunk.length > 1 && /exceeds the (?:available )?context|context size/i.test(text)) {
@@ -947,7 +986,10 @@ export class SlmHandoffCoordinator {
 				throw error;
 			}
 			const leaf = messageKey(chunk[chunk.length - 1]!);
-			notes = boundScratchpad(notes === "" ? result.document : `${notes}\n${result.document}`, notesBudget);
+			// Hitting the cap leaves a half-written line; drop it rather than smuggling a
+			// truncated path or outcome into the notes the contract reads.
+			const fresh = result.truncated ? result.document.replace(/\n[^\n]*$/, "").trimEnd() : result.document;
+			notes = boundScratchpad(notes === "" ? fresh : `${notes}\n${fresh}`, notesBudget);
 			const record: SlmNotesRecord = {
 				text: notes,
 				metadata: {

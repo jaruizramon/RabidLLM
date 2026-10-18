@@ -19,10 +19,11 @@ function assistant(parts: unknown[], text = ""): AgentMessage {
 	} as unknown as AgentMessage;
 }
 
-function result(text: string): AgentMessage {
+function result(text: string, toolCallId?: string): AgentMessage {
 	return {
 		role: "toolResult",
 		toolName: "read",
+		toolCallId,
 		content: [{ type: "text", text }],
 		isError: false,
 		timestamp: 3,
@@ -35,24 +36,29 @@ describe("renderScratchpad", () => {
 			user("Import the invasion helpers"),
 			assistant([
 				{ type: "thinking", thinking: "I should read the modal first.\nThen wire it." },
-				{ type: "toolCall", name: "read", arguments: { path: "src/scene/Targeting.js", offset: 26, limit: 413 } },
+				{
+					type: "toolCall",
+					id: "call-1",
+					name: "read",
+					arguments: { path: "src/scene/Targeting.js", offset: 26, limit: 413 },
+				},
 			]),
-			result("export function pickGlobePoint() { /* … */ }"),
+			result("export function pickGlobePoint() { /* … */ }", "call-1"),
 			assistant([], "Wired the helpers into the modal."),
 		]);
 
-		expect(pad).toContain("USER: Import the invasion helpers");
-		expect(pad).toContain("THOUGHT: I should read the modal first. Then wire it.");
-		expect(pad).toContain("CALL read(src/scene/Targeting.js:26-438)");
-		expect(pad).toContain("RESULT read:");
-		expect(pad).toContain("CONCLUSION: Wired the helpers into the modal.");
+		expect(pad).toContain("- [USER] Import the invasion helpers");
+		expect(pad).toContain("- [THOUGHT] I should read the modal first. Then wire it.");
+		// The call and its result arrive as the single line the notes want.
+		expect(pad).toContain("- [TOOL read] src/scene/Targeting.js:26-438 → export function pickGlobePoint()");
+		expect(pad).toContain("- [SAID] Wired the helpers into the modal.");
 	});
 
 	it("caps a single oversized thought so one block cannot dominate the pad", () => {
 		const pad = renderScratchpad([assistant([{ type: "thinking", thinking: "x".repeat(5_000) }])]);
 
 		expect(pad.length).toBeLessThan(300);
-		expect(pad).toContain("THOUGHT:");
+		expect(pad).toContain("- [THOUGHT]");
 	});
 });
 
@@ -77,14 +83,48 @@ describe("log transcription guard", () => {
 		"## Goal",
 		"Import the invasion helpers",
 		"## Progress",
-		"THOUGHT: I should read the modal first.",
-		"CALL read(src/scene/Targeting.js:26-438)",
-		"RESULT read: export function pickGlobePoint() { … }",
+		"- [THOUGHT] I should read the modal first.",
+		"- [TOOL read] src/scene/Targeting.js:26-438 → 413 lines",
+		"- [SAID] Wired the helpers into the modal.",
 	].join("\n");
 
-	it("counts copied log lines and ignores prose that merely mentions the words", () => {
+	it("counts copied note lines and ignores prose that merely mentions the words", () => {
 		expect(countLogEchoes(transcribed)).toBe(3);
 		expect(countLogEchoes("Call the loader before mounting; results are cached.")).toBe(0);
+	});
+
+	it("names the file an edit patches instead of its JSON arguments", () => {
+		const pad = renderScratchpad([
+			assistant([
+				{
+					type: "toolCall",
+					id: "edit-1",
+					name: "edit",
+					arguments: {
+						input: "*** Begin Patch\n*** Update File: src/scene/Targeting.js\n@@\n-a\n+b\n*** End Patch",
+					},
+				},
+			]),
+		]);
+
+		expect(pad).toBe("- [TOOL edit] src/scene/Targeting.js → (no result captured)");
+	});
+
+	it("pairs a result that carries no call id with the most recent open call", () => {
+		const pad = renderScratchpad([
+			assistant([{ type: "toolCall", id: "call-9", name: "read", arguments: { path: "a.ts" } }]),
+			result("file contents"),
+		]);
+
+		expect(pad).toBe("- [TOOL read] a.ts → file contents");
+	});
+
+	it("stops a call from a result that never arrived rendering as an outcome", () => {
+		const pad = renderScratchpad([
+			assistant([{ type: "toolCall", id: "pending-1", name: "read", arguments: { path: "a.ts" } }]),
+		]);
+
+		expect(pad).toBe("- [TOOL read] a.ts → (no result captured)");
 	});
 
 	it("counts copied note lines, which carry the note labels", () => {
@@ -97,8 +137,8 @@ describe("log transcription guard", () => {
 
 		expect(cleaned).toContain("## Goal");
 		expect(cleaned).toContain("Import the invasion helpers");
-		expect(cleaned).not.toContain("THOUGHT:");
-		expect(cleaned).not.toContain("CALL read(");
-		expect(cleaned).not.toContain("RESULT read:");
+		expect(cleaned).not.toContain("[THOUGHT]");
+		expect(cleaned).not.toContain("[TOOL read]");
+		expect(cleaned).not.toContain("[SAID]");
 	});
 });

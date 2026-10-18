@@ -641,6 +641,36 @@ protect.
 the echo detector now counts `- [THOUGHT]`/`- [TOOL]` copies too. 101 tests pass across
 `test/slm` and `test/rabid`.
 
+---
+
+## 2026-10-18 — Live probe: label drift, truncation, and the fix that came from it
+
+Ran the notes stage against the **live in-progress turn** (53 messages) on the up worker
+(Spark 4B, ctx 8192), bypassing the session.
+
+**Measured, in order.**
+
+1. Whole turn, `temperature 0.2`, cap 4 096: 3 713 in / **3 209 out**, 37 s. Notes were almost
+   the size of the input — one turn would fill the accumulated budget — and the model emitted
+   `[CALL]`/`[RESULT]` because the pad used those labels while the prompt asked for `[TOOL]`.
+2. `temperature 0`, cap 1 024: 12.8 s, but `finish_reason: length` and the notes ended
+   mid-line; a path came out as `basicRboxRocket`.
+3. Pad labels changed to the notes' own vocabulary (`- [USER]`, `- [SAID]`, `- [THOUGHT]`,
+   `- [TOOL name] target → outcome`), thoughts clipped 240 → 160 chars: labels stop drifting,
+   because there is nothing to translate.
+4. Chunked by note lines (cap ÷ 64 tokens/line ≈ 16 lines/run): 53 messages → **5 runs**, 45.6 s,
+   3 716 tokens, `finish: stop` on four of five, and the **end of the turn survives** — before
+   chunking the cap cut off the newest work, which is exactly what the contract needs next.
+
+**Follow-on defects fixed.** An `edit` call rendered its entire patch JSON as the target
+(paragraph of diff per line) → `callTarget()` now takes the file from a patch header. A result
+without a call id emitted a bare `- [TOOL edit] →` line → it now pairs with the most recent
+open call.
+
+**Cost.** ~46 s of background worker time for a 53-message turn, off the main model's critical
+path; notes budget 4 096 holds roughly one long turn, so older turns roll off (newest-first is
+the intent).
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.

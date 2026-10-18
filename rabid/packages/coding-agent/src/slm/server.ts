@@ -490,6 +490,7 @@ export class SlmHandoffServer {
 		system: string,
 		user: string,
 		signal?: AbortSignal,
+		options?: { temperature?: number; maxTokens?: number },
 	): Promise<SlmCompletionResult> {
 		await this.ensure(config);
 		const baseUrl = this.#baseUrl();
@@ -500,9 +501,9 @@ export class SlmHandoffServer {
 				{ role: "system", content: system },
 				{ role: "user", content: user },
 			],
-			temperature: 0.2,
+			temperature: options?.temperature ?? 0.2,
 			top_p: 0.95,
-			max_tokens: config.reasoningBudgetTokens + config.maxHandoffTokens + MAX_TOKENS_SLACK,
+			max_tokens: options?.maxTokens ?? config.reasoningBudgetTokens + config.maxHandoffTokens + MAX_TOKENS_SLACK,
 			cache_prompt: false,
 			stream: false,
 			stop: ["<|im_end|>"],
