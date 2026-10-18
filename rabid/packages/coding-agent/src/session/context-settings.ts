@@ -564,6 +564,19 @@ export const cfgSlmHandoffGpuLayers = register({
 	},
 });
 
+export const cfgSlmHandoffMaxNotesTokens = register({
+	id: "compaction.slmHandoff.maxNotesTokens",
+	type: "number",
+	default: 4096,
+	ui: {
+		tab: "context",
+		group: "SLM handoff",
+		label: "SLM Notes Budget",
+		description:
+			"Maximum size of the per-turn notes the worker keeps. The contract is built from these notes at compaction, so this bounds the judgment step's input",
+	},
+});
+
 export const cfgSlmHandoffWorkerUrl = register({
 	id: "compaction.slmHandoff.workerUrl",
 	type: "string",
@@ -656,6 +669,7 @@ export const cfgCompaction = combine({
 	slmHandoffGpuFreeMiB: cfgSlmHandoffGpuFreeMiB,
 	slmHandoffDetail: cfgSlmHandoffDetail,
 	slmHandoffWorkerUrl: cfgSlmHandoffWorkerUrl,
+	slmHandoffMaxNotesTokens: cfgSlmHandoffMaxNotesTokens,
 });
 
 /**

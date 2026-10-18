@@ -104,8 +104,8 @@ export function boundScratchpad(pad: string, maxChars: number): string {
 	return `… [${lines.length - kept.length} earlier events omitted] …\n${kept.join("\n")}`;
 }
 
-/** Lines that are a verbatim echo of the event log rather than a selection from it. */
-const LOG_ECHO = /^(?:THOUGHT|CALL|RESULT)\b/;
+/** Lines that are a verbatim echo of the log or the notes rather than a selection from them. */
+const LOG_ECHO = /^(?:THOUGHT|CALL|RESULT)\b|^[-*]\s*\[(?:USER|SAID|THOUGHT|TOOL)\b/;
 
 /** How many lines of `document` are copied log lines. */
 export function countLogEchoes(document: string): number {

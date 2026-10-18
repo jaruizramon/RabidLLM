@@ -56,6 +56,7 @@ flowchart LR
   P -->|worker cannot deliver| N[next configured method]
 ```
 
+- **Two stages, one judgment.** Each turn the worker writes **notes** — statements transcribed, thoughts summarised to one line, tool outcomes recorded — and nothing else. At compaction it writes the **contract** from those notes: that selection is the only non-deterministic step in the handoff, and it never runs on the main model's critical path.
 - **Selection is enforced, not requested.** A small model asked to summarise a log copies it, and a token cap only compresses the copy. Documents containing three or more copied `THOUGHT:`/`CALL`/`RESULT` lines are retried once with a stricter instruction, then the copied lines are stripped; requirements and file actions live in the harness blocks either way.
 - **The worker selects; the harness records.** The model's job is to choose what a successor needs to continue — objective, decisions and their reasons, binding constraints, verified facts, next step — and to drop routine reads, repeats and superseded plans. It can be selective because the exact record is kept outside the document: the user's own words and the turn's file actions. Quote exactly when quoting; omit rather than paraphrase.
 - **The worker reads a scratchpad, not the turn.** Each event becomes one bounded line — `USER`, `THOUGHT`, `CALL tool(target)`, `RESULT`, `CONCLUSION` — and the pad keeps the newest that fit. Measured: 316 messages / 142 K tokens of raw content → 26 K-token pad → 16.3 K after bounding, so an 88 K turn cannot overflow the worker.

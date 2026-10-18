@@ -17,6 +17,8 @@ import { $which, isEnoent, isRecord, logger, prompt, writeFileAtomically } from 
 import type { Settings } from "../config/settings";
 import slmHandoffInputPrompt from "../prompts/system/slm-handoff-input.md" with { type: "text" };
 import slmHandoffSystemPrompt from "../prompts/system/slm-handoff.md" with { type: "text" };
+import slmNotesInputPrompt from "../prompts/system/slm-notes-input.md" with { type: "text" };
+import slmNotesSystemPrompt from "../prompts/system/slm-notes.md" with { type: "text" };
 import { expandTilde } from "../tools/path-utils";
 import {
 	cfgCompaction,
@@ -29,6 +31,7 @@ import {
 	cfgSlmHandoffMaxContextTokens,
 	cfgSlmHandoffMaxHandoffTokens,
 	cfgSlmHandoffMaxInputTokens,
+	cfgSlmHandoffMaxNotesTokens,
 	cfgSlmHandoffModelPath,
 	cfgSlmHandoffReasoningBudgetTokens,
 	cfgSlmHandoffServerPath,
@@ -159,6 +162,101 @@ export function coversOperatorTurns(messages: readonly AgentMessage[], coveredKe
 	const index = messages.findLastIndex(message => messageKey(message) === coveredKey);
 	if (index === -1) return false;
 	return !messages.slice(index + 1).some(isOperatorTurn);
+}
+
+/** Provenance for a turn's notes. */
+export interface SlmNotesMetadata {
+	version: 1;
+	sessionId: string;
+	coveredLeafKey: string;
+	coveredAt: number;
+	turns: number;
+}
+
+export interface SlmNotesRecord {
+	text: string;
+	metadata: SlmNotesMetadata;
+}
+
+const NOTES_METADATA_OPEN = "<!-- rabid-slm-notes";
+
+/** Notes live beside the document; same digest, distinguishable name. */
+export function slmNotesFilePaths(agentDir: string, sessionId: string): { ram: string; disk: string } {
+	const handoff = slmHandoffFilePaths(agentDir, sessionId);
+	return {
+		ram: handoff.ram.replace(/\.md$/, ".notes.md"),
+		disk: handoff.disk.replace(/\.md$/, ".notes.md"),
+	};
+}
+
+function formatSlmNotesFile(record: SlmNotesRecord): string {
+	return `${NOTES_METADATA_OPEN}\n${JSON.stringify(record.metadata)}\n-->\n\n${record.text.trim()}\n`;
+}
+
+export function parseSlmNotesFile(raw: string): SlmNotesRecord | undefined {
+	const text = raw.trim();
+	if (!text.startsWith(NOTES_METADATA_OPEN)) return undefined;
+	const close = text.indexOf("-->");
+	if (close === -1) return undefined;
+	const body = text.slice(close + 3).trim();
+	if (body === "") return undefined;
+	let metadata: SlmNotesMetadata | undefined;
+	try {
+		const parsed: unknown = JSON.parse(text.slice(NOTES_METADATA_OPEN.length, close).trim());
+		if (
+			isRecord(parsed) &&
+			parsed.version === 1 &&
+			typeof parsed.sessionId === "string" &&
+			typeof parsed.coveredLeafKey === "string" &&
+			typeof parsed.coveredAt === "number" &&
+			typeof parsed.turns === "number"
+		) {
+			metadata = {
+				version: 1,
+				sessionId: parsed.sessionId,
+				coveredLeafKey: parsed.coveredLeafKey,
+				coveredAt: parsed.coveredAt,
+				turns: parsed.turns,
+			};
+		}
+	} catch {
+		metadata = undefined;
+	}
+	return metadata === undefined ? undefined : { text: body, metadata };
+}
+
+async function readNotesFile(file: string, sessionId: string): Promise<SlmNotesRecord | undefined> {
+	try {
+		const parsed = parseSlmNotesFile(await Bun.file(file).text());
+		if (parsed === undefined) return undefined;
+		return parsed.metadata.sessionId === sessionId ? parsed : undefined;
+	} catch (error) {
+		if (isEnoent(error)) return undefined;
+		throw error;
+	}
+}
+
+export async function readSlmNotes(agentDir: string, sessionId: string): Promise<SlmNotesRecord | undefined> {
+	const paths = slmNotesFilePaths(agentDir, sessionId);
+	const copies = (
+		await Promise.all([readNotesFile(paths.ram, sessionId), readNotesFile(paths.disk, sessionId)])
+	).filter((copy): copy is SlmNotesRecord => copy !== undefined);
+	if (copies.length === 0) return undefined;
+	copies.sort((a, b) => b.metadata.coveredAt - a.metadata.coveredAt);
+	return copies[0];
+}
+
+export async function writeSlmNotes(agentDir: string, sessionId: string, record: SlmNotesRecord): Promise<void> {
+	const paths = slmNotesFilePaths(agentDir, sessionId);
+	const text = formatSlmNotesFile(record);
+	await fs.mkdir(path.dirname(paths.ram), { recursive: true });
+	await writeFileAtomically(paths.ram, text);
+	try {
+		await fs.mkdir(path.dirname(paths.disk), { recursive: true });
+		await writeFileAtomically(paths.disk, text);
+	} catch (error) {
+		logger.warn("SLM notes disk write failed", { error: String(error) });
+	}
 }
 
 /** Stable identity for a live message, matching the persisted session's keys. */
@@ -443,6 +541,7 @@ export function resolveSlmServerConfig(settings: Settings, contextWindow: number
 		gpuLayers,
 		gpuFreeMiB: cfgSlmHandoffGpuFreeMiB.get(settings),
 		workerUrl: cfgSlmHandoffWorkerUrl.get(settings).trim() || undefined,
+		maxNotesTokens: Math.max(256, cfgSlmHandoffMaxNotesTokens.get(settings)),
 	};
 }
 
@@ -542,7 +641,7 @@ export class SlmHandoffCoordinator {
 	async prepareForCompaction(options: {
 		signal?: AbortSignal;
 		awaitMs: number;
-		/** The messages this compaction discards; the document is re-derived from them. */
+		/** The messages this compaction discards; the contract is built from their notes. */
 		region?: readonly AgentMessage[];
 	}): Promise<SlmHandoffRecord | undefined> {
 		if (this.#disposed || !this.#gateOpen()) return undefined;
@@ -550,36 +649,54 @@ export class SlmHandoffCoordinator {
 		const last = messages[messages.length - 1];
 		if (!last) return undefined;
 		const key = messageKey(last);
-		const existing = await readSlmHandoff(this.#options.agentDir(), this.#options.sessionId());
+		const agentDir = this.#options.agentDir();
+		const sessionId = this.#options.sessionId();
+
+		// A contract already covering the live leaf is reused: there is nothing new to judge.
+		const existing = await readSlmHandoff(agentDir, sessionId);
 		if (existing?.metadata && coversOperatorTurns(messages, existing.metadata.coveredLeafKey)) {
 			return { document: existing.document, metadata: existing.metadata };
 		}
-		// A drain scheduled at the last turn boundary is already covering the live
-		// leaf: enqueueing the region on top of it would pay for the same content
-		// twice (measured: two 118s runs for one turn with a 4B worker).
-		const coveredByScheduledDrain = this.#drainPromise !== undefined && this.#lastProcessedKey === key;
-		const region = coveredByScheduledDrain ? [] : (options.region ?? []);
-		if (region.length > 0) {
-			// The warm chain does not cover the live leaf, so derive the document from
-			// the region compaction is about to discard rather than from a chain that
-			// may have drifted: waiting then buys a document over the real content.
-			this.#pending = [...region];
-			this.#lastProcessedKey = key;
-		} else {
-			this.#ensureCoverage(messages, existing);
+
+		// Notes are the contract's input, so freshness is measured on the notes.
+		let notes = await readSlmNotes(agentDir, sessionId);
+		if (!coversOperatorTurns(messages, notes?.metadata.coveredLeafKey)) {
+			// A drain scheduled at the last turn boundary is already covering the live
+			// leaf: enqueueing the region on top of it would pay for the same content
+			// twice (measured: two 118s runs for one turn with a 4B worker).
+			const coveredByScheduledDrain = this.#drainPromise !== undefined && this.#lastProcessedKey === key;
+			const region = coveredByScheduledDrain ? [] : (options.region ?? []);
+			if (region.length > 0) {
+				// The warm chain does not cover the live leaf, so note the region
+				// compaction is about to discard rather than a chain that may have drifted.
+				this.#pending = [...region];
+				this.#lastProcessedKey = key;
+			} else {
+				this.#ensureCoverage(messages, notes?.metadata.coveredLeafKey);
+			}
+			const drain = this.#startDrain();
+			if (drain) {
+				const { promise: deadline, resolve: arriveAtDeadline } = Promise.withResolvers<void>();
+				const timer = setTimeout(arriveAtDeadline, options.awaitMs);
+				timer.unref();
+				await Promise.race([drain, deadline]);
+				clearTimeout(timer);
+			}
+			if (options.signal?.aborted) return undefined;
+			notes = await readSlmNotes(agentDir, sessionId);
 		}
-		const drain = this.#startDrain();
-		if (drain) {
-			const { promise: deadline, resolve: arriveAtDeadline } = Promise.withResolvers<void>();
-			const timer = setTimeout(arriveAtDeadline, options.awaitMs);
-			timer.unref();
-			await Promise.race([drain, deadline]);
-			clearTimeout(timer);
+		if (!notes || !coversOperatorTurns(messages, notes.metadata.coveredLeafKey)) return undefined;
+
+		// The only judgment step in the handoff: select from the notes.
+		try {
+			const config = resolveSlmServerConfig(this.#options.settings, this.#options.modelContextWindow());
+			const actionLog = renderFileActions(options.region ?? messages);
+			const record = await this.#runContract(config, notes, existing?.document, actionLog);
+			return options.signal?.aborted ? undefined : record;
+		} catch (error) {
+			logger.warn("SLM contract failed", { error: String(error) });
+			return undefined;
 		}
-		if (options.signal?.aborted) return undefined;
-		const written = await readSlmHandoff(this.#options.agentDir(), this.#options.sessionId());
-		if (!written?.metadata || !coversOperatorTurns(messages, written.metadata.coveredLeafKey)) return undefined;
-		return { document: written.document, metadata: written.metadata };
 	}
 
 	async dispose(): Promise<void> {
@@ -625,12 +742,82 @@ export class SlmHandoffCoordinator {
 	}
 
 	/**
+	 * The only judgment step: build the document from the turn's notes.
+	 *
+	 * Notes are transcribed facts; the contract is the selection made over them. This
+	 * runs at compaction, never during a turn, so the main model's critical path is
+	 * untouched.
+	 */
+	async #runContract(
+		config: SlmServerConfig,
+		notes: SlmNotesRecord,
+		previous: string | undefined,
+		actionLog: string,
+	): Promise<SlmHandoffRecord> {
+		const sessionId = this.#options.sessionId();
+		const agentDir = this.#options.agentDir();
+		const detail = cfgSlmHandoffDetail.get(this.#options.settings);
+		const systemPrompt = prompt.render(slmHandoffSystemPrompt, {
+			maxHandoffTokens: config.maxHandoffTokens,
+			detailConcise: detail === "concise",
+			detailStandard: detail === "standard",
+			detailDetailed: detail === "detailed",
+		});
+		const userPrompt = prompt.render(slmHandoffInputPrompt, {
+			previousHandoff: previous || "(none)",
+			turnTranscript: notes.text,
+			actionLog: actionLog || "(none)",
+			maxHandoffTokens: config.maxHandoffTokens,
+		});
+		const startedAt = Date.now();
+		let result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
+		// Notes are cheap to copy; the document must not be a copy of them.
+		const echoes = countLogEchoes(result.document);
+		if (echoes >= 3) {
+			logger.warn("SLM contract echoed the notes; retrying with a stricter instruction", { echoedLines: echoes });
+			const stricter = `${userPrompt}\n\nYour previous answer copied note lines. Do not transcribe notes. Select only what a successor needs to continue.`;
+			const second = await this.#completeWithRetry(config, systemPrompt, stricter);
+			if (countLogEchoes(second.document) < echoes) result = second;
+		}
+		if (countLogEchoes(result.document) >= 3) {
+			logger.warn("SLM contract still transcribed the notes; stripping the copied lines", {
+				document: result.document.length,
+			});
+			result = { ...result, document: stripLogEchoes(result.document) };
+		}
+		const record: SlmHandoffRecord = {
+			document: result.document,
+			metadata: {
+				version: 1,
+				sessionId,
+				coveredLeafKey: notes.metadata.coveredLeafKey,
+				coveredAt: Date.now(),
+				coveredUserTurns: notes.metadata.turns,
+				modelPath: config.modelPath,
+				ctxSize: config.ctxSize,
+				reasoningBudgetTokens: config.reasoningBudgetTokens,
+				inputTokens: result.inputTokens,
+				outputTokens: result.outputTokens,
+				durationMs: Date.now() - startedAt,
+				truncated: result.truncated,
+				formatFallback: result.formatFallback,
+			},
+		};
+		await writeSlmHandoff(agentDir, sessionId, record);
+		logger.debug("SLM contract written", {
+			chars: record.document.length,
+			ms: record.metadata.durationMs,
+			notes: notes.metadata.turns,
+		});
+		return record;
+	}
+
+	/**
 	 * Force a run that covers the live leaf. Replaces the queue rather than
 	 * appending: the batch always restarts from the covered key, so appending
 	 * would duplicate turns already waiting to be distilled.
 	 */
-	#ensureCoverage(messages: readonly AgentMessage[], record: SlmHandoffFile | undefined): void {
-		const coveredKey = record?.metadata?.coveredLeafKey;
+	#ensureCoverage(messages: readonly AgentMessage[], coveredKey: string | undefined): void {
 		let start = 0;
 		if (coveredKey !== undefined) {
 			const index = messages.findLastIndex(message => messageKey(message) === coveredKey);
@@ -713,26 +900,21 @@ export class SlmHandoffCoordinator {
 		}
 	}
 
+	/**
+	 * Per-turn stage: transcribe statements, summarise thoughts, record tool outcomes.
+	 *
+	 * Notes are the only thing written during a session. They cost one small run per turn
+	 * over a bounded pad, and they are the input the contract is built from — so the
+	 * judgment step reads notes, never the raw turn.
+	 */
 	async #runBatch(batch: readonly AgentMessage[]): Promise<void> {
 		const config = resolveSlmServerConfig(this.#options.settings, this.#options.modelContextWindow());
 		const sessionId = this.#options.sessionId();
 		const agentDir = this.#options.agentDir();
-		const stored = await readSlmHandoff(agentDir, sessionId);
-		let previous: SlmHandoffRecord | undefined =
-			stored?.metadata === undefined ? undefined : { document: stored.document, metadata: stored.metadata };
-		// Detail is a setting, not a prompt edit: the same template carries all three
-		// registers and exactly one branch is enabled.
-		const detail = cfgSlmHandoffDetail.get(this.#options.settings);
-		const systemPrompt = prompt.render(slmHandoffSystemPrompt, {
-			maxHandoffTokens: config.maxHandoffTokens,
-			detailConcise: detail === "concise",
-			detailStandard: detail === "standard",
-			detailDetailed: detail === "detailed",
-		});
-		// A queue rather than a plain loop: an oversized chunk is split in half and both
-		// halves are retried with their own rendered prompt. The character estimate
-		// cannot be exact (code tokenizes denser than prose), so the server's own
-		// overflow rejection is the authority.
+		const existing = await readSlmNotes(agentDir, sessionId);
+		const notesBudget = Math.floor(config.maxNotesTokens * CHUNK_CHARS_PER_TOKEN);
+		let notes = existing?.text ?? "";
+		const systemPrompt = prompt.render(slmNotesSystemPrompt, {});
 		const queue: AgentMessage[][] = chunkByRenderedLength(batch, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN);
 		while (queue.length > 0) {
 			const chunk = queue.shift()!;
@@ -742,38 +924,20 @@ export class SlmHandoffCoordinator {
 				renderScratchpad(chunk),
 				Math.floor(config.maxInputTokens * CHUNK_CHARS_PER_TOKEN),
 			);
-			const userPrompt = prompt.render(slmHandoffInputPrompt, {
-				previousHandoff: previous?.document || "(none)",
+			const userPrompt = prompt.render(slmNotesInputPrompt, {
+				previousNotes: notes || "(none)",
 				turnTranscript: scratchpad,
-				actionLog: renderFileActions(chunk) || "(none)",
-				maxHandoffTokens: config.maxHandoffTokens,
+				maxNotesTokens: config.maxNotesTokens,
 			});
 			const startedAt = Date.now();
 			let result: Awaited<ReturnType<SlmHandoffServer["complete"]>>;
 			try {
 				result = await this.#completeWithRetry(config, systemPrompt, userPrompt);
-				// A small model asked to summarise a log will copy it, and the token cap does not
-				// prevent that — it only compresses the copy. Selection is checked, not assumed.
-				const echoes = countLogEchoes(result.document);
-				if (echoes >= 3) {
-					logger.warn("SLM handoff echoed the event log; retrying with a stricter instruction", {
-						echoedLines: echoes,
-					});
-					const stricter = `${userPrompt}\n\nYour previous answer copied THOUGHT/CALL/RESULT lines from the log. Do not transcribe events. Keep only what a successor needs: the objective, decisions with their reasons, binding constraints, verified facts, the next step, and the files that matter.`;
-					const second = await this.#completeWithRetry(config, systemPrompt, stricter);
-					if (countLogEchoes(second.document) < echoes) result = second;
-				}
-				if (countLogEchoes(result.document) >= 3) {
-					logger.warn("SLM handoff still transcribed the log; stripping the copied lines", {
-						document: result.document.length,
-					});
-					result = { ...result, document: stripLogEchoes(result.document) };
-				}
 			} catch (error) {
 				const text = String(error);
 				if (chunk.length > 1 && /exceeds the (?:available )?context|context size/i.test(text)) {
 					const mid = Math.ceil(chunk.length / 2);
-					logger.warn("SLM worker rejected an oversized chunk; splitting it", {
+					logger.warn("SLM worker rejected an oversized notes chunk; splitting it", {
 						messages: chunk.length,
 						error: text.slice(0, 160),
 					});
@@ -782,27 +946,25 @@ export class SlmHandoffCoordinator {
 				}
 				throw error;
 			}
-			const leaf = chunk[chunk.length - 1]!;
-			const record: SlmHandoffRecord = {
-				document: result.document,
+			const leaf = messageKey(chunk[chunk.length - 1]!);
+			notes = boundScratchpad(notes === "" ? result.document : `${notes}\n${result.document}`, notesBudget);
+			const record: SlmNotesRecord = {
+				text: notes,
 				metadata: {
 					version: 1,
 					sessionId,
-					coveredLeafKey: messageKey(leaf),
+					coveredLeafKey: leaf,
 					coveredAt: Date.now(),
-					coveredUserTurns: (previous?.metadata.coveredUserTurns ?? 0) + chunk.filter(isOperatorTurn).length,
-					modelPath: config.modelPath,
-					ctxSize: config.ctxSize,
-					reasoningBudgetTokens: config.reasoningBudgetTokens,
-					inputTokens: result.inputTokens,
-					outputTokens: result.outputTokens,
-					durationMs: Date.now() - startedAt,
-					truncated: result.truncated,
-					formatFallback: result.formatFallback,
+					turns: (existing?.metadata.turns ?? 0) + 1,
 				},
 			};
-			await writeSlmHandoff(agentDir, sessionId, record);
-			previous = record;
+			await writeSlmNotes(agentDir, sessionId, record);
+			logger.debug("SLM handoff notes written", {
+				turns: record.metadata.turns,
+				lines: notes.split("\n").length,
+				chars: notes.length,
+				ms: Date.now() - startedAt,
+			});
 		}
 	}
 }

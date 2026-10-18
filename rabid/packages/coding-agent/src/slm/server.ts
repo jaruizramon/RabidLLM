@@ -51,6 +51,8 @@ export interface SlmServerConfig {
 	gpuFreeMiB: number;
 	/** Adopt this already-running worker instead of spawning one; never killed on release. */
 	workerUrl?: string;
+	/** Maximum size of the per-turn notes, in tokens. */
+	maxNotesTokens: number;
 }
 
 export interface SlmServerStatus {

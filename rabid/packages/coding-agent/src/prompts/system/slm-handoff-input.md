@@ -2,15 +2,15 @@
 {{{previousHandoff}}}
 </previous_handoff>
 
-<new_turn>
-Compressed event log. One line per event: USER (what was asked), THOUGHT (the model's
-reasoning, headed), CALL tool(target), RESULT tool(outcome), CONCLUSION (what it said).
-Old events may be dropped from the top; the pad is the turn, not a sample of it.
+<turn_notes>
+The turn's notes: statements transcribed, thoughts summarised, tool outcomes recorded.
+One line per event: `[USER]`, `[SAID]`, `[THOUGHT]`, `[TOOL name] target → outcome`.
+Older notes may be dropped from the top.
 {{{turnTranscript}}}
-</new_turn>
+</turn_notes>
 
 <recent_actions>
 {{{actionLog}}}
 </recent_actions>
 
-Update the handoff. Preserve every hard requirement and decision. Use recent_actions for every path and command you name. Output only the Markdown handoff. Maximum {{maxHandoffTokens}} tokens.
+Write the handoff for a successor who has none of these notes and cannot ask questions. Select: keep the objective and where it stands, each decision with its reason, the constraints that still bind, the facts the turn established (with the command and its outcome), the next concrete step, and the files that matter. Drop routine reads, repeated output, abandoned approaches and anything superseded. Quote exactly when you quote. Take every path and command from `<recent_actions>` or the notes. Output only the Markdown handoff. Maximum {{maxHandoffTokens}} tokens.

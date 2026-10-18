@@ -87,6 +87,11 @@ describe("log transcription guard", () => {
 		expect(countLogEchoes("Call the loader before mounting; results are cached.")).toBe(0);
 	});
 
+	it("counts copied note lines, which carry the note labels", () => {
+		const notes = "- [THOUGHT] Wants the pad bounded.\n- [TOOL read] Targeting.js → 400 lines\n- [SAID] Done.";
+		expect(countLogEchoes(notes)).toBe(3);
+	});
+
 	it("strips only the copied lines, keeping what the model selected", () => {
 		const cleaned = stripLogEchoes(transcribed);
 

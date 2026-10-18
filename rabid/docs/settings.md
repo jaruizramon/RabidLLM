@@ -806,6 +806,7 @@ memory:
 | `compaction.slmHandoff.reasoningBudgetTokens` | number | `1024`                       | Thinking tokens allowed per handoff run; `0` disables thinking. A full 4096 spent ~38 s on a 200-word merge. |
 | `compaction.slmHandoff.maxInputTokens` | number | `16384`                          | Input budget for one run; larger turn batches split into several runs. |
 | `compaction.slmHandoff.maxHandoffTokens` | number | `2048`                         | Output budget for the handoff document. |
+| `compaction.slmHandoff.maxNotesTokens` | number | `4096` | Budget for the per-turn notes the worker keeps. Notes are written during the turn (transcribed statements, one-line thought summaries, tool outcomes); the handoff contract is built from them at compaction, so this bounds the only judgment step's input. |
 | `compaction.slmHandoff.maxContextTokens` | number | `16384`                       | Upper bound on the main model's window copied as the worker's `--ctx-size`. One run only sees the turns since the last handoff, so a larger copy costs RAM and prefill for nothing. |
 | `compaction.slmHandoff.awaitMs` | number | `180000`                              | How long compaction waits for a stale or in-flight handoff before advancing to the next method. |
 | `compaction.slmHandoff.device` | string | `cpu`                                  | `cpu` blanks every GPU backend; `cuda` lets the driver pick; `cuda:N` pins the Nth GPU in `PCI_BUS_ID` order (matches `nvidia-smi -L`). Never the inference card by default. |

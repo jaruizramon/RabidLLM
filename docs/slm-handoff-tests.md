@@ -620,6 +620,27 @@ lines.
 guarantee — a schema-constrained delta (done/decisions/next) that the harness renders — remains
 the stronger option if transcription persists at larger pads.
 
+---
+
+## 2026-10-18 — Two stages: notes during the turn, contract at compaction
+
+**Design.** A turn is too large for the worker, so the worker records rather than judges during
+the turn: `slm-notes.md` transcribes every statement, summarises each thought to one line, and
+records each tool outcome as `- [TOOL name] target → outcome`. Those notes accumulate in
+`<session>.notes.md` (bounded by `compaction.slmHandoff.maxNotesTokens`, default 4096) beside the
+handoff document. At compaction the coordinator runs the contract over the notes plus
+`<recent_actions>`; the document is never written during a turn.
+
+**Why.** The judgment step's input is then the notes, not an 88K turn — and the notes are cheap
+because they are transcription. It also separates failure modes: a bad note loses detail, a bad
+contract loses judgement, and the second is the one the echo guard and the deterministic blocks
+protect.
+
+**Verification.** `test/slm/notes.test.ts` covers envelope round-trip, isolation by session id
+(a foreign session sees no notes), and the path convention (`.notes.md` beside the document);
+the echo detector now counts `- [THOUGHT]`/`- [TOOL]` copies too. 101 tests pass across
+`test/slm` and `test/rabid`.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
