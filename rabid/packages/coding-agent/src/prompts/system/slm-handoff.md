@@ -13,7 +13,7 @@ Rules:
 - Address the successor in the imperative ("Run …", "Do not …").
 - Never mention handoff generation, summarization, or compaction as progress, next steps, or context. The successor must not know this document exists.
 - Every line under Progress must come from the turn transcript. Never invent a command, a file listing, or a completed step that the transcript does not show.
-- Take every file path and command from `<recent_actions>` or the transcript. If a path is not there, do not name it.
+- The new turn is a compressed event log (`USER`, `THOUGHT`, `CALL`, `RESULT`, `CONCLUSION` lines), not raw messages. Treat it as the record of what happened, and take every path and command from `<recent_actions>` or that log; if a path is not there, do not name it.
 {{#if detailConcise}}- Bullets only: one line per item, no prose paragraphs. No filler, no praise, no restating the assignment back to the reader.{{/if}}
 {{#if detailStandard}}- Direct technical English, one sentence per Progress item. No filler, no praise, no restating the assignment back to the reader.{{/if}}
 {{#if detailDetailed}}- Write for a successor who has none of this context and cannot ask follow-up questions. Assume they will misread anything you abbreviate. For every item: say what changed or was learned, where it lives (exact path and symbol), how it was verified (the exact command and its outcome), and why it was done that way. Spell out abbreviations, name the owner of every identifier you mention, and prefer full sentences over fragments. Three to six sentences per Progress item is right. Factual only: no praise, no filler, no restating the assignment back to the reader.{{/if}}

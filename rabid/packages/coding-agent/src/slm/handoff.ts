@@ -38,7 +38,8 @@ import {
 } from "../session/context-settings";
 import { resolveCompactionMethodOrder } from "../session/compaction-methods";
 import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
-import { clipMiddle, messageText, renderFileActions, renderTurnTranscript } from "../rabid/turn-cards";
+import { messageText, renderFileActions } from "../rabid/turn-cards";
+import { boundScratchpad, renderScratchpad } from "./scratchpad";
 import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
 export { ensureSlmModelDownloaded } from "./server";
@@ -451,7 +452,7 @@ function chunkByRenderedLength(messages: readonly AgentMessage[], budgetChars: n
 	let current: AgentMessage[] = [];
 	let size = 0;
 	for (const message of messages) {
-		const rendered = renderTurnTranscript([message]).length;
+		const rendered = renderScratchpad([message]).length + 1;
 		// A single oversized message still gets its own run: the renderer clips
 		// individual parts, so it can only exceed the budget by so much.
 		if (current.length > 0 && size + rendered > budgetChars) {
@@ -676,7 +677,7 @@ export class SlmHandoffCoordinator {
 		const limit =
 			cfgCompaction.get(this.#options.settings).slmHandoffMaxInputTokens * CHARS_PER_TOKEN * BACKLOG_BUDGET_FACTOR;
 		let total = 0;
-		const sizes = this.#pending.map(message => renderTurnTranscript([message]).length);
+		const sizes = this.#pending.map(message => renderScratchpad([message]).length + 1);
 		for (const size of sizes) total += size;
 		let dropped = 0;
 		while (this.#pending.length > 1 && total > limit) {
@@ -735,13 +736,15 @@ export class SlmHandoffCoordinator {
 		const queue: AgentMessage[][] = chunkByRenderedLength(batch, config.maxInputTokens * CHUNK_CHARS_PER_TOKEN);
 		while (queue.length > 0) {
 			const chunk = queue.shift()!;
-			const transcript = clipMiddle(
-				renderTurnTranscript(chunk),
+			// The worker reads the pad, not the turn: an 88K turn and a four-message turn
+			// produce the same bounded input.
+			const scratchpad = boundScratchpad(
+				renderScratchpad(chunk),
 				Math.floor(config.maxInputTokens * CHUNK_CHARS_PER_TOKEN),
 			);
 			const userPrompt = prompt.render(slmHandoffInputPrompt, {
 				previousHandoff: previous?.document || "(none)",
-				turnTranscript: transcript,
+				turnTranscript: scratchpad,
 				actionLog: renderFileActions(chunk) || "(none)",
 				maxHandoffTokens: config.maxHandoffTokens,
 			});
