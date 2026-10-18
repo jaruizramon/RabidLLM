@@ -43,7 +43,7 @@ llama-manager start         # http://localhost:8090
 omp --profile rabid
 ```
 
-`install.sh` writes `~/.local/share/llama-v100/*`, the five `~/.local/bin` wrappers, and
+`install.sh` starts by reporting the prerequisites it cannot install — `bun`, `python3`, `hf`, `nvidia-smi`, the stock and PrismML `llama-server` binaries — then writes `~/.local/share/llama-v100/*`, the five `~/.local/bin` wrappers, and
 `~/.omp/profiles/rabid/agent/{config,models}.yml` **if absent**. It never overwrites a
 config you already have; it leaves a timestamped `.bak-install-*` beside anything it does
 replace. It creates `~/models` and prints the exact `hf download` line for every weight

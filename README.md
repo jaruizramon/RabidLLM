@@ -1,20 +1,18 @@
 # RabidAI
 
-A heavily modified fork of [oh-my-pi](https://github.com/can1357/oh-my-pi) tuned for one box:
-a single inference GPU, a gaming card, and local models. The harness itself diverges —
-maintenance, compaction, the token meter, the TUI, the provider layer and the catalog — not
-just a config profile ([inventory](rabid/docs/FORK.md)). The centrepiece is one mechanism:
-**compacting a long session without making the inference model re-read a saturated context.**
+One repository holding three things that only make sense together, built for one box: a
+single inference GPU, a gaming card, and local models.
 
-A small model, running on the CPU or on a second GPU, maintains a rolling handoff document
-for the live session — one stateless run per completed turn. When compaction triggers, the
-harness commits that document instead of paying the main model for a summary of a context
-that no longer fits. The parts that must never drift are written by the harness, not by the
-model: the user's own messages verbatim, and the turn's file actions extracted from tool
-calls.
+| Pillar | What it is | Where |
+|---|---|---|
+| **1. The compaction mechanism** | A small model on the CPU (or the gaming card) keeps a rolling handoff document current, one stateless run per turn. Compaction commits that document instead of making the inference model re-read a saturated context. The parts that must never drift are written by the harness, not the model. | [`packages/coding-agent/src/slm/`](packages/coding-agent/src/slm), [`docs/compaction.md`](docs/compaction.md) |
+| **2. The harness that supports it** | A heavily modified fork of [oh-my-pi](https://github.com/can1357/oh-my-pi): maintenance, compaction, the token meter, the TUI, the provider layer and the catalog all diverge, not just a config profile. | [`packages/coding-agent/src/rabid/`](packages/coding-agent/src/rabid), [`rabid/docs/FORK.md`](rabid/docs/FORK.md) |
+| **3. The setup duplicator** | The serving stack for a new rig: manager web page, llama.cpp routers and presets, tool filter, wrappers, an idempotent installer, and the exact `hf download` line for every weight. | [`rabid/rig/`](rabid/rig), [`rabid/rig/README.md`](rabid/rig/README.md) |
 
-`rig/` carries the local serving stack this was built against: a V100 router, a manager web
-page, and the SLM worker panel. Clone, install, drop in weights, run.
+Clone it on a new machine, run [`rabid/rig/install.sh`](rabid/rig/install.sh), install the
+weights it lists by name, and the harness plus the rig come up the same way they do here.
+The mechanism ships inside the harness, so the two are never out of step; the rig is what
+the harness talks to.
 
 ## Why
 

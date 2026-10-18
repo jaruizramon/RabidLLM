@@ -41,11 +41,30 @@ install_file() {
 }
 
 say "RabidAI rig installer"
-say "  repo:    $repo_dir"
+say "  rig:     $rig"
 say "  target:  $app_dir"
 [ "$dry" = 1 ] && say "  (dry run — nothing is written)"
 
-say "\n[1/4] manager, router presets, gateway"
+say "\n[0/5] prerequisites this installer cannot provide"
+missing_prereqs=0
+for cmd in bun python3 hf nvidia-smi; do
+	if command -v "$cmd" >/dev/null 2>&1; then
+		say "  ok:       $cmd"
+	else
+		missing_prereqs=$((missing_prereqs + 1))
+		say "  missing:  $cmd"
+	fi
+done
+for bin in "$HOME/.local/opt/llama.cpp/llama-server" "$HOME/.local/opt/llama-prism/llama-server"; do
+	if [ -x "$bin" ]; then
+		say "  ok:       $bin"
+	else
+		missing_prereqs=$((missing_prereqs + 1))
+		say "  missing:  $bin   (llama.cpp build; the V100 needs the CUDA 12.8 prebuilt)"
+	fi
+done
+
+say "\n[1/5] manager, router presets, gateway"
 # The repo splits by role; the runtime directory stays flat because manager.py reads
 # models.ini and index.html from its own directory.
 install_file "$rig/manager/manager.py" "$app_dir/manager.py" 644
@@ -56,12 +75,12 @@ done
 install_file "$rig/gateway/proxy.py" "$app_dir/proxy.py" 644
 install_file "$rig/gateway/toolfilter.py" "$app_dir/toolfilter.py" 644
 
-say "\n[2/4] command wrappers"
+say "\n[2/5] command wrappers"
 for f in llama-manager llama-server llama-server-stock llama-proxy llama-toolfilter; do
 	install_file "$rig/bin/$f" "$bin_dir/$f" 755
 done
 
-say "\n[3/4] rabid profile (omp)"
+say "\n[3/5] rabid profile (omp)"
 if [ -f "$profile_dir/config.yml" ]; then
 	say "  config.yml exists — left untouched; template available at rig/omp-profile/config.yml"
 else
@@ -73,7 +92,7 @@ else
 	install_file "$rig/omp-profile/models.yml" "$profile_dir/models.yml" 644
 fi
 
-say "\n[4/4] models"
+say "\n[4/5] models"
 run mkdir -p "$models_dir"
 missing=0
 if [ -f "$rig/models.list" ]; then
@@ -90,6 +109,10 @@ if [ -f "$rig/models.list" ]; then
 fi
 
 say ""
+if [ "$missing_prereqs" != 0 ]; then
+	say "Prerequisites still missing: $missing_prereqs (see [0/5] above)."
+	say ""
+fi
 say "Done. Next:"
 say "  1. install the missing weights above (any llama.cpp-compatible GGUF)",
 say "  2. edit $app_dir/models.ini if your model ids/paths differ"
