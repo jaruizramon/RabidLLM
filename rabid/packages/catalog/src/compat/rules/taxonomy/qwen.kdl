@@ -12,6 +12,7 @@ class "qwen" {
 
     revision prefix="qwen"
 
+    override id="ornith-1-0-35b-qwen" model="ornith-1.0-35b" class="qwen" rationale="Ornith 1.0 35B-A3B is a local GGUF served with the 248,320-token Qwen3.5 vocabulary and a Qwen3-style thinking template; the opaque product name carries no lineage tokens, so llama.cpp discovery otherwise builds it as non-reasoning" provenance="~/.rabid/agent/models.yml; llama-server /v1/models tags (reasoning, 35B-A3B, moe); Ornith-1.0-35B-Q6_K.gguf"
     override id="yolo-auto-yolo-flash-identity" provider="yolo-auto" model="yolo" class="qwen" revision="3.8" rationale="Yolo-Auto's paid yolo route is initially backed by the same Qwen3.8 Flash deployment as qwen3.8-flash; the opaque alias carries no lineage tokens" provenance="yolo-auto.com/models (2026-09)"
     override id="prismml-bonsai-27b-qwen-3-6" glob="*bonsai-27b*" class="qwen" revision="3.6" rationale="Reviewed PrismML Bonsai and Ternary-Bonsai 27B lineage is Qwen3.6-27B; the wire basename may carry a prefix or GGUF quantization suffix" provenance="packages/coding-agent/src/config/model-discovery.ts; original reviewed alias e3aa6594e5"
     override id="prismml-bonsai-2-27b-qwen-3-8" glob="*bonsai-2-27b*" class="qwen" revision="3.8" rationale="Reviewed PrismML Bonsai 2 27B lineage is Qwen3.8-27B; the wire basename may carry a prefix or GGUF quantization suffix" provenance="packages/coding-agent/src/config/model-discovery.ts"

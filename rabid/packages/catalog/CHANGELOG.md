@@ -6,6 +6,10 @@
 
 - Added the `reasoning-budget-field` compat axis (assigned to `llama.cpp`) so a Chat Completions host can receive its thinking-token budget in a top-level field
 
+### Fixed
+
+- Ornith 1.0 35B-A3B now resolves as Qwen, so llama.cpp discovery exposes the model as reasoning-capable with its thinking ladder instead of reporting that it does not support thinking
+
 ## [18.11.3] - 2026-10-16
 
 ### Changed

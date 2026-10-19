@@ -188,6 +188,13 @@ describe("classifyModel", () => {
 			family: "llama",
 		});
 	});
+
+	test("opaque local GGUF names classify by their reviewed lineage", () => {
+		// Ornith carries the Qwen3.5 vocabulary and Qwen3-style thinking template;
+		// without the reviewed override, llama.cpp discovery builds it as
+		// non-reasoning and the thinking controls disappear.
+		expect(classifyModel("llama.cpp", "ornith-1.0-35b")).toEqual({ class: "qwen" });
+	});
 });
 
 describe("collapse and variant vocabulary", () => {
