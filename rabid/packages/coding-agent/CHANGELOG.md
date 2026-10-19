@@ -16,6 +16,8 @@
 
 ### Changed
 
+- Turn cards are distilled by the local SLM worker: `turnCards.enabled` no longer falls back to the main model or a network provider, so per-prompt summarization stays on the worker (a missing worker skips the card instead of invoking the inference card or a remote model)
+- Compaction no longer falls back to the active session model: `compaction.allowMainModel: false` keeps the dense chat model out of the implicit candidate chain, so `slm` or an explicit `compactionModel` does the work (an explicit `compactionModel` naming the active model is still honored)
 - The `slm` worker can be capped to a fixed VRAM headroom on a shared or gaming card: `compaction.slmHandoff.gpuFreeMiB` (default 2048) makes llama.cpp offload only the layers that fit and spill the rest to the CPU, so a small quant of a 4B model does not evict the desktop
 - The `slm` worker can run on another GPU: `compaction.slmHandoff.device` accepts `cpu` (default), `cuda`, or `cuda:N` with `gpuLayers` controlling offload, so a spare card can host the handoff model while the inference card keeps the main one; compaction now re-derives the document from the region it discards when a warm handoff is stale, and an in-flight run gets 5s to finish on dispose
 - Handoff files are now keyed by the transcript id and a SHA-256 digest: a fork, an SDK-supplied provider session id, or a provider-id rotation can no longer share or lose a document, punctuation-only id differences cannot collide, and a copy naming another session is refused instead of merged
@@ -23,6 +25,11 @@
 - The SLM worker can be adopted instead of spawned: `compaction.slmHandoff.workerUrl` points the harness at an already-running worker (for example one loaded from the manager page), which avoids a second process competing for the same card. An adopted worker is never killed
 - Every compaction method that produces a text summary (`slm`, `handoff`, `soft`, and provider-native `remote`) now records what the turn did: a harness-extracted `## Recent file actions` block (paths and commands from the tool calls), a `## What just happened` section with `Learned:`/`Implemented:`/`Files:` grounded in that block (prose depth set by `compaction.slmHandoff.detail`, default `detailed`: paths, commands, verification, and reasons), and the user's own messages under `## User messages (verbatim; authoritative)`, all carried forward across successive compactions so a weak summarizer cannot lose them
 - With a first-party Anthropic model on the official API selected, the interactive UI opens the API connection at startup, on model switch, and when you start typing, so the next turn skips connection setup; third-party gateways and custom endpoints are never probed ([#16044](https://github.com/can1357/oh-my-pi/pull/16044) by [@H4vC](https://github.com/H4vC))
+
+### Fixed
+
+- Run budgets now follow the live worker's context: when the harness adopts a smaller SLM worker (for example one loaded from the manager page), notes and contract runs size their chunks for the `--ctx-size` the worker actually serves instead of the configured `maxContextTokens`, so runs no longer overflow the window and split on the server's rejection
+- A scheduled SLM drain no longer runs its notes batch twice, and compaction reuses the contract the drain just wrote instead of paying for a second contract call, so the warm path is one notes run plus one contract
 
 ## [18.11.3] - 2026-10-16
 

@@ -157,6 +157,26 @@ export const cfgCompactionMethodOrder = register({
 	},
 });
 
+/**
+ * Whether the active session model may be used as an implicit compactor. An
+ * explicit `compactionModel` naming that model is always honored; this only
+ * governs the fallback chain (no configured compactor, or its credentials are
+ * unavailable). Local dense models can spend minutes on a summary, so a rig
+ * that keeps compaction on an SLM worker turns this off.
+ */
+export const cfgCompactionAllowMainModel = register({
+	id: "compaction.allowMainModel",
+	type: "boolean",
+	default: true,
+	ui: {
+		tab: "context",
+		group: "Compaction",
+		label: "Allow Main Model Compaction",
+		description:
+			"Use the active session model as an implicit compactor when no compactionModel is configured or available. An explicit compactionModel naming it is still honored. Disable on slow local models so compaction stays on the SLM worker or the configured compactor",
+	},
+});
+
 export const cfgCompactionThresholdPercent = register({
 	id: "compaction.thresholdPercent",
 	type: "number",
@@ -666,6 +686,7 @@ export const cfgCompaction = combine({
 	enabled: cfgCompactionEnabled,
 	experimentalContextManagement: cfgCompactionExperimentalContextManagement,
 	methodOrder: cfgCompactionMethodOrder,
+	allowMainModel: cfgCompactionAllowMainModel,
 	thresholdPercent: cfgCompactionThresholdPercent,
 	thresholdTokens: cfgCompactionThresholdTokens,
 	reserveTokens: cfgCompactionReserveTokens,

@@ -42,8 +42,8 @@ import {
 	type CompactionSettings,
 } from "../session/context-settings";
 import { resolveCompactionMethodOrder } from "../session/compaction-methods";
-import { parseSlmDevice, SlmHandoffServer, type SlmServerConfig } from "./server";
-import { messageText, renderFileActions } from "../rabid/turn-cards";
+import { parseSlmDevice, SlmHandoffServer, type SlmCompletionResult, type SlmServerConfig } from "./server";
+import { clipMiddle, messageText, renderFileActions } from "../rabid/turn-cards";
 import { boundScratchpad, countLogEchoes, renderScratchpad, stripLogEchoes, unknownPaths } from "./scratchpad";
 import { sessionMessagePersistenceKey } from "../session/turn-persistence";
 
@@ -521,7 +521,11 @@ export function isSlmHandoffConfigured(
 }
 
 /** Worker launch configuration derived from the live model window and settings. */
-export function resolveSlmServerConfig(settings: Settings, contextWindow: number | null | undefined): SlmServerConfig {
+export function resolveSlmServerConfig(
+	settings: Settings,
+	contextWindow: number | null | undefined,
+	workerCtxSize?: number,
+): SlmServerConfig {
 	const modelPath = resolveSlmModelPath(cfgSlmHandoffModelPath.get(settings));
 	const serverPath = resolveSlmServerPath(cfgSlmHandoffServerPath.get(settings));
 	if (!serverPath) {
@@ -529,10 +533,18 @@ export function resolveSlmServerConfig(settings: Settings, contextWindow: number
 			"llama-server binary not found; set compaction.slmHandoff.serverPath or install llama-server-stock",
 		);
 	}
-	const ctxSize = Math.min(
+	const configuredCtx = Math.min(
 		Math.max(contextWindow ?? DEFAULT_CONTEXT_WINDOW, MIN_CONTEXT_WINDOW),
 		cfgSlmHandoffMaxContextTokens.get(settings),
 	);
+	// An adopted worker (the manager panel's, a previous session's) can serve less
+	// context than the setting asks for. What the worker actually serves is the
+	// authority for what fits: budgets sized for the configured ceiling overflow its
+	// real window, and every run then pays a 400 and a split.
+	const ctxSize =
+		workerCtxSize === undefined || !Number.isFinite(workerCtxSize) || workerCtxSize <= 0
+			? configuredCtx
+			: Math.min(configuredCtx, workerCtxSize);
 	const threads = resolveSlmThreads(cfgSlmHandoffThreads.get(settings));
 	const reasoningBudgetTokens = Math.min(
 		Math.max(cfgSlmHandoffReasoningBudgetTokens.get(settings), 0),
@@ -690,7 +702,10 @@ export class SlmHandoffCoordinator {
 			// twice (measured: two 118s runs for one turn with a 4B worker).
 			const coveredByScheduledDrain = this.#drainPromise !== undefined && this.#lastProcessedKey === key;
 			const region = coveredByScheduledDrain ? [] : (options.region ?? []);
-			if (region.length > 0) {
+			if (coveredByScheduledDrain) {
+				// The in-flight drain already owns this exact batch. Re-enqueueing it
+				// here would run the notes (and the per-turn contract) twice.
+			} else if (region.length > 0) {
 				// The warm chain does not cover the live leaf, so note the region
 				// compaction is about to discard rather than a chain that may have drifted.
 				this.#pending = [...region];
@@ -711,14 +726,63 @@ export class SlmHandoffCoordinator {
 		}
 		if (!notes || !coversOperatorTurns(messages, notes.metadata.coveredLeafKey)) return undefined;
 
+		// The drain that just finished may have written the contract for the live
+		// leaf (`contractEveryTurns`). Re-read before paying for a second contract
+		// run over the same notes: the per-turn contract is exactly the document
+		// compaction would produce.
+		const refreshed = await readSlmHandoff(agentDir, sessionId);
+		if (refreshed?.metadata && coversOperatorTurns(messages, refreshed.metadata.coveredLeafKey)) {
+			logger.debug("SLM contract reused after drain", {
+				chars: refreshed.document.length,
+				notes: notes.metadata.turns,
+			});
+			return { document: refreshed.document, metadata: refreshed.metadata };
+		}
+
 		// The only judgment step in the handoff: select from the notes.
 		try {
-			const config = resolveSlmServerConfig(this.#options.settings, this.#options.modelContextWindow());
+			const config = await this.#workerConfig();
 			const actionLog = renderFileActions(options.region ?? messages);
-			const record = await this.#runContract(config, notes, existing?.document, actionLog);
+			const record = await this.#runContract(config, notes, refreshed?.document ?? existing?.document, actionLog);
 			return options.signal?.aborted ? undefined : record;
 		} catch (error) {
 			logger.warn("SLM contract failed", { error: String(error) });
+			return undefined;
+		}
+	}
+
+	/**
+	 * One-shot summarization on the same supervised worker, for work that is not
+	 * the rolling handoff (turn cards). Cards are archive-only, but they are still
+	 * summarization: they must never be produced by the live model or a network
+	 * provider. No worker, no card.
+	 */
+	async completeTurnCard(options: {
+		system: string;
+		prompt: string;
+		maxTokens: number;
+		signal?: AbortSignal;
+	}): Promise<string | undefined> {
+		if (this.#disposed || !this.#gateOpen()) return undefined;
+		try {
+			const config = await this.#workerConfig();
+			const maxTokens = Math.max(128, Math.floor(options.maxTokens));
+			// The card is one user message plus a small system prompt; middle-clip the
+			// transcript to what one run can actually hold and keep both ends.
+			const budgetChars = Math.max(
+				2_048,
+				Math.floor((config.maxInputTokens - maxTokens - INPUT_BUDGET_SLACK_TOKENS) * CHUNK_CHARS_PER_TOKEN),
+			);
+			const result = await this.#completeWithRetry(
+				config,
+				options.system,
+				clipMiddle(options.prompt, budgetChars),
+				{ temperature: 0, maxTokens, normalize: "notes" },
+				options.signal,
+			);
+			return result.document;
+		} catch (error) {
+			logger.warn("SLM turn-card completion failed", { error: String(error) });
 			return undefined;
 		}
 	}
@@ -763,6 +827,27 @@ export class SlmHandoffCoordinator {
 
 	#gateOpen(): boolean {
 		return this.#gateReason() === undefined;
+	}
+
+	/**
+	 * Settings resolved against the context the live worker actually serves.
+	 *
+	 * `resolveSlmServerConfig` alone knows only the configured ceiling. Adoption
+	 * deliberately accepts a smaller worker (the manager panel's, a previous
+	 * session's) instead of spawning a second process on the same card, so the
+	 * live `/ctx-size` is the number every input budget must be derived from.
+	 */
+	async #workerConfig(): Promise<SlmServerConfig> {
+		const settings = this.#options.settings;
+		const contextWindow = this.#options.modelContextWindow();
+		const configured = resolveSlmServerConfig(settings, contextWindow);
+		const status = await this.#server.ensure(configured);
+		if (status.ctxSize === undefined || status.ctxSize >= configured.ctxSize) return configured;
+		logger.debug("SLM worker serves a smaller context than configured; shrinking the run budgets", {
+			workerCtx: status.ctxSize,
+			configuredCtx: configured.ctxSize,
+		});
+		return resolveSlmServerConfig(settings, contextWindow, status.ctxSize);
 	}
 
 	/**
@@ -936,16 +1021,20 @@ export class SlmHandoffCoordinator {
 		system: string,
 		user: string,
 		options?: { temperature?: number; maxTokens?: number; normalize?: "handoff" | "notes" },
-	): Promise<Awaited<ReturnType<SlmHandoffServer["complete"]>>> {
+		signal?: AbortSignal,
+	): Promise<SlmCompletionResult> {
+		// A caller may bound one run (a turn card must not hold the next prompt
+		// forever); the session abort still cancels every run.
+		const callSignal = signal ? AbortSignal.any([this.#abort.signal, signal]) : this.#abort.signal;
 		try {
-			return await this.#server.complete(config, system, user, this.#abort.signal, options);
+			return await this.#server.complete(config, system, user, callSignal, options);
 		} catch (error) {
-			if (this.#disposed || this.#abort.signal.aborted) throw error;
+			if (this.#disposed || callSignal.aborted) throw error;
 			const text = String(error);
 			if (!/ECONNRESET|ECONNREFUSED|socket|fetch failed/i.test(text)) throw error;
 			logger.warn("SLM worker connection dropped; retrying once", { error: text.slice(0, 160) });
 			await Bun.sleep(500);
-			return await this.#server.complete(config, system, user, this.#abort.signal);
+			return await this.#server.complete(config, system, user, callSignal, options);
 		}
 	}
 
@@ -957,7 +1046,7 @@ export class SlmHandoffCoordinator {
 	 * judgment step reads notes, never the raw turn.
 	 */
 	async #runBatch(batch: readonly AgentMessage[]): Promise<void> {
-		const config = resolveSlmServerConfig(this.#options.settings, this.#options.modelContextWindow());
+		const config = await this.#workerConfig();
 		const sessionId = this.#options.sessionId();
 		const agentDir = this.#options.agentDir();
 		const existing = await readSlmNotes(agentDir, sessionId);

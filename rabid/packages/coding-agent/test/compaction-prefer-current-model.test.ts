@@ -304,4 +304,130 @@ describe("compaction prefers the current session model over modelRoles.default",
 		const [, firstCandidate] = compactSpy.mock.calls[0]!;
 		expect(`${firstCandidate.provider}/${firstCandidate.id}`).toBe(`${currentModel.provider}/${currentModel.id}`);
 	});
+
+	it("allowMainModel=false skips the active model and uses a configured role", async () => {
+		const currentModel = getBundledModel("anthropic", "claude-sonnet-4-5");
+		const fallbackModel = getBundledModel("openai", "gpt-5");
+		if (!currentModel || !fallbackModel) {
+			throw new Error("Expected bundled test models to exist");
+		}
+
+		const settings = Settings.isolated({
+			"compaction.keepRecentTokens": 1,
+			"compaction.methodOrder": ["soft"],
+			"compaction.allowMainModel": false,
+		});
+		settings.setModelRole("smol", `${fallbackModel.provider}/${fallbackModel.id}`);
+
+		const agent = new Agent({
+			initialState: {
+				model: currentModel,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+			},
+		});
+
+		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage.keys.setRuntime(currentModel.provider, "anthropic-token");
+		authStorage.keys.setRuntime(fallbackModel.provider, "openai-token");
+		modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings,
+			modelRegistry,
+		});
+		session.subscribe(() => {});
+
+		for (const [userText, assistantText] of [
+			["first question", "first answer"],
+			["second question", "second answer"],
+		] as const) {
+			const user = userMsg(userText);
+			const assistant = assistantMsg(assistantText);
+			session.agent.appendMessage(user);
+			session.sessionManager.appendMessage(user);
+			session.agent.appendMessage(assistant);
+			session.sessionManager.appendMessage(assistant);
+		}
+
+		const compactSpy = vi.spyOn(compactionModule, "compact").mockImplementation(async (preparation, model) => ({
+			summary: "ok",
+			shortSummary: "ok short",
+			firstKeptEntryId: preparation.firstKeptEntryId,
+			tokensBefore: 1,
+			details: { provider: model.provider },
+		}));
+
+		await session.compact();
+
+		expect(compactSpy).toHaveBeenCalled();
+		const [, firstCandidate] = compactSpy.mock.calls[0]!;
+		expect(`${firstCandidate.provider}/${firstCandidate.id}`).toBe(`${fallbackModel.provider}/${fallbackModel.id}`);
+	});
+
+	it("allowMainModel=false still honors an explicit compactionModel naming the active model", async () => {
+		const baseCurrentModel = getBundledModel("anthropic", "claude-sonnet-4-5");
+		if (!baseCurrentModel) {
+			throw new Error("Expected bundled test models to exist");
+		}
+		const currentModel = buildModel({
+			...baseCurrentModel,
+			compactionModel: `${baseCurrentModel.provider}/${baseCurrentModel.id}`,
+			compat: baseCurrentModel.compatConfig,
+		});
+
+		const agent = new Agent({
+			initialState: {
+				model: currentModel,
+				systemPrompt: ["Test"],
+				tools: [],
+				messages: [],
+			},
+		});
+
+		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
+		authStorage.keys.setRuntime(currentModel.provider, "anthropic-token");
+		modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
+
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settings: Settings.isolated({
+				"compaction.keepRecentTokens": 1,
+				"compaction.methodOrder": ["soft"],
+				"compaction.allowMainModel": false,
+			}),
+			modelRegistry,
+		});
+		session.subscribe(() => {});
+
+		for (const [userText, assistantText] of [
+			["first question", "first answer"],
+			["second question", "second answer"],
+		] as const) {
+			const user = userMsg(userText);
+			const assistant = assistantMsg(assistantText);
+			session.agent.appendMessage(user);
+			session.sessionManager.appendMessage(user);
+			session.agent.appendMessage(assistant);
+			session.sessionManager.appendMessage(assistant);
+		}
+
+		const compactSpy = vi.spyOn(compactionModule, "compact").mockImplementation(async (preparation, model) => ({
+			summary: "ok",
+			shortSummary: "ok short",
+			firstKeptEntryId: preparation.firstKeptEntryId,
+			tokensBefore: 1,
+			details: { provider: model.provider },
+		}));
+
+		await session.compact();
+
+		expect(compactSpy).toHaveBeenCalled();
+		const [, firstCandidate] = compactSpy.mock.calls[0]!;
+		expect(`${firstCandidate.provider}/${firstCandidate.id}`).toBe(`${currentModel.provider}/${currentModel.id}`);
+	});
 });

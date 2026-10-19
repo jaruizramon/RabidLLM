@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import {
 	extractSlmHandoffGoal,
 	formatSlmHandoffFile,
@@ -10,7 +11,9 @@ import {
 	parseSlmHandoffFile,
 	readSlmHandoff,
 	renderVerbatimUserRequirements,
+	resolveSlmServerConfig,
 	slmHandoffFilePaths,
+	SlmHandoffCoordinator,
 	verbatimRequirementBodies,
 	writeSlmHandoff,
 	type SlmHandoffMetadata,
@@ -380,6 +383,38 @@ describe("isSlmHandoffConfigured", () => {
 	});
 });
 
+const RESOLVE_MODEL = path.join(TEMP_ROOT, "resolve-model.gguf");
+const RESOLVE_SERVER = path.join(TEMP_ROOT, "resolve-server");
+await Bun.write(RESOLVE_MODEL, "weights");
+await Bun.write(RESOLVE_SERVER, "#!/bin/sh\nexit 0\n");
+await fs.chmod(RESOLVE_SERVER, 0o755);
+
+describe("resolveSlmServerConfig", () => {
+	const settings = Settings.isolated({
+		"compaction.slmHandoff.modelPath": RESOLVE_MODEL,
+		"compaction.slmHandoff.serverPath": RESOLVE_SERVER,
+		"compaction.slmHandoff.maxContextTokens": 22_528,
+		"compaction.slmHandoff.maxHandoffTokens": 2_048,
+		"compaction.slmHandoff.reasoningBudgetTokens": 0,
+		"compaction.slmHandoff.maxInputTokens": 16_384,
+	});
+
+	it("derives the input budget from the context an adopted worker actually serves", () => {
+		const configured = resolveSlmServerConfig(settings, 262_144);
+		// The manager panel's worker: configured for 22528, serving 8192.
+		const adopted = resolveSlmServerConfig(settings, 262_144, 8_192);
+
+		expect(configured.ctxSize).toBe(22_528);
+		expect(configured.maxInputTokens).toBe(16_384);
+		expect(adopted.ctxSize).toBe(8_192);
+		expect(adopted.maxInputTokens).toBe(8_192 - 2_048 - 512);
+	});
+
+	it("keeps the configured ceiling when the worker serves more", () => {
+		expect(resolveSlmServerConfig(settings, 262_144, 32_768).ctxSize).toBe(22_528);
+	});
+});
+
 describe("clipMiddle", () => {
 	it("leaves a transcript that fits untouched", () => {
 		expect(clipMiddle("short transcript", 100)).toBe("short transcript");
@@ -393,5 +428,75 @@ describe("clipMiddle", () => {
 		expect(clipped.startsWith("HEAD-")).toBe(true);
 		expect(clipped.endsWith("-TAIL")).toBe(true);
 		expect(clipped).toContain("chars omitted");
+	});
+});
+
+describe("contract reuse after a scheduled drain", () => {
+	it("does not run a second contract when the drain already covered the live leaf", async () => {
+		let notesRuns = 0;
+		let contractRuns = 0;
+		const worker = Bun.serve({
+			port: 0,
+			hostname: "127.0.0.1",
+			async fetch(request) {
+				const url = new URL(request.url);
+				if (url.pathname === "/health") return new Response("ok");
+				if (url.pathname !== "/v1/chat/completions") return new Response("not found", { status: 404 });
+				const body = (await request.json()) as { messages?: { content?: unknown }[] };
+				const system = typeof body.messages?.[0]?.content === "string" ? body.messages[0].content : "";
+				let content: string;
+				if (system.includes("You keep notes on one turn")) {
+					notesRuns++;
+					content = "- [USER] rewrite the parser\n- [SAID] the CRLF carry is the blocker";
+				} else {
+					contractRuns++;
+					content = "## Goal\nRewrite the parser\n\n## Hard requirements\n- MUST keep parse()";
+				}
+				return Response.json({
+					choices: [{ message: { content }, finish_reason: "stop" }],
+					usage: { prompt_tokens: 100, completion_tokens: 20 },
+				});
+			},
+		});
+		const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "slm-contract-reuse-"));
+		try {
+			const settings = Settings.isolated({
+				"compaction.enabled": true,
+				"compaction.methodOrder": ["slm"],
+				"compaction.slmHandoff.workerUrl": `http://127.0.0.1:${worker.port}`,
+				"compaction.slmHandoff.maxHandoffTokens": 256,
+				"compaction.slmHandoff.maxNotesTokens": 256,
+				"compaction.slmHandoff.contractEveryTurns": 1,
+			});
+			const messages = [
+				{ role: "user", content: [{ type: "text", text: "rewrite the parser" }], timestamp: 1 },
+				{
+					role: "assistant",
+					content: [{ type: "text", text: "the CRLF carry is the blocker" }],
+					timestamp: 2,
+				},
+			] as unknown as AgentMessage[];
+			const coordinator = new SlmHandoffCoordinator({
+				settings,
+				sessionId: () => "contract-reuse",
+				agentDir: () => agentDir,
+				agentKind: () => "main",
+				messages: () => messages,
+				modelContextWindow: () => 32_768,
+			});
+			try {
+				coordinator.schedule();
+				const record = await coordinator.prepareForCompaction({ awaitMs: 5_000 });
+
+				expect(record?.document).toContain("## Goal");
+				expect(notesRuns).toBe(1);
+				expect(contractRuns).toBe(1);
+			} finally {
+				await coordinator.dispose();
+			}
+		} finally {
+			worker.stop(true);
+			await fs.rm(agentDir, { recursive: true, force: true });
+		}
 	});
 });

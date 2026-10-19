@@ -189,6 +189,13 @@ export interface CompactionSettings {
 	 */
 	reserveTokens?: number;
 	keepRecentTokens: number;
+	/**
+	 * Whether the active session model may be an implicit compaction candidate.
+	 * An explicit `compactionModel` naming it still wins; this only excludes it
+	 * from the fallback chain (roles and the largest-context scan). Defaults to
+	 * true, preserving the upstream "prefer the current model" behavior.
+	 */
+	allowMainModel?: boolean;
 	autoContinue?: boolean;
 	remoteEnabled?: boolean;
 	remoteEndpoint?: string;

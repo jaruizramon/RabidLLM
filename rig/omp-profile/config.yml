@@ -38,6 +38,7 @@ dev:
   autoqaConsent: granted
 compaction:
   thresholdPercent: 75
+  allowMainModel: false
   modelThresholds:
     llama-rabid/*: f88000
   asyncEnabled: false
@@ -62,6 +63,7 @@ compaction:
     maxHandoffTokens: 2048
     detail: detailed
     reasoningBudgetTokens: 0
+    contractEveryTurns: 1
     awaitMs: 300000
 turnCards:
   enabled: true

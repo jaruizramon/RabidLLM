@@ -563,6 +563,17 @@ export interface SessionMaintenanceHost {
 		awaitMs: number;
 		region?: readonly AgentMessage[];
 	}): Promise<SlmHandoffRecord | undefined>;
+	/**
+	 * One-shot card distillation on the local SLM worker. `undefined` means the
+	 * worker is not configured or available: cards are archive-only, and they must
+	 * never fall back to the live model or a network provider.
+	 */
+	distillTurnCardWithSlm?(options: {
+		system: string;
+		prompt: string;
+		maxTokens: number;
+		signal?: AbortSignal;
+	}): Promise<string | undefined>;
 	removeAssistantMessageFromActiveContext(message: AssistantMessage): void;
 	dropPersistedAssistantTurn(message: AssistantMessage): Promise<string | undefined>;
 	/**
@@ -3749,6 +3760,15 @@ export class SessionMaintenance {
 		availableModels = availableModels.map(model => registry.fitContextWindow(model, settings));
 		const candidates: Model[] = [];
 		const seen = new Set<string>();
+		const allowMainModel = this.#compactionSettings.allowMainModel !== false;
+		const configured = preferredModel
+			? resolveCompactionConfiguredTarget(preferredModel, availableModels)
+			: undefined;
+		const isMainModel = (model: Model | undefined): boolean =>
+			model !== undefined && preferredModel !== undefined && modelsAreEqual(model, preferredModel);
+		// An explicit compactionModel that names the active model is intentional;
+		// only the implicit fallbacks below are subject to the opt-out.
+		const explicitMainModel = isMainModel(configured);
 
 		const addCandidate = (model: Model | undefined): void => {
 			if (!model) return;
@@ -3763,17 +3783,25 @@ export class SessionMaintenance {
 		};
 
 		if (preferredModel) {
-			addCandidate(resolveCompactionConfiguredTarget(preferredModel, availableModels));
+			addCandidate(configured);
 		}
-		addCandidate(preferredModel ?? undefined);
+		if (allowMainModel || explicitMainModel) {
+			addCandidate(preferredModel ?? undefined);
+		}
 		for (const role of CHAT_MODEL_ROLE_IDS) {
-			addCandidate(
-				resolveRoleModelFull(this.#host.settings, role, availableModels, preferredModel ?? undefined).model,
-			);
+			const roleModel = resolveRoleModelFull(
+				this.#host.settings,
+				role,
+				availableModels,
+				preferredModel ?? undefined,
+			).model;
+			if (!allowMainModel && !explicitMainModel && isMainModel(roleModel)) continue;
+			addCandidate(roleModel);
 		}
 
 		const sortedByContext = [...availableModels].sort((a, b) => (b.contextWindow ?? 0) - (a.contextWindow ?? 0));
 		for (const model of sortedByContext) {
+			if (!allowMainModel && !explicitMainModel && isMainModel(model)) continue;
 			if (!seen.has(`${model.provider}/${model.id}`)) {
 				addCandidate(model);
 				break;
@@ -3784,9 +3812,10 @@ export class SessionMaintenance {
 	}
 
 	/**
-	 * Distill one completed turn into an episodic card via the compaction model
-	 * chain. Archive-only: the caller writes the card under `<agent>/turn-cards/`.
-	 * Failures are logged and swallowed; a turn never fails because its card did.
+	 * Distill one completed turn into an episodic card on the local SLM worker.
+	 * Archive-only: the caller writes the card under `<agent>/turn-cards/`.
+	 * Summarization belongs to the worker, so there is no model-chain fallback:
+	 * a worker that cannot run means no card, never the live model or deepseek.
 	 */
 	async distillTurnCard(messages: AgentMessage[]): Promise<TurnCard | undefined> {
 		const scope = this.#host.settings;
@@ -3799,39 +3828,19 @@ export class SessionMaintenance {
 			.replaceAll("{{maxTokens}}", String(maxTokens))
 			.replaceAll("{{summaryWords}}", String(summaryWords));
 		const signal = AbortSignal.timeout(60_000);
-		const candidates = this.resolveCompactionModelCandidates(this.#model, this.#host.modelRegistry.getAvailable());
-		for (const model of candidates) {
-			const label = `${model.provider}/${model.id}`;
-			const apiKey = await this.#host.modelRegistry.getApiKey(model, this.#host.sessionId(), { signal });
-			if (!apiKey) continue;
-			try {
-				const stream = await this.#host.sideStreamFn(
-					model,
-					{
-						systemPrompt: [instructions],
-						messages: [
-							{
-								role: "user",
-								content: [{ type: "text", text: transcript } as const],
-								timestamp: Date.now(),
-							},
-						],
-					},
-					{ apiKey, maxTokens, temperature: 0, signal, disableReasoning: true },
-				);
-				const result = await stream.result();
-				const text = result.content
-					.filter(part => part.type === "text")
-					.map(part => part.text)
-					.join("");
-				const card = parseTurnCard(text);
-				if (card) return trimTurnCard(card, maxTokens);
-				logger.debug("Turn card: unparseable model output", { model: label });
-			} catch (error) {
-				logger.debug("Turn card candidate failed", { model: label, error: String(error) });
-			}
+		const raw = await this.#host.distillTurnCardWithSlm?.({
+			system: instructions,
+			prompt: transcript,
+			maxTokens,
+			signal,
+		});
+		if (raw === undefined) return undefined;
+		const card = parseTurnCard(raw);
+		if (!card) {
+			logger.debug("Turn card: unparseable SLM output");
+			return undefined;
 		}
-		return undefined;
+		return trimTurnCard(card, maxTokens);
 	}
 
 	#buildCompactionAuthError(): Error {

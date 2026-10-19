@@ -2556,6 +2556,7 @@ export class AgentSession implements SettingsScope {
 			abort: options => this.abort(options),
 			abortHandoff: () => this.abortHandoff(),
 			prepareSlmHandoff: options => this.#slmHandoff.prepareForCompaction(options),
+			distillTurnCardWithSlm: options => this.#slmHandoff.completeTurnCard(options),
 		};
 		this.#maintenance = new SessionMaintenance(maintenanceHost);
 		this.addDisposer(() => {

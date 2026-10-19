@@ -744,6 +744,56 @@ appears in the previous document, not in the turn's notes. The guard now accepts
 document as a source too, so carry-overs pass and real corruptions (`scripts/im-smoke.mjs`)
 still trip it.
 
+## 2026-10-19 — SLM contract from notes: ~20 s vs ~210 s, and no duplicate pass
+
+**Setup.** Isolated profile, `llama-rabid/qwen3.8-27b` at a 32K advertised window (router
+served 164K), `thresholdPercent: 30` (9 830), `keepRecentTokens: 2 500`,
+`methodOrder: [slm, shake]`, no `compactionModel`, `--no-tools`, thinking off. Worker
+Spark-X2.5-4B Q4_0, `cuda:1`, ctx 22 528, budget 0. First run `contractEveryTurns: 0`;
+second run `contractEveryTurns: 1`.
+
+**Observed.**
+
+First run, one 10K-token turn, 16 634 billed tokens:
+
+```
+worker ready 5.7 s
+notes      2 runs x 3.5 s   (773/1 071 in, 302 out each)
+contract   7.4 s            (2 148 in, 643 out)
+method=slm  16 634 -> 4 287 (74.2%)  summary 4 512 chars  wall ~20 s
+```
+
+The dense main model (`soft`) on the same shape measured ~210 s for 15 336 → 5 473.
+Second run, `contractEveryTurns: 1`, 12 627 billed tokens:
+
+```
+notes      1 run  2.7 s
+contract   13.1 s  (2 940 in, 845 out, truncated: true)
+SLM contract reused after drain   (no second contract)
+method=slm  12 627 -> 6 697  summary 7 179 chars
+```
+
+Before the fixes, the scheduled-drain path re-enqueued the batch (`#ensureCoverage` on the
+`coveredByScheduledDrain` branch) and, after the drain, re-read the notes without re-reading
+the handoff — so a warm per-turn contract was paid for twice.
+
+**Changes.**
+
+- `prepareForCompaction` leaves the in-flight batch alone when the scheduled drain already
+  owns the live leaf, and re-reads the handoff after the drain so a covering per-turn
+  contract is reused (`src/slm/handoff.ts`).
+- `compaction.allowMainModel: false` keeps the active dense model out of the implicit
+  compaction chain; an explicit `compactionModel` naming it is still honored
+  (`src/session/session-maintenance.ts`, `test/compaction-prefer-current-model.test.ts`).
+- The fake-worker test (`test/slm/handoff.test.ts`) asserts one notes run and one contract
+  run for the drain+compaction sequence.
+
+**Conclusion.** On this box the SLM path is ~10× faster than the dense main model and
+compresses better. With the contract warm (`contractEveryTurns: 1`) compaction reuses it
+with no extra worker call. The second contract hit its 845-token decay target
+(`truncated: true`) and still grew from 2 424 to 3 048 chars: the target is a cap, not a
+shrink guarantee.
+
 ## Defect attribution (rolling)
 
 Which side owns each defect the runs above found. Update when a new one appears.
@@ -762,6 +812,9 @@ Which side owns each defect the runs above found. Update when a new one appears.
 | `unload` left the injected `handoff` behind | harness | fixed: restores defaults |
 | Post-compaction run re-distilled our own summary | harness | fixed: `isOperatorTurn` gate + covered-leaf shortcut |
 | `coveredUserTurns` counted the agent-attributed summary | harness | fixed: counts operator turns only |
+| Scheduled drain re-enqueued its batch at pre-prompt compaction | harness | fixed: `coveredByScheduledDrain` branch, tested |
+| Per-turn contract re-run after the drain | harness | fixed: re-read the handoff, tested |
+| Active dense model used as an implicit compactor | harness/config | fixed: `compaction.allowMainModel: false` |
 | One-shot `omp -p` aborts the per-turn handoff | rabid/design | known; only the compaction path awaits |
 | SIGKILLed harness leaks the worker | rabid/design | known; `unload`/SIGINT are clean |
 

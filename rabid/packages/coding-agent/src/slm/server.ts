@@ -572,16 +572,22 @@ export class SlmHandoffServer {
 		if (!this.#child || this.#child.exitCode !== null) {
 			const found = discoverSlmWorker();
 			if (found && found.modelPath === config.modelPath && (await probeHealth(found.url))) {
-				if (found.ctxSize < config.ctxSize) {
+				// `--ctx-size` comes from a /proc scan: a malformed value must not become a
+				// NaN ceiling. The configured value is both the fallback and the ceiling.
+				const workerCtx =
+					Number.isFinite(found.ctxSize) && found.ctxSize > 0
+						? Math.min(found.ctxSize, config.ctxSize)
+						: config.ctxSize;
+				if (workerCtx < config.ctxSize) {
 					logger.warn("Adopting an SLM worker with a smaller context than configured", {
 						pid: found.pid,
-						workerCtx: found.ctxSize,
+						workerCtx,
 						configuredCtx: config.ctxSize,
-						note: "runs will be split into more chunks",
+						note: "run budgets shrink to the worker's context",
 					});
 				}
 				this.#externalBaseUrl = found.url;
-				this.#config = { ...config, ctxSize: found.ctxSize };
+				this.#config = { ...config, ctxSize: workerCtx };
 				if (this.#startedAt === 0) this.#startedAt = Date.now();
 				logger.info("Adopted a running SLM worker", { pid: found.pid, url: found.url });
 				return this.status();
