@@ -61,6 +61,7 @@ import {
 	readTextFromClipboard,
 } from "../../utils/clipboard";
 import { commandUsage, hintUsage } from "../../utils/usage-counter";
+import { compactRepeatedLines } from "../../utils/compact-repeats";
 import { EnhancedPasteController } from "../../utils/enhanced-paste";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { resendProgramStatus } from "../../utils/run-status";
@@ -2524,7 +2525,9 @@ export class InputController {
 	async presentLargePasteMenu(text: string, lineCount: number): Promise<void> {
 		const WRAPPED_BLOCK = "Attach as a wrapped block";
 		const LOCAL_FILE = "Attach as local file";
+		const COMPACTED = "Compact repeated lines";
 		const INLINE = "Paste inline";
+		const compacted = compactRepeatedLines(text);
 
 		let choice: string | undefined;
 		try {
@@ -2533,6 +2536,14 @@ export class InputController {
 				[
 					{ label: WRAPPED_BLOCK, description: "Wrap the text in <attachment> tags, collapsed to a marker" },
 					{ label: LOCAL_FILE, description: "Save the text to a local://paste file" },
+					...(compacted.collapsedLines > 0
+						? [
+								{
+									label: COMPACTED,
+									description: `Collapse ${compacted.collapsedLines} repeated lines (${compacted.beforeLines} → ${compacted.afterLines})`,
+								},
+							]
+						: []),
 					{ label: INLINE, description: "Collapse the text to an inline paste marker" },
 				],
 				{ helpText: `${editorKey("tui.select.cancel")} to paste inline` },
@@ -2549,6 +2560,15 @@ export class InputController {
 			case LOCAL_FILE:
 				await this.#attachPasteAsFile(text, lineCount);
 				break;
+			case COMPACTED: {
+				const header = `<!-- paste compacted: ${compacted.beforeLines} → ${compacted.afterLines} lines; ${compacted.collapsedLines} repeated lines collapsed -->\n\n`;
+				const body = `${header}${compacted.text}`;
+				this.ctx.editor.insertTextAttachment(body, wrapPasteInAttachmentBlock(body));
+				this.ctx.showStatus(
+					`Compacted ${compacted.collapsedLines} repeated lines (${compacted.beforeLines} → ${compacted.afterLines})`,
+				);
+				break;
+			}
 			case INLINE:
 				this.ctx.editor.insertTextAttachment(text);
 				break;

@@ -12,6 +12,7 @@
 - Added a two-row archive progress panel above the status bar: the headline shows the maintenance method and context percentage (then `75% → 21% (−N pts)` when finished), and the detail row shows scanned entries, offloaded regions/tokens/bytes, recovery-artifact location, tokens reclaimed and elapsed time before it fades
 - Added `tools.disabled`: named tools (for example `task` on a local llama.cpp slot) are removed from the request and the system prompt, while the session keeps them selected so a model switch that lifts the policy restores them
 - Added `profiles`: per-model overrides keyed by `provider/model-id` or a `…*` prefix, covering the compaction threshold and method order, thinking budgets, disabled tools, and sampling defaults; models without a matching profile keep the global settings
+- Large pastes now offer **Compact repeated lines**: consecutive duplicate lines collapse to one copy plus `[×N]`, so a pasted log whose stack repeats sixty times stops consuming context (the option appears only when there is repetition to remove)
 
 ### Changed
 
