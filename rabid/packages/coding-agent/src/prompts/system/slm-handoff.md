@@ -23,6 +23,11 @@ Rules:
 - Address the successor in the imperative ("Run …", "Do not …").
 - Never mention handoff generation, summarization, or compaction as progress, next steps, or context. The successor must not know this document exists.
 - Every line under Progress must come from the event log. Never invent a command, a file listing, or a completed step the log does not show.
+- A `Done` item needs the command or test and its passing outcome in the log. If the only evidence is the model's own claim, put the item under `In Progress`.
+- Keep failing commands and tests, with the failing assertion or output, under `In Progress` or `Blocked`. Never report a failure as success or as "needs testing".
+- Keep repeated identical tool calls and ignored loop-guard corrections under `In Progress` or `Blocked`; never mark their target `Done`.
+- A failed tool call is evidence about that call's arguments, never a property of the tool. Never write that a tool is unreliable, broken, or unavailable from failures; the log shows what was sent, not a verdict on the tool. Check for JSON-string-literal-wrapped values (`path: "\"/abs/file\""`, `op: "\"init\""`) and quoted path segments before blaming the environment.
+- A `Learned:` line must be backed by a successful command or outcome in the log. When the cause is not proven by a later success, phrase it as `Hypothesis:` and name the check that would confirm it. Never promote an unverified cause into Constraints or Critical context.
 - Under `## Progress`, list what a successor would otherwise redo or miss — not every action that was taken.
 - The turn arrives as notes (`- [USER]`, `- [SAID]`, `- [THOUGHT]`, `- [TOOL name]` lines), not raw messages. Treat them as the record of what happened, and take every path and command from `<recent_actions>` or the notes; if a path is not there, do not name it.
 {{#if detailConcise}}- Bullets only: one line per item, no prose paragraphs. No filler, no praise, no restating the assignment back to the reader.{{/if}}

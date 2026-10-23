@@ -205,6 +205,9 @@ import { applyHyperlinkSetting, fileHyperlink } from "@oh-my-pi/pi-tui/render/hy
 import { renderTreeList } from "@oh-my-pi/pi-tui/render/tree-list";
 import { formatStartupChangelogSummary, type StartupChangelogSelection } from "../utils/changelog";
 import { copyToClipboard } from "../utils/clipboard";
+import { type ArtifactViewer, collectVisualArtifacts, startArtifactViewer } from "../artifacts";
+import { managerUrl } from "../rabid/llama-manager";
+import { LlamaManagerSheet } from "../rabid/llama-manager-sheet";
 import type { EventBus } from "../utils/event-bus";
 import { getEditorCommand, openInEditor } from "../utils/external-editor";
 import { openPath } from "../utils/open";
@@ -1597,6 +1600,10 @@ export class InteractiveMode implements InteractiveModeContext {
 	#planReviewOverlayHandle: OverlayHandle | undefined;
 	#sessionInfoOverlayHandle: OverlayHandle | undefined;
 	#jobsSheetHandle: OverlayHandle | undefined;
+	#artifactViewer: ArtifactViewer | undefined;
+	#llamaSheet: LlamaManagerSheet | undefined;
+	#llamaSheetHandle: OverlayHandle | undefined;
+	#llamaSheetTimer: NodeJS.Timeout | undefined;
 	/** Re-renders the open jobs sheet so output tails and pids stay live. */
 	#jobsSheetTimer: NodeJS.Timeout | undefined;
 	#planReviewOwner: object | undefined;
@@ -7174,6 +7181,9 @@ export class InteractiveMode implements InteractiveModeContext {
 		setCfgApprovalHost(null);
 		this.#disposeImageBlobWriter?.();
 		this.#disposeImageBlobWriter = undefined;
+		this.#artifactViewer?.stop();
+		this.#artifactViewer = undefined;
+		this.#hideLlamaManager();
 		this.#hideSessionInfo();
 		if (this.#ownsStartedUi) {
 			this.ui.stop();
@@ -7609,6 +7619,73 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#jobsSheetHandle = undefined;
 		clearInterval(this.#jobsSheetTimer);
 		this.#jobsSheetTimer = undefined;
+		if (!handle) return;
+		handle.hide();
+		this.#selectorController.focusActiveEditorArea();
+		this.ui.requestRender();
+	}
+
+	/**
+	 * `/artifacts`: open the session's visual files (images, sprites, SVGs,
+	 * pages) in a browser gallery. The viewer is a loopback HTTP server, so the
+	 * browser renders each artifact natively and webpages through a Chromium
+	 * screenshot. Discovery runs on open and on the page's refresh, so files
+	 * produced by bash/eval scripts are found by the bounded workspace scan.
+	 */
+	openArtifactsWindow(): void {
+		try {
+			this.#artifactViewer ??= startArtifactViewer({
+				cwd: () => this.viewSession.sessionManager.getCwd(),
+				collect: () =>
+					collectVisualArtifacts({
+						messages: this.viewSession.messages,
+						cwd: this.viewSession.sessionManager.getCwd(),
+					}),
+				openPath: filePath => this.openInBrowser(filePath),
+			});
+		} catch (error) {
+			this.showError(
+				`Could not start the artifact viewer: ${error instanceof Error ? error.message : String(error)}`,
+			);
+			return;
+		}
+		this.openInBrowser(this.#artifactViewer.url);
+		this.showStatus(`Artifacts: ${this.#artifactViewer.url}`);
+	}
+
+	/**
+	 * `/llama`: the V100 model-manager sheet. It reads the manager's live state,
+	 * loads/unloads presets, switches this session to the loaded model, and
+	 * exposes the router/VRAM/context actions. The full browser UI stays one
+	 * keypress away for logs and the SLM worker.
+	 */
+	showLlamaManager(): void {
+		if (this.#llamaSheetHandle) return;
+		const sheet = new LlamaManagerSheet({
+			session: this.session,
+			requestRender: () => this.ui.requestRender(),
+			close: () => this.#hideLlamaManager(),
+			showStatus: text => this.showStatus(text),
+			showError: text => this.showError(text),
+			confirm: (title, options) => this.showHookSelector(title, options),
+			openManagerUi: () => this.openInBrowser(managerUrl()),
+		});
+		this.#llamaSheet = sheet;
+		this.#llamaSheetHandle = this.ui.showOverlay(sheet, { anchor: "center", width: "90%", maxHeight: "90%" });
+		this.#llamaSheetTimer = setInterval(() => {
+			void sheet.refresh();
+		}, 2_000);
+		this.ui.setFocus(sheet);
+		this.ui.requestRender();
+	}
+
+	#hideLlamaManager(): void {
+		clearInterval(this.#llamaSheetTimer);
+		this.#llamaSheetTimer = undefined;
+		const handle = this.#llamaSheetHandle;
+		this.#llamaSheetHandle = undefined;
+		this.#llamaSheet?.dispose();
+		this.#llamaSheet = undefined;
 		if (!handle) return;
 		handle.hide();
 		this.#selectorController.focusActiveEditorArea();

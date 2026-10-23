@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Settled writes of images, SVGs, and webpages now draw a preview summary instead of their source; `Ctrl+O` reveals the source
+
 ## [18.11.3] - 2026-10-16
 
 ### Added

@@ -12,6 +12,8 @@ import {
 	buildStaticInlineHint,
 	buildSubcommandInlineHint,
 } from "./builtin-completions";
+import { BUILTIN_ARTIFACT_SLASH_COMMANDS } from "./builtin-artifacts";
+import { BUILTIN_LLAMA_MANAGER_SLASH_COMMANDS } from "./builtin-llama-manager";
 import { BUILTIN_CONTROL_SLASH_COMMANDS } from "./builtin-control";
 import { BUILTIN_LIFECYCLE_SLASH_COMMANDS } from "./builtin-lifecycle";
 import { BUILTIN_LLAMA_PRESET_SLASH_COMMANDS } from "../rabid/llama-preset-command";
@@ -50,6 +52,8 @@ const BUILTIN_SLASH_COMMAND_REGISTRY: ReadonlyArray<SlashCommandSpec> = [
 	...BUILTIN_LIFECYCLE_SLASH_COMMANDS,
 	...BUILTIN_MARKETPLACE_SLASH_COMMANDS,
 	...BUILTIN_SKILLS_SLASH_COMMANDS,
+	...BUILTIN_ARTIFACT_SLASH_COMMANDS,
+	...BUILTIN_LLAMA_MANAGER_SLASH_COMMANDS,
 	...BUILTIN_CONTROL_SLASH_COMMANDS,
 ];
 

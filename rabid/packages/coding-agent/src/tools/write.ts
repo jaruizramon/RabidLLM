@@ -43,7 +43,7 @@ import { recoverConflictUriPrefix } from "./conflict-detect";
 import { invalidateFsScanAfterWrite } from "./fs-cache-invalidation";
 
 import { outputMeta } from "./output-meta";
-import { formatPathRelativeToCwd, probeLiteralPathExists, specialFileKind } from "./path-utils";
+import { formatPathRelativeToCwd, PATH_ARG_PATTERN, probeLiteralPathExists, specialFileKind } from "./path-utils";
 import { splitPathAndSel } from "@oh-my-pi/pi-tui/tools/read";
 import {
 	enforcePlanModeWrite,
@@ -53,6 +53,7 @@ import {
 } from "./plan-mode-guard";
 import { decodeUtf8Text } from "./read-format";
 import { routeReadThroughBridge } from "./read-summary";
+import { assertNoSourceTokenCorruption } from "./source-integrity";
 import { shortenPath } from "@oh-my-pi/pi-tui/render/render-utils";
 
 import {
@@ -197,7 +198,7 @@ async function assertNotReadSelectorMisfire(target: string, content: string, cwd
 }
 
 const writeSchema = type({
-	path: "string",
+	path: type(PATH_ARG_PATTERN),
 	"content?": "string",
 });
 
@@ -929,6 +930,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 			const absolutePath = await resolvePlanPath(this.session, path, signal);
 			// A located URL write keeps its URL identity in progress, results, and the hashline header.
 			const displayPath = target ? path : formatPathRelativeToCwd(absolutePath, this.session.cwd);
+			assertNoSourceTokenCorruption(cleanContent, absolutePath, displayPath);
 			const batchRequest = getLspBatchRequest(context?.toolCall);
 
 			const existing = await fs.stat(absolutePath).catch(() => undefined);

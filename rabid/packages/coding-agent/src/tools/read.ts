@@ -87,6 +87,7 @@ import { postProcessToolResult, resolveOutputMaxColumns } from "./output-meta";
 import {
 	expandPath,
 	formatPathRelativeToCwd,
+	PATH_ARG_PATTERN,
 	probeLiteralPathExists,
 	resolveReadPathAsync,
 	specialFileKind,
@@ -793,7 +794,7 @@ export function splitImageQuestionTarget(readPath: string): { path: string; ques
 const MAX_IMAGE_SIZE = MAX_IMAGE_INPUT_BYTES;
 
 const readSchema = type({
-	path: type("string").describe("Local path, internal URI, or URL; selectors inline."),
+	path: type(PATH_ARG_PATTERN).describe("Local path, internal URI, or URL; selectors inline."),
 });
 
 export type ReadToolInput = typeof readSchema.infer;

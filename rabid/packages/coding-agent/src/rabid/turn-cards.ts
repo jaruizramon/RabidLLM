@@ -155,6 +155,92 @@ export function renderFileActions(messages: readonly AgentMessage[], maxItems = 
 	return `## Recent file actions\n\n${lines.join("\n")}`;
 }
 
+/**
+ * Deterministic failures and loops in `messages`, for the compaction summary.
+ *
+ * A weak summarizer can drop a failing test or describe an ignored loop as
+ * progress. This block is computed from the transcript, so the successor sees
+ * the failed call and the repeated payload even when the prose summary misses
+ * them. A failure only counts as open when the same tool has no later success.
+ */
+export function renderOpenFailures(messages: readonly AgentMessage[], maxItems = 4): string {
+	const calls: Array<{ id: string; name: string; fingerprint: string }> = [];
+	const results = new Map<string, { name: string; isError: boolean; text: string; index: number }>();
+	messages.forEach((message, index) => {
+		if (message.role === "assistant") {
+			for (const part of message.content) {
+				if (
+					!isRecord(part) ||
+					part.type !== "toolCall" ||
+					typeof part.id !== "string" ||
+					typeof part.name !== "string"
+				) {
+					continue;
+				}
+				calls.push({
+					id: part.id,
+					name: part.name,
+					fingerprint: `${part.name}:${isRecord(part.arguments) ? JSON.stringify(part.arguments) : ""}`,
+				});
+			}
+			return;
+		}
+		if (message.role !== "toolResult") return;
+		results.set(message.toolCallId, {
+			name: message.toolName,
+			isError: message.isError === true,
+			text: messageText(message.content).replace(/\s+/g, " ").trim(),
+			index,
+		});
+	});
+
+	const repeated: Array<{ name: string; count: number; result: string }> = [];
+	let run: { fingerprint: string; name: string; count: number; lastId: string } | undefined;
+	const flushRun = () => {
+		if (!run || run.count < 3) return;
+		const result = results.get(run.lastId);
+		// A repeated read or a retried command that eventually passed is not an
+		// open failure; only a run whose last result failed belongs here.
+		if (result?.isError) repeated.push({ name: run.name, count: run.count, result: result.text });
+	};
+	for (const call of calls) {
+		if (run?.fingerprint === call.fingerprint) {
+			run.count++;
+			run.lastId = call.id;
+			continue;
+		}
+		flushRun();
+		run = { fingerprint: call.fingerprint, name: call.name, count: 1, lastId: call.id };
+	}
+	flushRun();
+
+	const lastSuccessByTool = new Map<string, number>();
+	for (const result of results.values()) {
+		if (result.isError) continue;
+		lastSuccessByTool.set(result.name, Math.max(lastSuccessByTool.get(result.name) ?? -1, result.index));
+	}
+	const seen = new Set(repeated.map(entry => `${entry.name}\u0000${entry.result}`));
+	const failures = [...results.values()]
+		.filter(result => result.isError && (lastSuccessByTool.get(result.name) ?? -1) < result.index)
+		.filter(result => {
+			const key = `${result.name}\u0000${result.text}`;
+			if (seen.has(key)) return false;
+			seen.add(key);
+			return true;
+		})
+		.slice(-maxItems);
+
+	if (repeated.length === 0 && failures.length === 0) return "";
+	const lines = [
+		...repeated.map(
+			entry =>
+				`- \`${entry.name}\` repeated ${entry.count}× with identical arguments; last result: \`${clip(entry.result, 240)}\``,
+		),
+		...failures.map(failure => `- \`${failure.name}\` failed: \`${clip(failure.text, 240)}\``),
+	];
+	return `## Open failures\n\n${lines.join("\n")}\n\nA later passing command or test must prove these; do not record their targets as Done.`;
+}
+
 /** Render the turn's messages as the archivist transcript (thinking omitted). */
 export function renderTurnTranscript(messages: readonly AgentMessage[]): string {
 	const lines: string[] = [];

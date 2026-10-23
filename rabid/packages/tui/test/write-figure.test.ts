@@ -66,7 +66,9 @@ describe("write figures", () => {
 		await final;
 		expect(write.component.isTranscriptBlockPending()).toBe(false);
 		const rows = write.component.render(80);
-		expect(plain(rows)).toContain("<svg viewBox='0 0 160 40'>");
+		// A settled artifact write shows the drawing and its summary, not the source.
+		expect(plain(rows)).toContain("SVG");
+		expect(plain(rows)).not.toContain("<svg");
 		expect(hasImage(rows)).toBe(true);
 	});
 

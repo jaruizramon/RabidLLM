@@ -13,4 +13,6 @@ Rules:
 - `summary` describes what that operation did or revealed, at most {{summaryWords}} words.
 - Write `prompt` and every `summary` in pidgin English: real English words, primitive grammar. Drop articles, copulas, auxiliaries and filler; prefer noun phrases and "did X → saw Y" fragments. Keep paths, identifiers, commands and line numbers verbatim.
 - The entire JSON must stay under {{maxTokens}} tokens. Drop the least important operations and shorten summaries to fit.
+- If an operation was rejected or failed (`isError`, `STOP`, repeated-failure guard, loop redirect), its summary MUST say so. Never report a rejected edit as applied and never report a failing command or test as passing.
+- If the same call repeats with identical arguments, record the repetition and the correction it ignored. Do not describe the loop's target as fixed.
 - Never invent files or operations that are not in the transcript.

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Compaction and handoff prompts now require verification evidence for Done items and record failed tests and ignored loop-guard corrections instead of summarizing them as success
+
 ## [18.11.3] - 2026-10-16
 
 ### Added

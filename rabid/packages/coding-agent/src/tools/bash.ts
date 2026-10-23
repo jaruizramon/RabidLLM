@@ -46,7 +46,7 @@ import { isFindEnabled } from "./jfind";
 import { formatArtifactErrorNotice } from "@oh-my-pi/pi-tui/tools/output-meta";
 import { formatOutputNotice } from "@oh-my-pi/pi-tui/tools/output-meta";
 import { resolveInlineByteCapBudget } from "./output-meta";
-import { resolveToCwd } from "./path-utils";
+import { PATH_ARG_PATTERN, resolveToCwd } from "./path-utils";
 import { extractLeadingCdTarget, extractLiteralAndChainSegments, tokenizeShellSegments } from "./shell-tokenize";
 import { ToolAbortError } from "./tool-errors";
 import { ToolError } from "@oh-my-pi/pi-tui/tools/tool-errors";
@@ -329,14 +329,14 @@ const BASH_TIMEOUT_DESCRIPTION = `timeout in seconds; 0 disables the command dea
 const bashSchemaBase = type({
 	command: type("string"),
 	"timeout?": type("number").describe(BASH_TIMEOUT_DESCRIPTION),
-	"cwd?": "string",
+	"cwd?": type(PATH_ARG_PATTERN),
 	"pty?": "boolean",
 });
 
 const bashSchemaWithAsync = type({
 	command: "string",
 	"timeout?": type("number").describe(BASH_TIMEOUT_DESCRIPTION),
-	"cwd?": "string",
+	"cwd?": type(PATH_ARG_PATTERN),
 	"pty?": "boolean",
 	"async?": "boolean",
 });
@@ -344,7 +344,7 @@ const bashSchemaWithAsync = type({
 const bashSchemaWithService = type({
 	command: "string",
 	"timeout?": type("number").describe(BASH_TIMEOUT_DESCRIPTION),
-	"cwd?": "string",
+	"cwd?": type(PATH_ARG_PATTERN),
 	"pty?": "boolean",
 	"name?": "string <= 48",
 	"ready?": type({
@@ -358,7 +358,7 @@ const bashSchemaWithService = type({
 const bashSchemaWithAsyncAndService = type({
 	command: "string",
 	"timeout?": type("number").describe(BASH_TIMEOUT_DESCRIPTION),
-	"cwd?": "string",
+	"cwd?": type(PATH_ARG_PATTERN),
 	"pty?": "boolean",
 	"async?": "boolean",
 	"name?": "string <= 48",

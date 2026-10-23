@@ -76,6 +76,7 @@ import {
 	parseTurnCard,
 	readTurnCardChain,
 	renderFileActions,
+	renderOpenFailures,
 	renderTurnTranscript,
 	trimTurnCard,
 	type TurnCard,
@@ -3955,9 +3956,12 @@ export class SessionMaintenance {
 		}
 		// The chain is cumulative; only when its head was dropped do we prepend the
 		// previous summary (duplication is safer than losing older history).
+		const messages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
+		const failures = renderOpenFailures(messages);
 		const summary = [
 			truncated && preparation.previousSummary ? `## Earlier summary\n${preparation.previousSummary}` : "",
 			`## Turn cards\n${text}`,
+			failures,
 		]
 			.filter(section => section !== "")
 			.join("\n\n");
@@ -3990,7 +3994,10 @@ export class SessionMaintenance {
 		// File actions are extracted from tool calls, not written by the
 		// summarizer: paths and commands in the summary are then facts.
 		const actions = renderFileActions(messages);
-		return [summary, actions, requirements].filter(block => block !== "").join("\n\n");
+		// Same for failed and repeated calls: a summarizer cannot turn an
+		// unresolved loop into progress.
+		const failures = renderOpenFailures(messages);
+		return [summary, actions, failures, requirements].filter(block => block !== "").join("\n\n");
 	}
 
 	async #prepareCompactionFromHooks(

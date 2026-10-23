@@ -6,6 +6,7 @@ import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import {
 	estimateCardTokens,
 	parseTurnCard,
+	renderOpenFailures,
 	renderTurnTranscript,
 	readTurnCardChain,
 	trimTurnCard,
@@ -48,6 +49,63 @@ describe("turn cards", () => {
 		expect(text).toContain("RESULT read:");
 		expect(text).toContain("export function parse()");
 		expect(text).not.toContain("ASSISTANT:\n\n");
+	});
+
+	it("reports a repeated failing call in the deterministic summary block", () => {
+		const messages: AgentMessage[] = [];
+		for (let index = 0; index < 3; index++) {
+			const id = `call-${index}`;
+			messages.push({
+				role: "assistant",
+				content: [{ type: "toolCall", id, name: "edit", arguments: { input: "[a.ts]\nPUT 1:\n+same" } }],
+				timestamp: index * 2,
+			} as unknown as AgentMessage);
+			messages.push({
+				role: "toolResult",
+				toolCallId: id,
+				toolName: "edit",
+				content: [{ type: "text", text: "STOP. byte-identical no-op" }],
+				isError: true,
+				timestamp: index * 2 + 1,
+			} as unknown as AgentMessage);
+		}
+		const block = renderOpenFailures(messages);
+		expect(block).toContain("## Open failures");
+		expect(block).toContain("`edit` repeated 3× with identical arguments");
+		expect(block).toContain("byte-identical no-op");
+		expect(block).toContain("do not record their targets as Done");
+	});
+
+	it("drops a failure a later call to the same tool resolved", () => {
+		const messages = [
+			{
+				role: "assistant",
+				content: [{ type: "toolCall", id: "fail", name: "bash", arguments: { command: "bun test" } }],
+				timestamp: 1,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "fail",
+				toolName: "bash",
+				content: [{ type: "text", text: "1 failing" }],
+				isError: true,
+				timestamp: 2,
+			},
+			{
+				role: "assistant",
+				content: [{ type: "toolCall", id: "pass", name: "bash", arguments: { command: "bun test" } }],
+				timestamp: 3,
+			},
+			{
+				role: "toolResult",
+				toolCallId: "pass",
+				toolName: "bash",
+				content: [{ type: "text", text: "all passed" }],
+				isError: false,
+				timestamp: 4,
+			},
+		] as unknown as AgentMessage[];
+		expect(renderOpenFailures(messages)).toBe("");
 	});
 
 	it("parses strict or fenced JSON and rejects garbage", () => {

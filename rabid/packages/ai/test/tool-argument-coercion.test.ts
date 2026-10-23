@@ -2394,6 +2394,87 @@ describe("Tool argument coercion", () => {
 		});
 	});
 
+	describe("double-JSON-encoded scalar values", () => {
+		it("unwraps a quoted path and cwd before the tool sees them", () => {
+			const tool: Tool = {
+				name: "quoted_paths",
+				description: "",
+				parameters: type({ path: type("string"), cwd: type("string").optional() }),
+			};
+			const result = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "dv1",
+				name: "quoted_paths",
+				arguments: {
+					path: '"/home/pipo/Documents/sampleGame2/index.html"',
+					cwd: '"/home/pipo/Documents/sampleGame2"',
+				},
+			}) as { path: string; cwd: string };
+			expect(result).toEqual({
+				path: "/home/pipo/Documents/sampleGame2/index.html",
+				cwd: "/home/pipo/Documents/sampleGame2",
+			});
+		});
+
+		it("unwraps a quoted command and a quoted enum member", () => {
+			const tool: Tool = {
+				name: "quoted_command",
+				description: "",
+				parameters: type({ command: type("string"), op: type.enumerated("init", "done") }),
+			};
+			const result = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "dv2",
+				name: "quoted_command",
+				arguments: { command: '"echo hello"', op: '"init"' },
+			}) as { command: string; op: string };
+			expect(result).toEqual({ command: "echo hello", op: "init" });
+		});
+
+		it("does not decode enum strings the decoded value cannot match", () => {
+			const tool: Tool = {
+				name: "quoted_enum_miss",
+				description: "",
+				parameters: type({ op: type.enumerated("init", "done") }),
+			};
+			expect(() =>
+				validateToolArguments(tool, {
+					type: "toolCall",
+					id: "dv3",
+					name: "quoted_enum_miss",
+					arguments: { op: '"nope"' },
+				}),
+			).toThrow(/nope/);
+		});
+
+		it("leaves content-carrying fields verbatim", () => {
+			const tool: Tool = {
+				name: "quoted_content",
+				description: "",
+				parameters: type({
+					content: type("string"),
+					old_string: type("string"),
+					new_string: type("string"),
+				}),
+			};
+			const result = validateToolArguments(tool, {
+				type: "toolCall",
+				id: "dv4",
+				name: "quoted_content",
+				arguments: {
+					content: '"const x = 1;"',
+					old_string: '"old"',
+					new_string: '"new"',
+				},
+			}) as { content: string; old_string: string; new_string: string };
+			expect(result).toEqual({
+				content: '"const x = 1;"',
+				old_string: '"old"',
+				new_string: '"new"',
+			});
+		});
+	});
+
 	describe("single-string-field coercion", () => {
 		it("remaps a different string field to the single required string field when target is absent", () => {
 			const tool: Tool = {

@@ -7,6 +7,8 @@
  * restarting the router behind the user's back: restarting would unload the
  * resident model from VRAM. `/preset reload` refreshes omp's model list only and
  * always leaves the loaded model untouched.
+ *
+ * The manager client itself lives in `./llama-manager`, shared with `/llama`.
  */
 import { logger } from "@oh-my-pi/pi-utils";
 import { cfgRabidMode } from "./rabid-modes";
@@ -18,6 +20,16 @@ import type {
 	SlashCommandSpec,
 	TuiSlashCommandRuntime,
 } from "../slash-commands/types";
+import {
+	fetchManagerState,
+	formatModelList,
+	isModelLoaded,
+	loadPreset,
+	restartRouter,
+	switchToLocalModel,
+	unloadPreset,
+} from "./llama-manager";
+import type { LlamaManagerModel } from "./llama-manager";
 
 const PROVIDER = "llama-rabid";
 /** Modes the Alt+Q / `/preset` picker offers, in display order. */
@@ -31,139 +43,7 @@ function isRabidMode(value: string | undefined): value is RabidModeName {
 	return value !== undefined && (RABID_MODES as readonly string[]).includes(value);
 }
 
-/** Read per call so tests and alternate rigs can redirect the endpoints. */
-function managerUrl(): string {
-	return process.env.RABID_LLAMA_MANAGER ?? "http://127.0.0.1:8090";
-}
-
-function routerUrl(): string {
-	return process.env.RABID_LLAMA_ROUTER ?? "http://127.0.0.1:8080";
-}
-const LOAD_TIMEOUT_MS = 180_000;
-const POLL_MS = 1_000;
-
-interface ManagerPreset {
-	id: string;
-	status?: string;
-	active?: boolean;
-	exists?: boolean;
-	engine?: string;
-}
-
-interface ManagerState {
-	models?: ManagerPreset[];
-}
-
-function timeoutSignal(ms: number): AbortSignal {
-	return AbortSignal.timeout(ms);
-}
-
-async function managerState(): Promise<ManagerPreset[]> {
-	const response = await fetch(`${managerUrl()}/api/state`, { signal: timeoutSignal(5_000) });
-	if (!response.ok) throw new Error(`llama-manager state: HTTP ${response.status}`);
-	const state = (await response.json()) as ManagerState;
-	return state.models ?? [];
-}
-
-/** Preset ids the *running router* knows (its preset file snapshot). */
-async function routerPresets(): Promise<Set<string>> {
-	const response = await fetch(`${routerUrl()}/v1/models`, { signal: timeoutSignal(5_000) });
-	if (!response.ok) throw new Error(`llama router: HTTP ${response.status}`);
-	const data = (await response.json()) as { data?: Array<{ id?: string }> };
-	return new Set((data.data ?? []).flatMap(entry => (entry.id ? [entry.id] : [])));
-}
-
-function isLoaded(preset: ManagerPreset | undefined): boolean {
-	return preset?.status === "loaded" || preset?.status === "sleeping";
-}
-
-function formatPresets(models: readonly ManagerPreset[]): string {
-	const lines = models.map(model => {
-		const here = isLoaded(model) ? "loaded" : (model.status ?? "unloaded");
-		return `  ${model.id} (${here}${model.exists === false ? ", missing file" : ""})`;
-	});
-	return lines.length > 0 ? lines.join("\n") : "  (no presets)";
-}
-
-/** Poll for readiness; `onTick` receives elapsed seconds so callers can narrate. */
-async function waitUntilLoaded(id: string, onTick: (seconds: number, status: string) => void): Promise<ManagerPreset> {
-	const startedAt = Date.now();
-	for (;;) {
-		const preset = (await managerState()).find(model => model.id === id);
-		const elapsed = Math.round((Date.now() - startedAt) / 1000);
-		if (!preset) throw new Error(`llama-manager stopped reporting ${id}`);
-		if (preset.status === "failed") throw new Error(`${id} failed to load`);
-		if (isLoaded(preset)) return preset;
-		if (Date.now() - startedAt > LOAD_TIMEOUT_MS) {
-			throw new Error(`timed out loading ${id} (${elapsed}s)`);
-		}
-		onTick(elapsed, preset.status ?? "unloaded");
-		await Bun.sleep(POLL_MS);
-	}
-}
-
-async function loadPreset(id: string, onStatus: (text: string) => void): Promise<void> {
-	const presets = await managerState();
-	const preset = presets.find(model => model.id === id);
-	if (!preset) {
-		throw new Error(`unknown preset "${id}"; models.ini has:\n${formatPresets(presets)}`);
-	}
-	if (preset.exists === false) throw new Error(`${id}: model file is missing from disk`);
-	if (isLoaded(preset)) return;
-
-	const known = await routerPresets();
-	if (!known.has(id)) {
-		throw new Error(
-			`${id} is in models.ini but the running router was started before it was added. ` +
-				"Restarting the router would unload the resident model from VRAM, so it was left resident; " +
-				"run /preset restart when the card is free, then run /preset again.",
-		);
-	}
-
-	onStatus(`Loading ${id}…`);
-	const response = await fetch(`${managerUrl()}/api/load`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ model: id }),
-		signal: timeoutSignal(20_000),
-	});
-	const result = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
-	if (!response.ok || result.ok === false) throw new Error(result.error ?? `load failed (HTTP ${response.status})`);
-	await waitUntilLoaded(id, (seconds, status) => {
-		if (seconds % 5 === 0) onStatus(`Loading ${id}… ${seconds}s (${status})`);
-	});
-}
-
-async function unloadPreset(id: string, onStatus: (text: string) => void): Promise<void> {
-	const presets = await managerState();
-	const preset = presets.find(model => model.id === id);
-	if (!preset) {
-		throw new Error(`unknown preset "${id}"; models.ini has:\n${formatPresets(presets)}`);
-	}
-	if (!isLoaded(preset)) {
-		onStatus(`${id} is not loaded.`);
-		return;
-	}
-	onStatus(`Unloading ${id}…`);
-	const response = await fetch(`${managerUrl()}/api/unload`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify({ model: id }),
-		signal: timeoutSignal(20_000),
-	});
-	const result = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
-	if (!response.ok || result.ok === false) throw new Error(result.error ?? `unload failed (HTTP ${response.status})`);
-	// The manager parks the context during unload, so a later load resumes it.
-	const startedAt = Date.now();
-	while (Date.now() - startedAt < 60_000) {
-		const current = (await managerState()).find(model => model.id === id);
-		if (!current || !isLoaded(current)) return;
-		await Bun.sleep(POLL_MS);
-	}
-	throw new Error(`timed out unloading ${id}`);
-}
-
-/** Parse `list` / `reload` / `load <id>` / `unload <id>` / bare `<id>` (load shorthand). */
+/** Parse `list` / `reload` / `restart` / `load <id>` / `unload <id>` / `<mode> [id]`. */
 function parsePresetArgs(arg: string): {
 	action: "list" | "reload" | "restart" | "load" | "unload" | "mode";
 	id?: string;
@@ -185,58 +65,36 @@ async function applyMode(
 	mode: RabidModeName,
 	modelId: string,
 	onStatus: (text: string) => void,
-): Promise<void> {
-	const preset = (await managerState()).find(model => model.id === modelId);
+): Promise<{ provider: string; id: string }> {
+	const state = await fetchManagerState();
+	const preset = state.models.find(model => model.id === modelId);
 	if (!preset) throw new Error(`"${modelId}" is not a preset in models.ini`);
-	if (!isLoaded(preset)) await loadPreset(modelId, onStatus);
+	if (!isModelLoaded(preset)) await loadPreset(modelId, onStatus);
 	cfgRabidMode.set(runtime.settings, mode);
-	await switchToPreset(runtime, modelId);
+	return await switchToLocalModel(runtime.session, modelId, PROVIDER);
 }
 
-async function postManager(path: string, body: object, timeoutMs = 30_000): Promise<void> {
-	const response = await fetch(`${managerUrl()}${path}`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(body),
-		signal: timeoutSignal(timeoutMs),
-	});
-	const result = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
-	if (!response.ok || result.ok === false) throw new Error(result.error ?? `${path} failed (HTTP ${response.status})`);
-}
-
-/**
- * Restarts the router so it re-reads models.ini. This is the one operation that
- * deliberately evicts the resident model; callers must confirm it first.
- */
-async function restartRouter(onStatus: (text: string) => void): Promise<void> {
-	onStatus("Stopping the llama router (the resident model will leave VRAM)…");
-	await postManager("/api/server/stop", {});
-	onStatus("Starting the llama router (re-reading models.ini)…");
-	await postManager("/api/server/start", {}, 60_000);
-	const startedAt = Date.now();
-	while (Date.now() - startedAt < 60_000) {
-		try {
-			await managerState();
-			return;
-		} catch {
-			await Bun.sleep(500);
-		}
-	}
-	throw new Error("router did not come back after restart");
-}
-
-async function switchToPreset(runtime: { session: SlashCommandRuntime["session"] }, id: string): Promise<void> {
-	const model = runtime.session.modelRegistry
-		.getAll("all")
-		.find(candidate => candidate.provider === PROVIDER && candidate.id === id);
-	if (!model) {
-		throw new Error(`${PROVIDER}/${id} is not in omp's model list yet; run /preset reload first`);
-	}
-	await runtime.session.setModel(model);
+async function switchToPreset(
+	runtime: { session: SlashCommandRuntime["session"] },
+	id: string,
+): Promise<{ provider: string; id: string }> {
+	return await switchToLocalModel(runtime.session, id, PROVIDER);
 }
 
 async function reloadModels(runtime: { session: SlashCommandRuntime["session"] }): Promise<void> {
 	await runtime.session.modelRegistry.refreshProvider(PROVIDER, "online-if-uncached");
+}
+
+/** The manager's model list, with the mode bundles hidden for the mode picker. */
+function localModelsForMode(models: readonly LlamaManagerModel[]): LlamaManagerModel[] {
+	return models.filter(
+		model => model.engine === "llama" && !RABID_PRESET_BUNDLES.has(model.id) && model.exists !== false,
+	);
+}
+
+function modeLabel(model: LlamaManagerModel): string {
+	const state = isModelLoaded(model) ? "loaded" : (model.status ?? "unloaded");
+	return `${model.id} (${state})`;
 }
 
 export const BUILTIN_LLAMA_PRESET_SLASH_COMMANDS: SlashCommandSpec[] = [
@@ -273,23 +131,25 @@ export const BUILTIN_LLAMA_PRESET_SLASH_COMMANDS: SlashCommandSpec[] = [
 					const current = runtime.session.model;
 					const modelId = parsed.id ?? (current?.provider === PROVIDER ? current.id : "");
 					if (!modelId) throw new Error("name a local model, e.g. /preset fast qwen3.8-27b");
-					await applyMode(runtime, mode, modelId, text => logger.debug(text, { source: "preset" }));
-					await runtime.output(`Applied ${mode} to ${modelId}; omp is on ${PROVIDER}/${modelId}.`);
+					const target = await applyMode(runtime, mode, modelId, text => logger.debug(text, { source: "preset" }));
+					await runtime.output(`Applied ${mode} to ${modelId}; omp is on ${target.provider}/${target.id}.`);
 					return commandConsumed();
 				}
 				if (parsed.action === "list") {
-					await runtime.output(`llama-server presets (${managerUrl()}):\n${formatPresets(await managerState())}`);
+					await runtime.output(`llama-server presets:\n${formatModelList((await fetchManagerState()).models)}`);
 					return commandConsumed();
 				}
 				const id = parsed.id ?? "";
 				if (parsed.action === "unload") {
-					await unloadPreset(id, text => logger.debug(text, { source: "preset" }));
-					await runtime.output(`Unloaded ${id}; its context was parked for a fast reload.`);
+					const result = await unloadPreset(id, text => logger.debug(text, { source: "preset" }));
+					await runtime.output(
+						`Unloaded ${id}; its context was parked for a fast reload${result.detail ? ` (${result.detail})` : ""}.`,
+					);
 					return commandConsumed();
 				}
 				await loadPreset(id, text => logger.debug(text, { source: "preset" }));
-				await switchToPreset(runtime, id);
-				await runtime.output(`Loaded ${id} and switched omp to ${PROVIDER}/${id}.`);
+				const target = await switchToPreset(runtime, id);
+				await runtime.output(`Loaded ${id} and switched omp to ${target.provider}/${target.id}.`);
 			} catch (error) {
 				await runtime.output(`Preset failed: ${errorMessage(error)}`);
 			}
@@ -319,7 +179,7 @@ export const BUILTIN_LLAMA_PRESET_SLASH_COMMANDS: SlashCommandSpec[] = [
 				}
 				if (parsed.action === "list") {
 					if (command.args.trim() !== "") {
-						ctx.showStatus(`llama-server presets:\n${formatPresets(await managerState())}`);
+						ctx.showStatus(`llama-server presets:\n${formatModelList((await fetchManagerState()).models)}`);
 						return commandConsumed();
 					}
 					// 1) Mode. 2) Which local model it applies to. 3) Confirm.
@@ -333,47 +193,46 @@ export const BUILTIN_LLAMA_PRESET_SLASH_COMMANDS: SlashCommandSpec[] = [
 							)?.split(" ")[0];
 					if (!isRabidMode(chosenMode)) return commandConsumed();
 
-					const all = await managerState();
-					const models = all.filter(
-						model => model.engine === "llama" && !RABID_PRESET_BUNDLES.has(model.id) && model.exists !== false,
-					);
+					const all = (await fetchManagerState()).models;
+					const models = localModelsForMode(all);
 					if (models.length === 0) {
 						ctx.showError("No local llama models are available in models.ini.");
 						return commandConsumed();
 					}
-					const modelLabels = models.map(model => {
-						const state = isLoaded(model) ? "loaded" : (model.status ?? "unloaded");
-						return `${model.id} (${state})`;
-					});
-					const pickedModel = await ctx.showHookSelector(`Apply ${chosenMode} to which model?`, modelLabels);
+					const pickedModel = await ctx.showHookSelector(
+						`Apply ${chosenMode} to which model?`,
+						models.map(modeLabel),
+					);
 					if (!pickedModel) return commandConsumed();
 					const modelId = pickedModel.split(" ")[0] ?? "";
 					if (!modelId) return commandConsumed();
 
 					const target = models.find(model => model.id === modelId);
-					const resident = all.find(model => isLoaded(model) && model.id !== modelId);
-					const evict = target && !isLoaded(target) && resident ? ` (unloads ${resident.id})` : "";
+					const resident = all.find(model => isModelLoaded(model) && model.id !== modelId);
+					const evict = target && !isModelLoaded(target) && resident ? ` (unloads ${resident.id})` : "";
 					const confirmed = await ctx.showHookSelector(`Apply ${chosenMode} to ${modelId}?${evict}`, [
 						"Apply (Enter)",
 						"Cancel (Esc)",
 					]);
 					if (confirmed !== "Apply (Enter)") return commandConsumed();
-					await applyMode(ctx, chosenMode, modelId, text => ctx.showStatus(text));
+					const switched = await applyMode(ctx, chosenMode, modelId, text => ctx.showStatus(text));
 					ctx.statusLine.invalidate();
-					ctx.showStatus(`Applied ${chosenMode} to ${modelId}; omp is on ${PROVIDER}/${modelId}.`);
+					ctx.showStatus(`Applied ${chosenMode} to ${modelId}; omp is on ${switched.provider}/${switched.id}.`);
 					return commandConsumed();
 				}
 				const id = parsed.id ?? "";
 				if (parsed.action === "unload") {
-					await unloadPreset(id, text => ctx.showStatus(text));
+					const result = await unloadPreset(id, text => ctx.showStatus(text));
 					ctx.statusLine.invalidate();
-					ctx.showStatus(`Unloaded ${id}; its context was parked for a fast reload.`);
+					ctx.showStatus(
+						`Unloaded ${id}; its context was parked for a fast reload${result.detail ? ` (${result.detail})` : ""}.`,
+					);
 					return commandConsumed();
 				}
 				await loadPreset(id, text => ctx.showStatus(text));
-				await switchToPreset(ctx, id);
+				const target = await switchToPreset(ctx, id);
 				ctx.statusLine.invalidate();
-				ctx.showStatus(`Loaded ${id}; omp is on ${PROVIDER}/${id}.`);
+				ctx.showStatus(`Loaded ${id}; omp is on ${target.provider}/${target.id}.`);
 			} catch (error) {
 				ctx.showError(`Preset failed: ${errorMessage(error)}`);
 			}

@@ -276,6 +276,34 @@ function aggregateDetails(files: readonly EditFileOutcome[], mode: EditMode): Ed
 }
 
 /**
+ * The engine reports a byte-identical patch as a successful `update` with an
+ * empty diff. Reporting that as success teaches a looping model that the call
+ * worked; treat an all-no-op call as a soft error and hand it proof instead.
+ * The proof is the current content hash plus the row ranges the payload targeted.
+ */
+async function noopEditProof(files: readonly EditFileOutcome[], input: string): Promise<string> {
+	const hashes = await Promise.all(
+		files.slice(0, 4).map(async file => {
+			try {
+				const bytes = await Bun.file(file.path).arrayBuffer();
+				return `${file.displayPath} content-hash=${Bun.hash(bytes).toString(16).padStart(16, "0")}`;
+			} catch {
+				return `${file.displayPath} content-hash=unavailable`;
+			}
+		}),
+	);
+	const rows = [...input.matchAll(/^PUT\s+([^:\n]+?)\s*:/gm)].map(match => match[1].trim());
+	return [
+		"No file changed: every edit section was a byte-identical no-op.",
+		...hashes,
+		rows.length > 0 ? `Targeted rows: ${rows.join(", ")}.` : "",
+		"The change is already on disk or the anchor is stale. Re-read the file and target a different section; do not reissue this payload.",
+	]
+		.filter(line => line.length > 0)
+		.join("\n");
+}
+
+/**
  * Combined `oldText` + `newText` character budget shared across a multi-file
  * result. The engine already prunes each file on its own; this keeps a
  * many-small-files batch from accumulating unbounded snapshot bytes in the
@@ -511,6 +539,15 @@ export class EditTool implements AgentTool<TInput> {
 
 		if (outcome.isError) {
 			return { content: [{ type: "text", text: outcome.text }], isError: true };
+		}
+
+		if (
+			outcome.files.length > 0 &&
+			outcome.files.every(file => file.op === "update" && file.diff.length === 0 && file.moveTo === undefined)
+		) {
+			const input = "input" in params && typeof params.input === "string" ? params.input : "";
+			const text = `${outcome.text}\n\n${await noopEditProof(outcome.files, input)}`;
+			return { content: [{ type: "text", text }], isError: true };
 		}
 
 		const details = aggregateDetails(outcome.files, this.mode);

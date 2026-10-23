@@ -5,6 +5,9 @@ import { fencedCode } from "../components/markdown";
 import { Text } from "../components/text";
 import { getLanguageFromPath } from "../lang-from-path";
 import { createHighlightStream, highlightCode, type Theme } from "../theme/theme";
+import { isNativeRendering } from "../native/state";
+import { TERMINAL } from "../terminal-capabilities";
+import { artifactPreviewsEnabled, visualArtifactKind, webpageTitle } from "./artifacts";
 import { fileHyperlink, renderStatusLine } from "../render";
 import { framedToolCard } from "../render/tool-card";
 import { wrapPrefixedLine } from "../render/hanging-wrap";
@@ -431,7 +434,56 @@ function renderContentPreview(
 	});
 }
 
-/** Render context for the write tool: resolves an `xd://`-mounted tool so its live renderer drives device dispatch previews. */
+/** The replacement body for a settled visual artifact write, elaborated per kind. */
+interface ArtifactWriteSummary {
+	readonly label: string;
+	readonly title?: string;
+	readonly hint: string;
+}
+
+/**
+ * Summary of a settled write whose value is what it renders, or `undefined`
+ * for source files (and for SVG writes on a terminal that cannot draw them).
+ * HTML and raster images always get one: the gallery can still open/preview
+ * them even where the terminal cannot draw inline graphics.
+ */
+function artifactWriteSummary(rawPath: string, content: string): ArtifactWriteSummary | undefined {
+	if (!artifactPreviewsEnabled() || splitUrlScheme(rawPath)) return undefined;
+	const kind = visualArtifactKind(rawPath);
+	if (!kind) return undefined;
+	if (kind === "webpage") {
+		return {
+			label: "Webpage",
+			title: webpageTitle(content),
+			hint: "Preview with /artifacts · Ctrl+O shows source",
+		};
+	}
+	if (kind === "svg") {
+		// A terminal that cannot draw the figure keeps the source, which is useful on its own.
+		if (TERMINAL.imageProtocol === null && !isNativeRendering()) return undefined;
+		return { label: "SVG", hint: "Rendered above · /artifacts · Ctrl+O shows source" };
+	}
+	return { label: "Image", hint: "Preview in /artifacts · Ctrl+O shows source" };
+}
+
+/** ANSI body of an {@link ArtifactWriteSummary}, in the same `\n\n`-prefixed shape as a source preview. */
+function renderArtifactSummary(summary: ArtifactWriteSummary, uiTheme: Theme): string {
+	const title = summary.title ? ` ${uiTheme.fg("dim", "·")} ${uiTheme.fg("toolOutput", summary.title)}` : "";
+	return `\n\n${uiTheme.fg("accent", summary.label)}${title}\n${uiTheme.fg("dim", summary.hint)}`;
+}
+
+/** Native body of an {@link ArtifactWriteSummary}: one wrapped line. */
+function describeArtifactSummary(summary: ArtifactWriteSummary): NativeNode {
+	return node("text", {
+		spans: [
+			span(summary.label, "bold"),
+			...(summary.title ? [span(` · ${summary.title}`, "muted")] : []),
+			span(` · ${summary.hint}`, "muted"),
+		],
+		wrap: "word",
+	});
+}
+
 export interface WriteRenderContext {
 	resolveXdevMounted?: (name: string) => XdevMountedRenderer | undefined;
 }
@@ -732,6 +784,7 @@ export const writeToolRenderer = {
 
 		const isPartial = options.isPartial === true;
 		const progressText = result.content?.find(c => c.type === "text")?.text ?? "";
+		const artifact = isPartial || options.expanded ? undefined : artifactWriteSummary(rawPath, fileContent);
 		const lineCount = countLines(fileContent);
 		const lineSuffix = formatLineCountSuffix(lineCount, uiTheme);
 		const execSuffix =
@@ -755,7 +808,9 @@ export const writeToolRenderer = {
 			uiTheme,
 			({ contentWidth }) => {
 				const { expanded } = options;
-				let body = renderContentPreview(fileContent, expanded, lang, uiTheme, previewCache);
+				let body = artifact
+					? renderArtifactSummary(artifact, uiTheme)
+					: renderContentPreview(fileContent, expanded, lang, uiTheme, previewCache);
 				if (isPartial && progressText) {
 					const safeProgressText = truncateToWidth(
 						replaceTabs(progressText),
@@ -841,17 +896,23 @@ export const writeToolRenderer = {
 		if (result.isError) return { tool, tone: "error", body: [errorText(resultText(result))] };
 		const progressText = resultText(result);
 		// A figure write leads with the drawing, drawn as its fence in a reply;
-		// its source follows below the collapsed clamp.
+		// a settled visual artifact replaces its source with a summary (the
+		// gallery and, for SVG, the drawing above show what it is).
 		const figure = writeFigure(args, result, options);
+		const artifact = isPartial || options.expanded ? undefined : artifactWriteSummary(rawPath, fileContent);
 		const body = compact<NativeChild>([
 			isPartial &&
 				progressText.length > 0 &&
 				node("text", { spans: [span(progressText, "muted")], truncate: "end" }),
 			describeFigure(figure),
-			fileContent.length > 0 && describeSource(rawPath, fileContent),
+			artifact ? describeArtifactSummary(artifact) : fileContent.length > 0 && describeSource(rawPath, fileContent),
 			diagnosticsSection(diagnostics),
 		]);
-		return { tool, body, preview: figure ? { lines: NATIVE_FIGURE_PREVIEW_LINES } : NATIVE_WRITE_PREVIEW };
+		return {
+			tool,
+			body,
+			preview: artifact ? { lines: 8 } : figure ? { lines: NATIVE_FIGURE_PREVIEW_LINES } : NATIVE_WRITE_PREVIEW,
+		};
 	},
 	figure: writeFigure,
 	mergeCallAndResult: true,

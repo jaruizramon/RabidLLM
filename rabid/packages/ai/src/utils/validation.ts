@@ -1249,6 +1249,115 @@ function normalizeDoubleEncodedKeys(value: unknown): { value: unknown; changed: 
 }
 
 // ============================================================================
+// Double-encoded scalar-value normalization (LLM quirk).
+// ============================================================================
+//
+// The key-side pass above handles `{ "\"op\"": "done" }`. Some models also
+// serialize the VALUE one time too many, so `path`, `cwd`, `command`, or an
+// enum arrives as the JSON encoding of the real string — literal quote
+// characters included (`path: '"/abs/file.ts"'`). Left alone, a quoted
+// absolute path is no longer absolute: `path.resolve(cwd, ...)` joins the
+// quote to the workspace and every write lands under a phantom directory
+// literally named `"`, while the success message still reports the requested
+// path. This pass peels exactly one layer off values where a JSON string
+// literal is never meaningful, or where the decoded value is the only enum
+// member that validates.
+//
+// Content-carrying fields are never touched: `content`, `code`, `input`,
+// `old_string`, `new_string`, and patch payloads may legitimately be quoted
+// strings, and rewriting them would corrupt the payload.
+
+/** Scalar argument names where a surrounding JSON string literal is a serialization accident, never content. */
+const SCALAR_STRING_VALUE_KEYS: Readonly<Record<string, true>> = Object.fromEntries(
+	[...IDENTIFIER_STRING_KEYS, "cwd", "dir", "directory", "command"].map(key => [key, true]),
+);
+
+/** One layer of accidental JSON string encoding, or null when `value` is not a JSON string literal. */
+function decodeJsonStringLiteral(value: string): string | null {
+	if (value.length < 2 || value[0] !== '"' || value[value.length - 1] !== '"') return null;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(value);
+	} catch {
+		return null;
+	}
+	if (typeof parsed !== "string" || parsed.length === 0 || parsed === value) return null;
+	return parsed;
+}
+
+/** The string `enum` of the property `key` on an object schema, when exactly that shape is present. */
+function stringEnumOfProperty(schema: unknown, key: string): readonly string[] | undefined {
+	if (!isPlainRecord(schema)) return undefined;
+	const properties = schema.properties;
+	if (!isPlainRecord(properties)) return undefined;
+	const property = properties[key];
+	if (!isPlainRecord(property)) return undefined;
+	const values = property.enum;
+	if (!Array.isArray(values) || values.length === 0) return undefined;
+	if (!values.every((value): value is string => typeof value === "string")) return undefined;
+	return values;
+}
+
+/**
+ * Recursively unwrap string values that were JSON-encoded an extra time.
+ *
+ * Fires on an allow-list of scalar names (paths, cwd, commands) and on any
+ * property whose schema declares a string `enum` and whose decoded value is a
+ * member. Content fields are skipped wholesale. The decoded value must be
+ * non-empty; a literal `""` is left alone so an intentionally empty value
+ * still reaches validation.
+ */
+function normalizeDoubleEncodedValues(schema: unknown, value: unknown): { value: unknown; changed: boolean } {
+	if (Array.isArray(value)) {
+		const itemSchema = isPlainRecord(schema) ? schema.items : undefined;
+		let changed = false;
+		let next = value;
+		for (let i = 0; i < value.length; i += 1) {
+			const normalized = normalizeDoubleEncodedValues(itemSchema, value[i]);
+			if (!normalized.changed) continue;
+			if (!changed) {
+				next = [...value];
+				changed = true;
+			}
+			next[i] = normalized.value;
+		}
+		return { value: changed ? next : value, changed };
+	}
+
+	if (!isPlainRecord(value)) return { value, changed: false };
+
+	let changed = false;
+	let out: Record<string, unknown> = value;
+	for (const [key, entry] of Object.entries(value)) {
+		if (CONTENT_CARRYING_KEYS.has(key) && key !== "command") continue;
+
+		let nextEntry = entry;
+		if (typeof entry === "string") {
+			const decoded = decodeJsonStringLiteral(entry);
+			if (decoded !== null) {
+				const enumValues = stringEnumOfProperty(schema, key);
+				const allowed =
+					enumValues !== undefined ? enumValues.includes(decoded) : Object.hasOwn(SCALAR_STRING_VALUE_KEYS, key);
+				if (allowed) nextEntry = decoded;
+			}
+		} else if (entry !== null && typeof entry === "object") {
+			const childSchema =
+				isPlainRecord(schema) && isPlainRecord(schema.properties) ? schema.properties[key] : undefined;
+			const normalized = normalizeDoubleEncodedValues(childSchema, entry);
+			if (normalized.changed) nextEntry = normalized.value;
+		}
+
+		if (nextEntry === entry) continue;
+		if (!changed) {
+			out = { ...value };
+			changed = true;
+		}
+		out[key] = nextEntry;
+	}
+	return { value: out, changed };
+}
+
+// ============================================================================
 // String-encoded array coercion for union(string, array) schemas.
 // ============================================================================
 
@@ -2036,6 +2145,16 @@ export function validateToolArguments(tool: Tool, toolCall: ToolCall): ToolCall[
 	const keyNormalization = normalizeDoubleEncodedKeys(normalizedArgs);
 	if (keyNormalization.changed) {
 		normalizedArgs = keyNormalization.value;
+		changed = true;
+	}
+
+	// The value-side twin: a scalar argument serialized as a JSON string literal
+	// (`path: '"/abs/file"'`) is relative once it reaches a filesystem tool. Runs
+	// before schema validation so the corrected value is what the tool executes
+	// and what a validation error echoes back.
+	const valueNormalization = normalizeDoubleEncodedValues(json, normalizedArgs);
+	if (valueNormalization.changed) {
+		normalizedArgs = valueNormalization.value;
 		changed = true;
 	}
 

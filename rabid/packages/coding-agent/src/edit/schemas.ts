@@ -1,7 +1,8 @@
 import { type } from "@oh-my-pi/omptype";
+import { PATH_ARG_PATTERN } from "../tools/path-utils";
 
 export const replaceEditSchema = type({
-	path: "string",
+	path: type(PATH_ARG_PATTERN),
 	old_string: "string",
 	new_string: "string",
 	"replace_all?": "boolean",
@@ -24,7 +25,7 @@ export const patchEditEntrySchema = type({
 export type PatchEditEntry = typeof patchEditEntrySchema.infer;
 
 export const patchEditSchema = type({
-	path: "string",
+	path: type(PATH_ARG_PATTERN),
 	edits: patchEditEntrySchema.array(),
 });
 

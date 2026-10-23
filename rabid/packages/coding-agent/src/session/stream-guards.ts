@@ -125,19 +125,47 @@ export class LoopGuards {
 	#geminiHeaderDetector: GeminiHeaderRunDetector | undefined;
 	#toolCallLoopGuard: ToolCallLoopGuard | undefined;
 	#toolCallLoopGuardSettingsKey: string | undefined;
+	#redirectIssued = false;
 
 	constructor(host: StreamGuardsHost) {
 		this.#host = host;
 	}
 
-	/** Records a completed turn and injects a redirect when calls repeat. */
+	/** Records a completed turn, redirects the first repeat, and stops an ignored one. */
 	recordTurn(messages: AgentMessage[], context: AgentTurnEndContext | undefined): void {
 		if (context?.message.role !== "assistant") return;
 		const detection = this.#activeToolCallLoopGuard()?.recordTurn({
 			message: context.message,
 			toolResults: context.toolResults,
 		});
-		if (detection) this.#injectToolCallLoopRedirect(messages, detection);
+		if (!detection) {
+			// The model changed the call or stopped using tools: the loop is broken,
+			// so a later repeat earns a fresh corrective before it is stopped.
+			this.#redirectIssued = false;
+			return;
+		}
+		if (this.#redirectIssued) {
+			logger.warn("tool-call loop ignored redirect; aborting run", {
+				toolName: detection.toolName,
+				count: detection.count,
+			});
+			this.#host.emitNotice(
+				"error",
+				`Stopped a repeated ${detection.toolName} loop after the corrective was ignored. Review the last tool error, then send new instructions.`,
+				"loop-guard",
+			);
+			this.#redirectIssued = false;
+			// A new run starts from a clean detector; the aborted run's call count
+			// must not make the next, genuinely different attempt look like a loop.
+			this.#toolCallLoopGuard = undefined;
+			this.#toolCallLoopGuardSettingsKey = undefined;
+			this.#host.agent.abort(
+				`Stopped: ${detection.toolName} repeated with identical arguments after the loop-guard correction was ignored`,
+			);
+			return;
+		}
+		this.#injectToolCallLoopRedirect(messages, detection);
+		this.#redirectIssued = true;
 	}
 
 	/** Feeds a streamed assistant event to the Gemini header-runaway detector. */
@@ -169,6 +197,7 @@ export class LoopGuards {
 		if (!this.#toolCallLoopGuard || this.#toolCallLoopGuardSettingsKey !== settingsKey) {
 			this.#toolCallLoopGuard = new ToolCallLoopGuard({ threshold, exemptTools });
 			this.#toolCallLoopGuardSettingsKey = settingsKey;
+			this.#redirectIssued = false;
 		}
 		return this.#toolCallLoopGuard;
 	}

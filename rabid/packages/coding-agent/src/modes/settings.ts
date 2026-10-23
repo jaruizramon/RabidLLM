@@ -17,6 +17,7 @@ import { setEmojiAutocompleteEnabled } from "@oh-my-pi/pi-tui/prompt/prompt-acti
 import { WORD_COMPLETION_METHODS } from "@oh-my-pi/pi-tui/prompt/word-completion";
 import { applyHyperlinkSetting } from "@oh-my-pi/pi-tui/render/hyperlink";
 import { setInlineImageMaxColumns, setInlineImageMaxRows } from "@oh-my-pi/pi-tui/render/render-utils";
+import { setArtifactPreviewsEnabled } from "@oh-my-pi/pi-tui/tools/artifacts";
 import { setShimmerMode } from "@oh-my-pi/pi-tui/theme/shimmer";
 import { setAutoThemeMapping, setColorBlindMode, setSymbolPreset } from "@oh-my-pi/pi-tui/theme/theme";
 
@@ -656,6 +657,20 @@ export const cfgDisplayHideToolActivity = register({
 		description: "Hide model-initiated tool calls and results from the transcript",
 	},
 });
+
+export const cfgDisplayArtifactPreviews = register({
+	id: "display.artifactPreviews",
+	type: "boolean",
+	default: true,
+	ui: {
+		tab: "appearance",
+		group: "Display",
+		label: "Artifact Previews",
+		description:
+			"Settled writes of images, SVGs, and webpages show a preview instead of their source; browse them all with /artifacts",
+	},
+});
+effect(cfgDisplayArtifactPreviews, setArtifactPreviewsEnabled);
 
 export const cfgDisplayShowTokenUsage = register({
 	id: "display.showTokenUsage",

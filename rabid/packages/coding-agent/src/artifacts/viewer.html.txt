@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Artifacts</title>
+<style>
+	:root {
+		--bg: #0b0d12;
+		--panel: #12151d;
+		--panel-2: #171b25;
+		--line: #252b38;
+		--text: #e8ebf2;
+		--muted: #8a93a6;
+		--dim: #5f687a;
+		--accent: #ffb454;
+		--accent-soft: rgba(255, 180, 84, 0.14);
+		--img: #0e1118;
+		--ok: #7fd99a;
+		--bad: #ff7b72;
+		--mono: "SFMono-Regular", ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+		--sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+	}
+	* { box-sizing: border-box; }
+	html, body { height: 100%; }
+	body {
+		margin: 0;
+		background: var(--bg);
+		color: var(--text);
+		font: 14px/1.45 var(--sans);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	header {
+		display: flex;
+		align-items: center;
+		gap: 18px;
+		padding: 14px 20px;
+		border-bottom: 1px solid var(--line);
+		background: linear-gradient(180deg, #10131a, #0d1016);
+	}
+	.brand { display: flex; align-items: center; gap: 9px; font-weight: 650; letter-spacing: 0.01em; }
+	.mark {
+		width: 26px; height: 26px; border-radius: 8px;
+		display: grid; place-items: center;
+		background: var(--accent-soft); color: var(--accent);
+		font-size: 15px;
+	}
+	.meta { color: var(--muted); font-size: 12.5px; min-width: 0; display: flex; gap: 6px; align-items: baseline; }
+	.meta #cwd { font-family: var(--mono); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+	.spacer { flex: 1; }
+	button {
+		font: inherit; color: var(--text);
+		background: var(--panel-2); border: 1px solid var(--line);
+		border-radius: 8px; padding: 7px 12px; cursor: pointer;
+		transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+	}
+	button:hover { border-color: #394154; background: #1b202b; }
+	button:active { transform: translateY(1px); }
+	button.primary { background: var(--accent-soft); border-color: rgba(255, 180, 84, 0.38); color: #ffd9a1; }
+	button.primary:hover { background: rgba(255, 180, 84, 0.2); }
+	button:disabled { opacity: 0.45; cursor: default; }
+	main { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); }
+	aside {
+		border-right: 1px solid var(--line);
+		background: var(--panel);
+		overflow-y: auto;
+		padding: 8px;
+	}
+	aside::-webkit-scrollbar, #stage::-webkit-scrollbar { width: 10px; }
+	aside::-webkit-scrollbar-thumb, #stage::-webkit-scrollbar-thumb { background: #262c3a; border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+	.section-label {
+		font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+		color: var(--dim); padding: 6px 8px 8px;
+	}
+	.item {
+		display: flex; gap: 10px; align-items: center;
+		padding: 8px; border-radius: 10px; cursor: pointer;
+		border: 1px solid transparent;
+	}
+	.item:hover { background: #171b24; }
+	.item.selected { background: var(--accent-soft); border-color: rgba(255, 180, 84, 0.28); }
+	.thumb {
+		width: 42px; height: 42px; flex: none; border-radius: 8px;
+		background: var(--img); border: 1px solid var(--line);
+		display: grid; place-items: center; overflow: hidden;
+	}
+	.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+	.thumb .glyph { font-size: 18px; color: var(--muted); }
+	.item.selected .thumb { border-color: rgba(255, 180, 84, 0.35); }
+	.item .text { min-width: 0; flex: 1; }
+	.item .name { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.item .sub { color: var(--muted); font-size: 11.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.badge {
+		display: inline-block; padding: 0 6px; border-radius: 5px;
+		background: #1e2430; color: var(--muted); font-size: 10.5px;
+		letter-spacing: 0.03em; text-transform: uppercase;
+	}
+	.badge.image { color: #8ec5ff; background: rgba(100, 170, 255, 0.12); }
+	.badge.svg { color: #c7a0ff; background: rgba(170, 120, 255, 0.12); }
+	.badge.webpage { color: #7fd99a; background: rgba(100, 220, 140, 0.12); }
+	#stage { position: relative; min-width: 0; display: flex; flex-direction: column; overflow: auto; }
+	.empty {
+		margin: auto; text-align: center; color: var(--muted);
+		max-width: 460px; padding: 40px 24px;
+	}
+	.empty .big { font-size: 34px; color: #2c3342; margin-bottom: 12px; }
+	.empty h2 { margin: 0 0 6px; color: var(--text); font-size: 17px; font-weight: 600; }
+	.empty p { margin: 0; font-size: 13px; }
+	#viewer { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+	#surface {
+		flex: 1; min-height: 260px; display: flex; align-items: center; justify-content: center;
+		padding: 28px; overflow: auto;
+		background:
+			linear-gradient(180deg, rgba(18, 21, 29, 0.55), rgba(11, 13, 18, 0.9)),
+			repeating-conic-gradient(#10131a 0% 25%, #0c0f15 0% 50%) 50% / 26px 26px;
+	}
+	#surface img.art {
+		max-width: 100%; max-height: 100%; object-fit: contain;
+		image-rendering: auto;
+		filter: drop-shadow(0 18px 50px rgba(0, 0, 0, 0.55));
+	}
+	#surface img.shot {
+		max-width: 100%; max-height: 100%; object-fit: contain;
+		border-radius: 10px; border: 1px solid var(--line);
+		box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+		background: #fff;
+	}
+	#surface .placeholder { color: var(--muted); font-size: 13px; text-align: center; }
+	.spinner {
+		width: 22px; height: 22px; border-radius: 50%;
+		border: 2px solid #2a3040; border-top-color: var(--accent);
+		animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+	}
+	@keyframes spin { to { transform: rotate(360deg); } }
+	.info {
+		flex: none; border-top: 1px solid var(--line);
+		background: var(--panel); padding: 14px 20px 16px;
+	}
+	.info .title { font-size: 16px; font-weight: 620; letter-spacing: 0.01em; }
+	.info .path { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 4px; word-break: break-all; }
+	.info .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12px; margin-top: 9px; }
+	.info .facts b { color: var(--text); font-weight: 550; }
+	.buttons { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+	.toast {
+		position: fixed; right: 20px; bottom: 20px;
+		background: #1b2130; border: 1px solid #2f3748; color: var(--text);
+		padding: 9px 13px; border-radius: 9px; font-size: 12.5px;
+		opacity: 0; transform: translateY(6px); pointer-events: none;
+		transition: opacity 160ms ease, transform 160ms ease;
+		max-width: 52vw;
+	}
+	.toast.show { opacity: 1; transform: translateY(0); }
+	.toast.error { border-color: rgba(255, 123, 114, 0.45); color: #ffc9c5; }
+	@media (max-width: 760px) {
+		main { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 34vh) minmax(0, 1fr); }
+		aside { border-right: 0; border-bottom: 1px solid var(--line); }
+		.meta #cwd { max-width: 34vw; }
+		#surface { padding: 16px; }
+	}
+</style>
+</head>
+<body>
+<header>
+	<div class="brand"><span class="mark">◈</span> Artifacts</div>
+	<div class="meta"><span id="count">0</span> files<span id="cwd"></span></div>
+	<div class="spacer"></div>
+	<button id="refresh" title="Rescan the workspace (r)">Refresh</button>
+</header>
+<main>
+	<aside>
+		<div class="section-label">Session artifacts</div>
+		<div id="list"></div>
+	</aside>
+	<section id="stage">
+		<div id="empty" class="empty">
+			<div class="big">◈</div>
+			<h2>No artifacts yet</h2>
+			<p>Ask the agent for an image, sprite, SVG, or webpage. New files appear here automatically.</p>
+		</div>
+		<div id="viewer" hidden>
+			<div id="surface"></div>
+			<div class="info">
+				<div class="title" id="title"></div>
+				<div class="path" id="path"></div>
+				<div class="facts" id="facts"></div>
+				<div class="buttons">
+					<button class="primary" id="open">Open</button>
+					<button id="copy">Copy path</button>
+					<button id="reload" hidden>Reload preview</button>
+				</div>
+			</div>
+		</div>
+	</section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+(() => {
+	const state = { artifacts: [], selectedPath: null, loading: false, lastFetched: 0 };
+	const $ = id => document.getElementById(id);
+	const listEl = $("list");
+	const emptyEl = $("empty");
+	const viewerEl = $("viewer");
+	const surfaceEl = $("surface");
+	const titleEl = $("title");
+	const pathEl = $("path");
+	const factsEl = $("facts");
+	const countEl = $("count");
+	const cwdEl = $("cwd");
+	const openEl = $("open");
+	const reloadEl = $("reload");
+	const copyEl = $("copy");
+	const refreshEl = $("refresh");
+	let toastTimer = 0;
+
+	function toast(message, error = false) {
+		const el = $("toast");
+		el.textContent = message;
+		el.classList.toggle("error", error);
+		el.classList.add("show");
+		clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+	}
+
+	function formatBytes(bytes) {
+		if (!Number.isFinite(bytes) || bytes < 0) return "—";
+		if (bytes < 1024) return bytes + " B";
+		const units = ["KB", "MB", "GB"];
+		let value = bytes / 1024;
+		let unit = 0;
+		while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+		return value.toFixed(value >= 10 ? 0 : 1) + " " + units[unit];
+	}
+
+	function formatTime(ms) {
+		const date = new Date(ms);
+		return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	}
+
+	function itemFor(path) {
+		return state.artifacts.find(artifact => artifact.path === path);
+	}
+
+	function fileUrl(artifact) {
+		return "/file?path=" + encodeURIComponent(artifact.path) + "&v=" + artifact.mtimeMs;
+	}
+
+	function previewUrl(artifact, refresh) {
+		return "/api/preview?path=" + encodeURIComponent(artifact.path) + "&v=" + artifact.mtimeMs + (refresh ? "&refresh=1" : "");
+	}
+
+	function kindGlyph(kind) {
+		if (kind === "webpage") return "▤";
+		if (kind === "svg") return "◈";
+		return "▧";
+	}
+
+	function renderList() {
+		listEl.textContent = "";
+		for (const artifact of state.artifacts) {
+			const item = document.createElement("div");
+			item.className = "item" + (artifact.path === state.selectedPath ? " selected" : "");
+			item.tabIndex = 0;
+			item.dataset.path = artifact.path;
+			item.addEventListener("click", () => select(artifact.path));
+
+			const thumb = document.createElement("div");
+			thumb.className = "thumb";
+			if (artifact.kind === "image" || artifact.kind === "svg") {
+				const img = document.createElement("img");
+				img.loading = "lazy";
+				img.alt = "";
+				img.src = fileUrl(artifact);
+				thumb.append(img);
+			} else {
+				const glyph = document.createElement("span");
+				glyph.className = "glyph";
+				glyph.textContent = kindGlyph(artifact.kind);
+				thumb.append(glyph);
+			}
+
+			const text = document.createElement("div");
+			text.className = "text";
+			const name = document.createElement("div");
+			name.className = "name";
+			name.textContent = artifact.name;
+			const sub = document.createElement("div");
+			sub.className = "sub";
+			const badge = document.createElement("span");
+			badge.className = "badge " + artifact.kind;
+			badge.textContent = artifact.kind === "webpage" ? "web" : artifact.kind;
+			sub.append(badge, document.createTextNode("  " + formatBytes(artifact.size)));
+			text.append(name, sub);
+			item.append(thumb, text);
+			listEl.append(item);
+		}
+	}
+
+	function select(path) {
+		if (state.selectedPath === path) return;
+		state.selectedPath = path;
+		renderList();
+		renderDetail(false);
+	}
+
+	function renderDetail(refresh) {
+		const artifact = itemFor(state.selectedPath);
+		emptyEl.hidden = true;
+		viewerEl.hidden = !artifact;
+		if (!artifact) { emptyEl.hidden = false; return; }
+		titleEl.textContent = artifact.title || artifact.name;
+		pathEl.textContent = artifact.path;
+		factsEl.textContent = "";
+		const facts = [
+			["kind", artifact.kind],
+			["size", formatBytes(artifact.size)],
+			["modified", formatTime(artifact.mtimeMs)],
+			["source", artifact.tool || artifact.source],
+		];
+		for (const [key, value] of facts) {
+			const span = document.createElement("span");
+			const label = document.createElement("b");
+			label.textContent = value;
+			span.append(key + " ", label);
+			factsEl.append(span);
+		}
+		surfaceEl.textContent = "";
+		const loading = document.createElement("div");
+		loading.className = "placeholder";
+		const spinner = document.createElement("div");
+		spinner.className = "spinner";
+		loading.append(spinner, document.createTextNode("Rendering preview…"));
+		surfaceEl.append(loading);
+		reloadEl.hidden = artifact.kind !== "webpage";
+		openEl.textContent = artifact.kind === "webpage" ? "Open page" : "Open image";
+
+		const img = document.createElement("img");
+		img.alt = artifact.title || artifact.name;
+		img.className = artifact.kind === "webpage" ? "shot" : "art";
+		img.src = artifact.kind === "webpage" ? previewUrl(artifact, refresh) : fileUrl(artifact);
+		img.addEventListener("load", () => { if (surfaceEl.contains(loading)) { surfaceEl.textContent = ""; surfaceEl.append(img); } });
+		img.addEventListener("error", () => {
+			surfaceEl.textContent = "";
+			const message = document.createElement("div");
+			message.className = "placeholder";
+			message.textContent = artifact.kind === "webpage"
+				? "Could not render this webpage. Open it in a browser window instead."
+				: "Could not load this image.";
+			surfaceEl.append(message);
+			toast(artifact.kind === "webpage" ? "Webpage preview failed" : "Image preview failed", true);
+		});
+	}
+
+	async function refreshArtifacts(force) {
+		if (state.loading) return;
+		state.loading = true;
+		refreshEl.disabled = true;
+		try {
+			const response = await fetch("/api/artifacts" + (force ? "?refresh=1" : ""), { cache: "no-store" });
+			if (!response.ok) throw new Error("HTTP " + response.status);
+			const data = await response.json();
+			const previous = itemFor(state.selectedPath);
+			state.artifacts = Array.isArray(data.artifacts) ? data.artifacts : [];
+			state.lastFetched = Date.now();
+			countEl.textContent = String(state.artifacts.length);
+			cwdEl.textContent = data.cwd ? " · " + data.cwd : "";
+			if (!itemFor(state.selectedPath)) state.selectedPath = state.artifacts[0]?.path || null;
+			renderList();
+			const current = itemFor(state.selectedPath);
+			const changed = !previous || !current || previous.mtimeMs !== current.mtimeMs || previous.kind !== current.kind;
+			renderDetail(changed);
+		} catch (error) {
+			toast("Could not load artifacts: " + (error.message || error), true);
+		} finally {
+			state.loading = false;
+			refreshEl.disabled = false;
+		}
+	}
+
+	async function openSelected() {
+		const artifact = itemFor(state.selectedPath);
+		if (!artifact) return;
+		if (artifact.kind === "webpage") {
+			try {
+				const response = await fetch("/api/open", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ path: artifact.path }),
+				});
+				if (!response.ok) throw new Error("HTTP " + response.status);
+				toast("Opening in your browser…");
+			} catch (error) {
+				toast("Could not open the page: " + (error.message || error), true);
+			}
+			return;
+		}
+		window.open(fileUrl(artifact), "_blank", "noopener,noreferrer");
+	}
+
+	async function copySelected() {
+		const artifact = itemFor(state.selectedPath);
+		if (!artifact) return;
+		try {
+			await navigator.clipboard.writeText(artifact.path);
+			toast("Copied path");
+		} catch {
+			const area = document.createElement("textarea");
+			area.value = artifact.path;
+			document.body.append(area);
+			area.select();
+			document.execCommand("copy");
+			area.remove();
+			toast("Copied path");
+		}
+	}
+
+	refreshEl.addEventListener("click", () => refreshArtifacts(true));
+	openEl.addEventListener("click", openSelected);
+	reloadEl.addEventListener("click", () => renderDetail(true));
+	copyEl.addEventListener("click", copySelected);
+	document.addEventListener("keydown", event => {
+		if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+		const index = state.artifacts.findIndex(artifact => artifact.path === state.selectedPath);
+		if (event.key === "ArrowDown" || event.key === "j") {
+			event.preventDefault();
+			const next = state.artifacts[Math.min(state.artifacts.length - 1, index + 1)];
+			if (next) select(next.path);
+		} else if (event.key === "ArrowUp" || event.key === "k") {
+			event.preventDefault();
+			const next = state.artifacts[Math.max(0, index - 1)];
+			if (next) select(next.path);
+		} else if (event.key === "Enter" || event.key === "o") {
+			event.preventDefault();
+			openSelected();
+		} else if (event.key === "r") {
+			event.preventDefault();
+			refreshArtifacts(true);
+		} else if (event.key === "c") {
+			event.preventDefault();
+			copySelected();
+		}
+	});
+
+	refreshArtifacts(true);
+	setInterval(() => {
+		if (!document.hidden) refreshArtifacts(false);
+	}, 2500);
+	document.addEventListener("visibilitychange", () => {
+		if (!document.hidden && Date.now() - state.lastFetched > 2500) refreshArtifacts(false);
+	});
+})();
+</script>
+</body>
+</html>

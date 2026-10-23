@@ -72,7 +72,12 @@ beforeEach(() => {
 		port: 0,
 		async fetch(request) {
 			const url = new URL(request.url);
-			if (url.pathname === "/api/state") return Response.json({ models: presets });
+			if (url.pathname === "/api/state") {
+				return Response.json({
+					server: { up: true, engine: "llama", router_port: 8080, ui_port: 8090 },
+					models: presets,
+				});
+			}
 			if (url.pathname === "/api/load") {
 				const body = (await request.json()) as { model: string };
 				loads.push(body.model);

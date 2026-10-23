@@ -10,6 +10,9 @@ Capture exact technical state, not abstractions.
 - Test results, observed failures
 - Decisions made
 - Partial work affecting the next step
+- A `Done` item requires the exact command or test and its outcome. Applied but unverified work is `In Progress`.
+- Record failing tests with their exact failing command/output under `In Progress` or `Pending`; never mark their target `Done`.
+- If the log shows one tool call repeated with identical arguments, record the repetition and the correction it ignored. Never mark that call's target `Done`.
 Register: address the successor directly in the imperative ("Fix X", "Run Y") — never first person ("I need to…", "my attempt…").
 The handoff mechanism is invisible to the document: NEVER list writing, generating, or delivering a handoff/summary/context document as progress or a next step. Progress and Next Steps cover the user's task only.
 </instruction>

@@ -462,6 +462,7 @@ import { SessionTools, type SessionToolsHost } from "./session-tools";
 import { resolveOpenAIWebsocketPreference } from "./settings-stream-fn";
 import type { ShakeMode, ShakeResult } from "./shake-types";
 import { ToolChoiceQueue } from "./tool-choice-queue";
+import { ToolFailureTracker } from "./tool-failure-tracker";
 import { planTurnPersistence, sameMessageContent, sessionMessagePersistenceKey } from "./turn-persistence";
 import { TurnRecovery, type TurnRecoveryHost } from "./turn-recovery";
 import { YieldQueue } from "./yield-queue";
@@ -1102,6 +1103,7 @@ export class AgentSession implements SettingsScope {
 
 	readonly #ttsr: TtsrCoordinator;
 	readonly #stats: SessionStatsTracker;
+	readonly #toolFailures = new ToolFailureTracker();
 
 	/** One-shot flag for expected internal plan-mode aborts. Approval actions may
 	 *  abort the post-approval continuation before compaction, execution, or
@@ -5195,6 +5197,12 @@ export class AgentSession implements SettingsScope {
 	}
 
 	#afterToolCall(ctx: AfterToolCallContext): AfterToolCallResult | undefined {
+		const failureNote = this.#toolFailures.recordOutcome(
+			ctx.toolCall.name,
+			ctx.args,
+			ctx.isError,
+			ctx.result.content,
+		);
 		if (
 			this.#isTerminalYieldToolResult({
 				toolName: ctx.toolCall.name,
@@ -5207,7 +5215,14 @@ export class AgentSession implements SettingsScope {
 			this.#synchronouslyTerminatedYieldToolCallIds.add(ctx.toolCall.id);
 			this.agent.abort(TERMINAL_TOOL_RESULT_ABORT_REASON);
 		}
-		return this.#ttsr.afterToolCall(ctx);
+		const ttsrResult = this.#ttsr.afterToolCall(ctx);
+		if (failureNote?.additionalContext === undefined) return ttsrResult;
+		return {
+			...ttsrResult,
+			additionalContext: ttsrResult?.additionalContext
+				? `${ttsrResult.additionalContext}\n\n${failureNote.additionalContext}`
+				: failureNote.additionalContext,
+		};
 	}
 	/**
 	 * Emits the extension `tool_call` event for a loop-dispatched call at
@@ -5222,6 +5237,13 @@ export class AgentSession implements SettingsScope {
 	async #beforeToolCall(ctx: BeforeToolCallContext, signal?: AbortSignal): Promise<BeforeToolCallResult | undefined> {
 		const runner = this.#extensionRunner;
 		runner?.markLoopToolCall?.(ctx.toolCall.id, ctx.tool.name);
+		// A third byte-identical call cannot change its outcome. Block it before
+		// scheduling so a looping model gets a reason instead of another error.
+		const failureGuard = this.#toolFailures.beforeCall(ctx.tool.name, ctx.args);
+		if (failureGuard?.block) {
+			runner?.clearLoopToolCall?.(ctx.toolCall.id, ctx.tool.name);
+			return failureGuard;
+		}
 		const ttsrResult = await this.#ttsr.beforeToolCall(ctx);
 		if (ttsrResult) {
 			runner?.clearLoopToolCall?.(ctx.toolCall.id, ctx.tool.name);
@@ -7690,6 +7712,12 @@ export class AgentSession implements SettingsScope {
 			return true;
 		}
 
+		// A new turn is new evidence: a call that failed last turn may be valid now
+		// (installed dependency, corrected workspace). A queued steer does not reset
+		// the guard: it changed the instructions, not the call's arguments, so the
+		// identical retry still cannot produce a different outcome.
+		this.#toolFailures.reset();
+
 		// Captured before the normalization/vision-description awaits below so an
 		// abort() landing during either can be told apart from a fresh submission —
 		// see the drop check right after those awaits.
@@ -9309,7 +9337,7 @@ export class AgentSession implements SettingsScope {
 		content: string | (TextContent | ImageContent)[],
 		options?: SendUserMessageOptions,
 	): Promise<void> {
-		// Normalize content to text string + optional images
+		// Normalize content to text string or optional images
 		let text: string;
 		let images: ImageContent[] | undefined;
 
@@ -10193,6 +10221,7 @@ export class AgentSession implements SettingsScope {
 		}
 
 		this.#disconnectFromAgent();
+		this.#toolFailures.reset();
 		let advisorRecordersDetached = false;
 		await this.abort();
 		this.#cancelOwnAsyncJobs();
@@ -11826,6 +11855,7 @@ export class AgentSession implements SettingsScope {
 		}
 
 		this.#disconnectFromAgent();
+		this.#toolFailures.reset();
 		await this.abort({ goalReason: "internal" });
 		await this.#sessionBeforeSwitchReconciler?.();
 

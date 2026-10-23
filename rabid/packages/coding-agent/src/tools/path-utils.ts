@@ -309,6 +309,27 @@ function isInternalUrlPath(filePath: string): boolean {
 	return InternalUrlRouter.instance().canHandle(expandPath(filePath));
 }
 
+/** Path-shaped tool argument schema pattern: any quote character marks a serialization accident. */
+export const PATH_ARG_PATTERN = /^[^"]*$/;
+
+/**
+ * Reject a filesystem path carrying a quote character as a whole segment or at
+ * the edge of one. That is the shape a JSON-string-literal-wrapped argument
+ * produces (`"/home/x"` becomes the literal path segment `"`), and resolving it
+ * silently writes under a phantom directory instead of the requested file.
+ * Internal URLs are exempt: a query string may legitimately contain quotes.
+ */
+export function assertNoQuotedPathSegment(filePath: string): void {
+	if (isInternalUrlPath(filePath)) return;
+	for (const segment of filePath.split(/[\\/]+/)) {
+		if (segment === '"' || segment.startsWith('"') || segment.endsWith('"')) {
+			throw new ToolError(
+				`Path "${filePath}" contains a quote character in a path segment. The argument was JSON-string-literal wrapped; pass the raw path without surrounding quotes.`,
+			);
+		}
+	}
+}
+
 /**
  * Resolve a path relative to the given cwd.
  * Handles ~ expansion and absolute paths.
@@ -318,9 +339,17 @@ function isInternalUrlPath(filePath: string): boolean {
  * filesystem root is almost never what they intended.
  */
 export function resolveToCwd(filePath: string, cwd: string): string {
-	const expanded = normalizeWindowsDriveAliasPath(expandPath(filePath));
+	// Models that serialize a path as a JSON string literal send the quote
+	// characters as part of the value. `path.resolve` then treats the quoted
+	// path as relative and writes under a phantom directory literally named
+	// `"`, while the success message still names the requested path. Peel the
+	// outer pair here and refuse any remaining quote-shaped segment so the
+	// failure is loud instead of a silent misdirected write.
+	const unquoted = stripOuterDoubleQuotes(filePath);
+	assertNoQuotedPathSegment(unquoted);
+	const expanded = normalizeWindowsDriveAliasPath(expandPath(unquoted));
 
-	assertNotInternalUrl(expanded, filePath);
+	assertNotInternalUrl(expanded, unquoted);
 
 	if (/^\/+$/.test(expanded)) {
 		return cwd;
