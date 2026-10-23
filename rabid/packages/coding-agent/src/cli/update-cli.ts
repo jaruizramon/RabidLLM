@@ -1,7 +1,7 @@
 /**
  * Update CLI command handler.
  *
- * Handles `omp update` to check for and install updates.
+ * Handles `rabid update` to check for and install updates.
  * Uses the installer that owns the active omp executable when it can be detected.
  */
 import * as fs from "node:fs";
@@ -386,7 +386,7 @@ export function isSourceCheckout(): boolean {
  *
  * A manager (Tern) keeps `manager.json` (`{"manager": "tern", "name": "Tern"}`) two
  * directories above every binary it installs (`<root>/versions/<version>`,
- * `<root>/bin/omp.exe`) and updates them itself, so `omp update` must leave them alone.
+ * `<root>/bin/omp.exe`) and updates them itself, so `rabid update` must leave them alone.
  * A missing or unreadable manifest means unmanaged.
  */
 export async function managedInstallName(binaryPath: string): Promise<string | undefined> {
@@ -1055,11 +1055,11 @@ async function pruneBunCacheAfterGlobalInstall(): Promise<BunInstallCachePruneRe
  * Resolve the path that `omp` maps to in the user's PATH.
  */
 function resolveOmpPath(): string | undefined {
-	return $which(APP_NAME) ?? undefined;
+	return $which(APP_NAME) ?? $which("omp") ?? undefined;
 }
 
 /**
- * Parse the version a launcher reports from `omp --version` output
+ * Parse the version a launcher reports from `rabid --version` output
  * (`omp/X.Y.Z`, or a prerelease such as `omp/X.Y.Z-canary.1`).
  *
  * The prerelease suffix is preserved so a correctly installed canary build
@@ -1067,8 +1067,11 @@ function resolveOmpPath(): string | undefined {
  * being mistaken for an unreplaced launcher.
  */
 export function parseReportedVersion(output: string): string | undefined {
-	if (!output.startsWith(`${APP_NAME}/`)) return undefined;
-	return output.slice(APP_NAME.length + 1).match(/^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/)?.[1];
+	// Accept the legacy `omp/` prefix so an unreplaced upstream launcher still
+	// verifies during the rebrand transition.
+	const prefix = [APP_NAME, "omp"].find(candidate => output.startsWith(`${candidate}/`));
+	if (!prefix) return undefined;
+	return output.slice(prefix.length + 1).match(/^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/)?.[1];
 }
 
 async function reportedVersionAtPath(binaryPath: string): Promise<string | undefined> {
@@ -1309,7 +1312,7 @@ export async function replaceBinaryForUpdate(options: BinaryReplacementOptions):
 		const verification = await options.verifyInstalledVersion(options.expectedVersion);
 		if (!verification.ok) {
 			throw new Error(
-				`${formatVerificationFailure(verification, options.expectedVersion)}; restored previous ${APP_NAME} binary`,
+				`${formatVerificationFailure(verification, options.expectedVersion)}; restored previous ${path.basename(options.targetPath)} binary`,
 			);
 		}
 
@@ -1358,7 +1361,7 @@ function buildVersionedPackageInstallArgs(
  * - `--no-cache` tells bun to ignore its on-disk manifest snapshot so it
  *   re-fetches metadata from that registry on every invocation.
  *
- * Together these two flags make `omp update` produce exactly the registry
+ * Together these two flags make `rabid update` produce exactly the registry
  * lookup the version check just performed. See #1686.
  *
  * Also pins {@link NATIVES_PACKAGE} and the platform-specific
@@ -1912,7 +1915,7 @@ export async function updateViaBinaryAt(
 	} = {},
 ): Promise<void> {
 	if (options.validateExistingTarget) await validateExistingUpdateTarget(targetPath);
-	// Unique per attempt so two overlapping `omp update` runs never share a temp
+	// Unique per attempt so two overlapping `rabid update` runs never share a temp
 	// or backup path. A fixed temp name (`<binary>.new`) let the second run's
 	// pre-download unlink delete the first run's still-downloading temp file; the
 	// first kept writing to its open fd (size + digest still passed), then chmod
@@ -1927,7 +1930,7 @@ export async function updateViaBinaryAt(
 	await downloadBuild(build, { basePath: targetPath, patchPath: `${targetPath}.${attempt}.patch`, tempPath }, options);
 
 	// Serialize the target swap and stale-artifact sweep per target so two
-	// overlapping `omp update` runs never replace the same binary concurrently
+	// overlapping `rabid update` runs never replace the same binary concurrently
 	// or reclaim each other's live backup/temp files. The download above writes
 	// to a unique temp path and is safe to overlap; only the swap is shared.
 	const verification = await withFileLock(targetPath, async () => {
@@ -1992,7 +1995,11 @@ export async function updateViaShimTakeover(
 	options: BuildDownloadOptions & { verifyBinary?: typeof verifyBinaryAtPath } = {},
 ): Promise<void> {
 	const launcherDir = path.dirname(shimPath);
-	const exePath = path.join(launcherDir, `${APP_NAME}.exe`);
+	// A legacy `omp.cmd` shim keeps its own basename; a branded `rabid.cmd`
+	// installs `rabid.exe`. The launcher, not APP_NAME, names the sidecar.
+	const launcherBase = path.basename(shimPath).replace(/\.(cmd|ps1|bat)$/i, "");
+	const exeName = `${launcherBase}.exe`;
+	const exePath = path.join(launcherDir, exeName);
 	const attempt = `${Date.now()}.${process.pid}.${updateAttemptSeq++}`;
 	const tempPath = `${exePath}.${attempt}.new`;
 	await downloadBuild(build, { basePath: exePath, patchPath: `${exePath}.${attempt}.patch`, tempPath }, options);
@@ -2002,7 +2009,7 @@ export async function updateViaShimTakeover(
 	// never retire the same shims or reclaim a live run's backup before its
 	// verification can roll it back.
 	await withFileLock(exePath, async () => {
-		console.log(chalk.dim(`Installing ${APP_NAME}.exe beside the script launcher...`));
+		console.log(chalk.dim(`Installing ${exeName} beside the script launcher...`));
 		await fs.promises.rename(tempPath, exePath);
 		// Retire the shims so PATH resolution lands on the new exe. Renamed, not
 		// deleted: restorable on verification failure, and Windows permits
@@ -2013,7 +2020,7 @@ export async function updateViaShimTakeover(
 		const backupSuffix = `${attempt}.bak`;
 		const retired: Array<{ launcher: string; backup: string }> = [];
 		for (const ext of ["", ".cmd", ".ps1", ".bat"]) {
-			const launcher = path.join(launcherDir, `${APP_NAME}${ext}`);
+			const launcher = path.join(launcherDir, `${launcherBase}${ext}`);
 			const backup = `${launcher}.${backupSuffix}`;
 			try {
 				await fs.promises.rename(launcher, backup);
@@ -2022,7 +2029,7 @@ export async function updateViaShimTakeover(
 				if (isEnoent(err)) continue;
 				try {
 					const original = await Bun.file(launcher).text();
-					await Bun.write(launcher, SHIM_FORWARDERS[ext]);
+					await Bun.write(launcher, SHIM_FORWARDERS[ext].replaceAll(`${APP_NAME}.exe`, exeName));
 					forwarded.push({ launcher, original });
 				} catch {
 					stuck.push(launcher);
@@ -2048,7 +2055,7 @@ export async function updateViaShimTakeover(
 			}
 			await unlinkIfExists(exePath);
 			throw new Error(
-				`${formatVerificationFailure(verification, build.version)}; restored previous ${APP_NAME} launcher`,
+				`${formatVerificationFailure(verification, build.version)}; restored previous ${launcherBase} launcher`,
 			);
 		}
 		for (const { backup } of retired) {
@@ -2056,7 +2063,7 @@ export async function updateViaShimTakeover(
 		}
 		// Reclaim exe backups and retired-shim leftovers from earlier attempts.
 		for (const ext of [".exe", "", ".cmd", ".ps1", ".bat"]) {
-			await sweepStaleUpdateArtifacts(path.join(launcherDir, `${APP_NAME}${ext}`));
+			await sweepStaleUpdateArtifacts(path.join(launcherDir, `${launcherBase}${ext}`));
 		}
 	});
 	for (const { launcher } of forwarded) {
@@ -2107,7 +2114,7 @@ function persistChannel(channel: UpdateChannel): void {
 type BinaryUpdateTarget = Extract<UpdateTarget, { method: "binary" }>;
 type ManagedUpdateTarget = Exclude<UpdateTarget, { method: "binary" }>;
 
-/** What `omp update` was asked to do, after resolving the channel. */
+/** What `rabid update` was asked to do, after resolving the channel. */
 interface UpdateRequest {
 	force: boolean;
 	check: boolean;

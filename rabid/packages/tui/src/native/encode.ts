@@ -145,7 +145,7 @@ export function encodeTspHelloQuery(version?: string): string {
 	return encodeTspJson("q", {
 		q: "hello",
 		v: [TSP_VERSION],
-		app: "omp",
+		app: "rabid",
 		features: ["edit", "undo", "send"],
 		ver: version,
 	});

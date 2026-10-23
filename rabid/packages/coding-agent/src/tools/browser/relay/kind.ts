@@ -1,8 +1,8 @@
 /**
  * Browser relay mode: drive the user's own Chrome tabs through the local CDP
- * relay served by `omp browser-relay` (sibling `server.ts`/`bridge.ts`) plus
+ * relay served by `rabid browser-relay` (sibling `server.ts`/`bridge.ts`) plus
  * its companion extension (`packages/browser-relay`, installed via
- * `omp browser-relay install`). The relay impersonates Chrome's CDP discovery
+ * `rabid browser-relay install`). The relay impersonates Chrome's CDP discovery
  * endpoint, so beyond kind resolution the entire connected-browser machinery
  * (registry, tab supervisor, tab workers) applies unchanged.
  */

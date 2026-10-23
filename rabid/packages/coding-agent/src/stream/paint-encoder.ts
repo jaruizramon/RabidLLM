@@ -1,7 +1,7 @@
 /**
  * TUI paint → stream screen frames.
  *
- * Both consumers of a session's screen — the live `omp stream` publisher and
+ * Both consumers of a session's screen — the live `rabid stream` publisher and
  * the `/record` recorder — observe `TuiPaint`s and need the same thing out of
  * them: rows reduced to the stream-safe ANSI subset, secrets redacted, and the
  * viewport expressed as full snapshots or row patches against what the

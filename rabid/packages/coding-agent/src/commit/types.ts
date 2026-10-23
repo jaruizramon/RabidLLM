@@ -47,7 +47,7 @@ export const CHANGELOG_CATEGORIES: ChangelogCategory[] = [
 	"Security",
 ];
 
-/** Arguments accepted by the `omp commit` command. */
+/** Arguments accepted by the `rabid commit` command. */
 export interface CommitCommandArgs {
 	/** Push after commit */
 	push: boolean;

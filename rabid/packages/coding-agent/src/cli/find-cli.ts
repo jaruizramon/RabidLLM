@@ -1,5 +1,5 @@
 /**
- * `omp find`: run the semantic `find` tool's cascade from the shell. Same
+ * `rabid find`: run the semantic `find` tool's cascade from the shell. Same
  * search as the tool, printed as a ranked, colored digest (or JSON).
  */
 import { ToolError } from "@oh-my-pi/pi-tui/tools/tool-errors";

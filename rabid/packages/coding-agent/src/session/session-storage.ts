@@ -27,7 +27,7 @@ const utf8Decoder = new TextDecoder("utf-8");
 /**
  * Basename of a rewrite staged by {@link sessionStagingPath}; group 1 is the
  * target's basename. A live publish renames it away within milliseconds;
- * `omp gc` reclaims one a killed writer left behind.
+ * `rabid gc` reclaims one a killed writer left behind.
  */
 export const SESSION_STAGING_RE = /^\.(.+)\.[0-9a-f]{16}\.tmp$/;
 
@@ -579,7 +579,7 @@ function readSessionHeaderIdSync(sessionPath: string): string | undefined {
 /**
  * Take a session's ownership lease without waiting, or `null` while another
  * process holds it. A process writing the session holds it (see
- * `FileSessionStorage.claimSession`) until it exits; `omp gc` probes it to tell
+ * `FileSessionStorage.claimSession`) until it exits; `rabid gc` probes it to tell
  * whether a session is live. Keyed by the session id from the journal's
  * header, not by the file's path, so every process that reaches the journal
  * (through a symlink, a hard link, or after a move) meets the same lease. Ids

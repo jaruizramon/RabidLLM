@@ -403,10 +403,10 @@ export class PluginListComponent extends OverlayPanel {
 						text([span("No plugins installed", "muted")]),
 						node("kv", {
 							items: [
-								{ k: "Install npm plugins", v: [span("omp plugin install <package>", "code")] },
+								{ k: "Install npm plugins", v: [span("rabid plugin install <package>", "code")] },
 								{
 									k: "Install marketplace plugins",
-									v: [span("omp plugin install <name>@<marketplace>", "code")],
+									v: [span("rabid plugin install <name>@<marketplace>", "code")],
 								},
 							],
 						}),

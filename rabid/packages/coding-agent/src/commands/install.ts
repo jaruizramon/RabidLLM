@@ -1,6 +1,6 @@
 /**
- * `omp install <target>` — top-level convenience over `omp plugin install` /
- * `omp plugin link`.
+ * `rabid install <target>` — top-level convenience over `rabid plugin install` /
+ * `rabid plugin link`.
  *
  * The docs (omp.sh/docs/extension-authoring) advertise
  *
@@ -26,7 +26,7 @@ import { type PluginAction, type PluginCommandArgs, runPluginCommand } from "../
 import { initTheme } from "@oh-my-pi/pi-tui/theme";
 
 /**
- * Heuristic used to decide whether `omp install <target>` should `link` a
+ * Heuristic used to decide whether `rabid install <target>` should `link` a
  * local directory or `install` a remote spec. Exported for tests.
  */
 export function looksLikeLocalPath(target: string, cwd?: string): boolean {

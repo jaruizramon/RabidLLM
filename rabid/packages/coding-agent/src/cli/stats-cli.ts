@@ -1,7 +1,7 @@
 /**
  * Stats CLI command handlers.
  *
- * Handles `omp stats` subcommand for viewing AI usage statistics.
+ * Handles `rabid stats` subcommand for viewing AI usage statistics.
  */
 
 import { formatKeyHint } from "@oh-my-pi/pi-tui/key-hint-format";

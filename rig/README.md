@@ -69,7 +69,7 @@ replace. It creates `~/models` and prints the exact `hf download` line for every
   live worker CPU%/RSS) and **Load — CPU / GPU** (system CPU busy + load average, and one
   row per GPU with utilisation and memory).
 - **SLM handoff worker.** A plain `llama-server` (not a router child — the router admits
-  one model and loading a 4B through it would evict the session's model) that the omp fork
+  one model and loading a 4B through it would evict the session's model) that the rabid fork
   drives, one stateless run per completed turn, to maintain a rolling handoff document.
   Compaction reads that document instead of re-summarising a saturated context. The
   harness spawns and owns its own worker; the manager panel is for loading one by hand —

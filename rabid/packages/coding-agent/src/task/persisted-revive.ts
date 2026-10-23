@@ -60,7 +60,7 @@ export interface PersistedSubagentReviveContext {
 
 /**
  * The agent definition a cold-revived subagent's monitored turns report (IRC wakes,
- * `omp --restore`): persisted files predate an agent-source field, so frames carry
+ * `rabid --restore`): persisted files predate an agent-source field, so frames carry
  * the runtime-neutral `user` source; the name is the registry ref's.
  */
 export function persistedAgentDefinition(displayName: string, init: PersistedSessionInit): AgentDefinition {

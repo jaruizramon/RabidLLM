@@ -13,7 +13,7 @@ export default class Worktree extends Command {
 	static aliases = ["wt"];
 
 	static args = {
-		// A positional action keeps `omp worktree` (the no-arg form) useful.
+		// A positional action keeps `rabid worktree` (the no-arg form) useful.
 		action: Args.string({
 			description: "list (default), clear, or add",
 			required: false,
@@ -68,14 +68,14 @@ export default class Worktree extends Command {
 	};
 
 	static examples = [
-		"omp worktree",
-		"omp worktree list --json",
-		"omp worktree add ../feature",
-		"omp worktree add -b feature ../feature origin/main",
-		"omp worktree add --detach ../review HEAD~2",
-		"omp worktree clear",
-		"omp worktree clear --dry-run",
-		"omp worktree clear --all",
+		"rabid worktree",
+		"rabid worktree list --json",
+		"rabid worktree add ../feature",
+		"rabid worktree add -b feature ../feature origin/main",
+		"rabid worktree add --detach ../review HEAD~2",
+		"rabid worktree clear",
+		"rabid worktree clear --dry-run",
+		"rabid worktree clear --all",
 	];
 
 	async run(): Promise<void> {

@@ -1,6 +1,6 @@
 /**
- * Terminal (readline) OAuth login primitives shared by `omp login` and
- * `omp auth-broker login`: a cancellable line prompt, a numbered provider
+ * Terminal (readline) OAuth login primitives shared by `rabid login` and
+ * `rabid auth-broker login`: a cancellable line prompt, a numbered provider
  * picker, and the stdout-driven OAuth flow itself.
  *
  * Callers own ONE `readline.Interface` for the whole command and pass it to

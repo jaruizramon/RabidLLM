@@ -1,10 +1,10 @@
 /**
  * Hand a session to another machine.
  *
- * `omp session pack <session> <out.tar>` writes a self-contained archive,
- * `omp session unpack <archive.tar> --cwd <dir>` lands it in `<dir>`'s session
+ * `rabid session pack <session> <out.tar>` writes a self-contained archive,
+ * `rabid session unpack <archive.tar> --cwd <dir>` lands it in `<dir>`'s session
  * directory (printing the session file path as the only stdout line), and
- * `omp session moved <session> --to <label>` marks the copy left behind stale
+ * `rabid session moved <session> --to <label>` marks the copy left behind stale
  * so resuming it forks instead of continuing it.
  */
 import chalk from "@oh-my-pi/pi-utils/chalk";
@@ -24,9 +24,9 @@ const ACTIONS = ["pack", "unpack", "moved"] as const;
 type SessionAction = (typeof ACTIONS)[number];
 
 const USAGE: Record<SessionAction, string> = {
-	pack: "omp session pack <session> <out.tar>",
-	unpack: "omp session unpack <archive.tar> --cwd <dir>",
-	moved: "omp session moved <session> --to <label>",
+	pack: "rabid session pack <session> <out.tar>",
+	unpack: "rabid session unpack <archive.tar> --cwd <dir>",
+	moved: "rabid session moved <session> --to <label>",
 };
 
 const UNPACK_NOTE: Record<UnpackMode, string> = {

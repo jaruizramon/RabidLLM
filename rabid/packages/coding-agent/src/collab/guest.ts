@@ -182,7 +182,7 @@ export class CollabGuestLink {
 	 * The replica's ownership lease, held from the first snapshot write until
 	 * the guest has left. Opening and reloading the replica never claims it, so
 	 * without this an idle guest would leave its live replica unowned (and
-	 * collectable by `omp gc`).
+	 * collectable by `rabid gc`).
 	 */
 	#replicaLease: (() => void) | undefined;
 	/** Previous session file to restore on leave; null = previous session was unsaved. */
@@ -482,7 +482,7 @@ export class CollabGuestLink {
 		const lines = [header, ...pending.entries].map(entry => JSON.stringify(entry)).join("\n");
 		const storage = new FileSessionStorage();
 		this.#replicaLease ??= storage.claimSession(this.#replicaId, replicaPath) ?? undefined;
-		// Published atomically: `omp gc` reads the replica's header to find its
+		// Published atomically: `rabid gc` reads the replica's header to find its
 		// lease, so a resync must never expose a truncated, headerless file.
 		const tempPath = `${replicaPath}.${mintSessionId()}.tmp`;
 		try {

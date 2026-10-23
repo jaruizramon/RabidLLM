@@ -43,7 +43,7 @@ type ModelPerfRow = {
 	ttft_ms: number;
 };
 
-/** Row shape read from an `omp stats` messages table during backfill. */
+/** Row shape read from a `rabid stats` messages table during backfill. */
 type StatsMessageRow = {
 	rowid: number;
 	timestamp: number;
@@ -639,12 +639,12 @@ FROM model_usage_legacy
 
 	/**
 	 * One-time, non-blocking import of historical request timings from the
-	 * `omp stats` database (`~/.omp/stats.db`) into model_perf. Fire-and-forget:
+	 * `rabid stats` database (`~/.omp/stats.db`) into model_perf. Fire-and-forget:
 	 * the walk runs in bounded chunks with event-loop yields between them
 	 * (bun:sqlite is synchronous — an unbounded scan here froze the TUI for
 	 * ~30s on multi-million-row stats databases), and the persistent meta
 	 * marker is only set on success so a crash or error retries next process.
-	 * A missing stats.db leaves the marker unset so a later `omp stats` run
+	 * A missing stats.db leaves the marker unset so a later `rabid stats` run
 	 * still gets imported. No-op for non-default db paths.
 	 */
 	#kickModelPerfBackfill(): void {
@@ -680,7 +680,7 @@ FROM model_usage_legacy
 	}
 
 	/**
-	 * Imports recent measurable request rows from an `omp stats` database
+	 * Imports recent measurable request rows from a `rabid stats` database
 	 * (`messages` table) into the model_perf aggregates. Walks newest-first
 	 * over the timestamp index in {@link MODEL_PERF_BACKFILL_CHUNK}-row chunks,
 	 * yielding to the event loop between chunks, and keeps at most

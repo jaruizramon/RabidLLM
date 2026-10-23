@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 // Subpaths, not the `@oh-my-pi/pi-utils` barrel: the barrel loads the native
 // addon (file-lock), and key-hint formatting runs on addon-free CLI paths
-// (`omp --version`, help) through cli/command-help.ts.
+// (`rabid --version`, help) through cli/command-help.ts.
 import { getActiveProfile, getAgentDir, getProfileRootDir } from "@oh-my-pi/pi-utils/dirs";
 import { isEnoent } from "@oh-my-pi/pi-utils/fs-error";
 import * as logger from "@oh-my-pi/pi-utils/logger";

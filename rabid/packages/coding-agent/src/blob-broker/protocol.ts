@@ -24,11 +24,11 @@ export const BLOB_BROKER_CONFIG_ENV = "OMP_BLOB_BROKER_CONFIG";
 export const BLOB_BROKER_DAEMON_NAME = "omp.blob.broker";
 
 /** Broker readiness regex matched against the banner printed by the worker. */
-export const BLOB_BROKER_READY_PATTERN = String.raw`omp blob broker serving \S+`;
+export const BLOB_BROKER_READY_PATTERN = String.raw`rabid blob broker serving \S+`;
 
 /** Banner printed on stdout once the exposure is up and control is listening. */
 export function blobBrokerReadyBanner(baseUrl: string): string {
-	return `omp blob broker serving ${baseUrl}`;
+	return `rabid blob broker serving ${baseUrl}`;
 }
 
 /** Resolve the control socket path for one project scope. */

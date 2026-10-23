@@ -3552,7 +3552,7 @@ export interface FollowUpTurnOptions {
 	message: string;
 	/**
 	 * Go on with the turn the previous process left unfinished instead of sending
-	 * `message` (`omp --restore`: {@link AgentSession.restoreInterruptedTurn}).
+	 * `message` (`rabid --restore`: {@link AgentSession.restoreInterruptedTurn}).
 	 */
 	restore?: boolean;
 	index?: number;

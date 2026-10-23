@@ -759,7 +759,7 @@ const SESSION_CWD_CHANGE_REJECTED = Symbol("sessionCwdChangeRejected");
 export function powerAssertionOptions(mode: "off" | "idle" | "display" | "system"): PowerAssertionOptions | undefined {
 	if (mode === "off") return undefined;
 	return {
-		reason: "omp agent session",
+		reason: "rabid agent session",
 		idle: true,
 		display: mode === "display" || mode === "system",
 		system: mode === "system",
@@ -11355,7 +11355,7 @@ export class AgentSession implements SettingsScope {
 	}
 
 	/**
-	 * Go on with the turn the previous process was in when it ended (`omp --restore`).
+	 * Go on with the turn the previous process was in when it ended (`rabid --restore`).
 	 *
 	 * A turn cut off without an exit record (a crash, SIGKILL or power loss records
 	 * none) is first closed the way exit recovery closes one whose exit was recorded:

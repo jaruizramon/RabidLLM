@@ -1,5 +1,5 @@
 /**
- * Shared helpers for `/usage reset` (TUI selector + ACP) and `omp usage reset`:
+ * Shared helpers for `/usage reset` (TUI selector + ACP) and `rabid usage reset`:
  * turn the live per-account reset-credit status into rows, resolve a typed
  * `<provider>/<credential id>` target, and map a redeem outcome code to a
  * human message.

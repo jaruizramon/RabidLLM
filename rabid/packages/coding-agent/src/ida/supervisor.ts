@@ -466,7 +466,7 @@ export class IdaWorker {
 
 	#appendStderr(text: string): void {
 		if (!text) return;
-		// The host's output is the daemon log (`omp ps logs`).
+		// The host's output is the daemon log (`rabid ps logs`).
 		process.stderr.write(text);
 		const tail = this.#stderrTail + text;
 		this.#stderrTail = tail.length > STDERR_TAIL_CHARS ? tail.slice(-STDERR_TAIL_CHARS) : tail;

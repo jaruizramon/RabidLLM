@@ -3,8 +3,8 @@ import { discoverAuthStorage } from "../sdk";
 import type { AuthStorage } from "../session/auth-storage";
 
 /**
- * Bearer credential presented to Stencil services (`omp stream`, `omp clip`,
- * `omp skill`).
+ * Bearer credential presented to Stencil services (`rabid stream`, `rabid clip`,
+ * `rabid skill`).
  *
  * `STENCIL_API_KEY` wins outright (debug and CI: `STENCIL_API_KEY=test omp
  * stream …`); otherwise the stencil.so credential stored by `/login` is used

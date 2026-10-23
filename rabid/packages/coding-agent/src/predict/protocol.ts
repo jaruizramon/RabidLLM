@@ -2,7 +2,7 @@
  * Cross-process contract for the machine-global text-prediction daemon.
  *
  * One daemon per agent directory runs under the `text-predict` global daemon
- * broker (`omp ps --global text-predict`) and serves ghost-text word
+ * broker (`rabid ps --global text-predict`) and serves ghost-text word
  * completion to every omp process over newline-delimited JSON on a native IPC
  * endpoint (`ipcEndpoint`). Each request carries a numeric `id` echoed by its
  * response; responses may arrive out of order.
@@ -21,14 +21,14 @@ export const TEXT_PREDICT_SOCKET_ENV = "OMP_TEXT_PREDICT_SOCKET";
 export const TEXT_PREDICT_AGENT_DIR_ENV = "OMP_TEXT_PREDICT_AGENT_DIR";
 
 /** Broker readiness regex matched against {@link textPredictReadyBanner}. */
-export const TEXT_PREDICT_READY_PATTERN = String.raw`omp text-predict listening on \S+`;
+export const TEXT_PREDICT_READY_PATTERN = String.raw`rabid text-predict listening on \S+`;
 
 /** Engines the daemon can open (`TextPredictor` methods); clients resolve `auto` before asking. */
 export type TextPredictMethod = "ngram" | "smollm" | "apple";
 
 /** Banner printed on stdout once the daemon accepts connections. */
 export function textPredictReadyBanner(endpoint: string): string {
-	return `omp text-predict listening on ${endpoint}`;
+	return `rabid text-predict listening on ${endpoint}`;
 }
 
 /**

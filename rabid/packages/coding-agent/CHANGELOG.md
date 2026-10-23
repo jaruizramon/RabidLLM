@@ -20,6 +20,8 @@
 
 ### Changed
 
+- Rebranded the visible product from omp to rabid: `rabid` is the process title, CLI name in help and command examples, User-Agent, notification title, log filename prefix, and XDG data/state/cache root; the on-disk config root stays `.omp` for compatibility
+- Onboarding no longer links providers or a default model: setup now covers glyph mode, composer shape, and theme only; provider sign-in remains available on demand through `/setup providers` and `/login`
 - Turn cards are distilled by the local SLM worker: `turnCards.enabled` no longer falls back to the main model or a network provider, so per-prompt summarization stays on the worker (a missing worker skips the card instead of invoking the inference card or a remote model)
 - Compaction no longer falls back to the active session model: `compaction.allowMainModel: false` keeps the dense chat model out of the implicit candidate chain, so `slm` or an explicit `compactionModel` does the work (an explicit `compactionModel` naming the active model is still honored)
 - The `slm` worker can be capped to a fixed VRAM headroom on a shared or gaming card: `compaction.slmHandoff.gpuFreeMiB` (default 2048) makes llama.cpp offload only the layers that fit and spill the rest to the CPU, so a small quant of a 4B model does not evict the desktop

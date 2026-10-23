@@ -1,9 +1,9 @@
 /**
  * Copy stored provider credentials between machines.
  *
- * `omp auth export` prints every active credential in the local credential
+ * `rabid auth export` prints every active credential in the local credential
  * store (`agent.db`) as JSON — API keys and OAuth logins, refresh tokens
- * included. `omp auth import <file>` merges such a file into the local store:
+ * included. `rabid auth import <file>` merges such a file into the local store:
  * an imported OAuth login replaces the stored login of the same provider
  * account, an imported API key replaces the provider's stored API key, and
  * everything else is kept.
@@ -24,10 +24,10 @@ import { Args, CliUsageError, Command } from "@oh-my-pi/pi-utils/cli";
 import { authHelp as commandHelp } from "../cli/command-help";
 import { resolveAuthBrokerConfig } from "../session/auth-broker-config";
 
-/** Format version of the `omp auth export` document. */
+/** Format version of the `rabid auth export` document. */
 export const AUTH_EXPORT_VERSION = 1;
 
-/** One stored credential in an `omp auth export` document. */
+/** One stored credential in a `rabid auth export` document. */
 export interface AuthExportEntry {
 	/** Provider id the credential authenticates (e.g. `anthropic`). */
 	provider: string;
@@ -35,7 +35,7 @@ export interface AuthExportEntry {
 	credential: AuthCredential;
 }
 
-/** The document `omp auth export` prints and `omp auth import` reads. */
+/** The document `rabid auth export` prints and `rabid auth import` reads. */
 export interface AuthExport {
 	version: typeof AUTH_EXPORT_VERSION;
 	credentials: AuthExportEntry[];
@@ -94,7 +94,7 @@ function parseCredential(value: unknown, where: string): AuthCredential {
 }
 
 /**
- * Parse and validate an `omp auth export` document. Throws
+ * Parse and validate a `rabid auth export` document. Throws
  * {@link AuthTransferError} naming the first offending entry.
  */
 export function parseAuthExport(text: string, source = "credential file"): AuthExport {
@@ -104,7 +104,7 @@ export function parseAuthExport(text: string, source = "credential file"): AuthE
 	} catch {
 		throw new AuthTransferError(`${source} is not valid JSON.`);
 	}
-	if (!isRecord(value)) throw new AuthTransferError(`${source} is not an \`omp auth export\` document.`);
+	if (!isRecord(value)) throw new AuthTransferError(`${source} is not an \`rabid auth export\` document.`);
 	if (value.version !== AUTH_EXPORT_VERSION) {
 		throw new AuthTransferError(
 			`${source} has export version ${JSON.stringify(value.version)}; this omp reads version ${AUTH_EXPORT_VERSION}.`,
@@ -174,7 +174,7 @@ export default class Auth extends Command {
 			options: ["export", "import"],
 		}),
 		file: Args.string({
-			description: "File written by `omp auth export`, or - for stdin (import)",
+			description: "File written by `rabid auth export`, or - for stdin (import)",
 			required: false,
 		}),
 	};
@@ -202,7 +202,7 @@ export default class Auth extends Command {
 		if (broker) {
 			process.stderr.write(
 				`${chalk.red(`error: omp uses the auth broker at ${broker.url}; credentials live there, not in this machine's agent.db.`)}\n` +
-					"Run this on the broker host, or disable the broker (`omp config reset auth.broker.url`) first.\n",
+					"Run this on the broker host, or disable the broker (`rabid config reset auth.broker.url`) first.\n",
 			);
 			process.exitCode = 1;
 			return;

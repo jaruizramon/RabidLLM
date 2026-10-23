@@ -1,14 +1,14 @@
 /**
- * Centralized path helpers for omp config directories.
+ * Centralized path helpers for rabid config directories.
  *
  * Uses PI_CONFIG_DIR (default ".omp") for the config root and
  * PI_CODING_AGENT_DIR to override the agent directory.
  *
  * On Linux, if XDG_DATA_HOME / XDG_STATE_HOME / XDG_CACHE_HOME environment
  * variables are set, paths are redirected to XDG-compliant locations under
- * $XDG_*_HOME/omp/. This requires running `omp config migrate` first to
+ * $XDG_*_HOME/rabid/. This requires running `rabid config migrate` first to
  * move data to the new locations. No filesystem existence checks are performed
- * — if the env var is set, omp trusts that the migration has been done.
+ * — if the env var is set, rabid trusts that the migration has been done.
  */
 
 import * as fs from "node:fs";
@@ -18,13 +18,16 @@ import { expandWindowsLongPath } from "@oh-my-pi/pi-natives/path";
 import { engines, version } from "../package.json" with { type: "json" };
 import { isEnoent, isEnotdir } from "./fs-error";
 
-/** App name (e.g. "omp") */
-export const APP_NAME: string = "omp";
+/** App name (e.g. "rabid") */
+export const APP_NAME: string = "rabid";
 
-/** Public homepage that inference gateways (OpenRouter, Vercel AI Gateway) credit omp traffic to. */
-export const APP_URL: string = "https://omp.sh/";
+/** Public homepage that inference gateways (OpenRouter, Vercel AI Gateway) credit rabid traffic to. */
+export const APP_URL: string = "https://github.com/jaruizramon/RabidLLM";
 
-/** Config directory name (e.g. ".omp") */
+/**
+ * Config directory name (e.g. ".omp"). Kept for on-disk compatibility with
+ * existing installations; the product name is Rabid's `APP_NAME`.
+ */
 export const CONFIG_DIR_NAME: string = ".omp";
 
 /** Ordered main settings filenames: canonical write target first, legacy-compatible YAML fallback second. */
@@ -33,8 +36,8 @@ export const MAIN_CONFIG_FILENAMES = ["config.yml", "config.yaml"] as const;
 /** Version (e.g. "1.0.0") */
 export const VERSION: string = version;
 
-/** Default User-Agent header string (e.g. "omp/17.2.12") */
-export const USER_AGENT = `omp/${VERSION}`;
+/** Default User-Agent header string (e.g. "rabid/17.2.12") */
+export const USER_AGENT = `rabid/${VERSION}`;
 
 /** Minimum Bun version */
 export const MIN_BUN_VERSION: string = engines.bun.replace(/[^0-9.]/g, "");

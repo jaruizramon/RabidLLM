@@ -148,7 +148,7 @@ describe("fetchBuild", () => {
 		expect(requests[0].url).toBe(
 			"https://build.test/api/products/omp/latest/macos-arm64?channel=canary&from_version=18.8.8",
 		);
-		expect(requests[0].userAgent).toBe(`omp/${VERSION}`);
+		expect(requests[0].userAgent).toBe(`rabid/${VERSION}`);
 		expect(requests[0].signal).toBeInstanceOf(AbortSignal);
 		expect(build.patch?.fromVersion).toBe("18.8.8");
 	});
@@ -177,6 +177,6 @@ describe("fetchBuild", () => {
 				{ channel: "stable" },
 				{ host, fetchImpl: async () => Response.json({ error: "no_build" }, { status: 404 }) },
 			),
-		).rejects.toThrow("No omp stable build for macos-arm64 is published");
+		).rejects.toThrow("No rabid stable build for macos-arm64 is published");
 	});
 });

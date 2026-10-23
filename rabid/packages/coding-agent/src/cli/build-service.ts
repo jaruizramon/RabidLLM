@@ -1,7 +1,7 @@
 /**
  * Client for Stencil's build service, the source of omp's standalone binaries.
  *
- * `omp update` on a standalone binary install, the binary takeover of a
+ * `rabid update` on a standalone binary install, the binary takeover of a
  * package-manager install, and the startup update check of a compiled binary
  * all ask the service which build to install ({@link fetchBuild}):
  *
@@ -95,7 +95,7 @@ export function resolveBuildHost(platform: NodeJS.Platform, arch: string, musl: 
 	}
 	return {
 		target: `${targetOs}-${targetArch}`,
-		fileName: `${APP_NAME}-${fileOs}-${arch}${platform === "win32" ? ".exe" : ""}`,
+		fileName: `${PRODUCT}-${fileOs}-${arch}${platform === "win32" ? ".exe" : ""}`,
 	};
 }
 

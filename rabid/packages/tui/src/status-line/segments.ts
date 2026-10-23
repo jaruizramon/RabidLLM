@@ -235,7 +235,7 @@ const piSegment: StatusLineSegment = {
 	},
 };
 /**
- * Brand glyph tagged with the active named profile (`π-work`) so sessions from
+ * Brand glyph tagged with the active named profile (`🕷-work`) so sessions from
  * different profiles are distinguishable at a glance; the bare glyph for the
  * default profile. The tag stays put while the glyph slot animates.
  */

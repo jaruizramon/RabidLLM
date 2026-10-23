@@ -480,7 +480,7 @@ const UNICODE_SYMBOLS: SymbolMap = {
 	"icon.advisor": "👁",
 	"icon.advisorClosed": "🙈",
 	"icon.time": "⏱",
-	"icon.omp": "π",
+	"icon.omp": "🕷",
 	"icon.ghost": "👻",
 	"icon.agents": "👥",
 	"icon.job": "⚙",
@@ -858,11 +858,8 @@ const NERD_SYMBOLS: SymbolMap = {
 	"icon.advisorClosed": "\ueae7",
 	// pick:  | alt: ◷ ◴
 	"icon.time": "\uf017",
-	// pick: 󰵗 (nf-md-pi) | alt:  π ∏ ∑
-	// INTENTIONAL: U+F0D57 is the chosen glyph here. It has been "fixed" to
-	// U+F03FF before (2ec52b8bdd) and reverted because it renders the wrong glyph;
-	// do not swap it again.
-	"icon.omp": "\u{f0d57}",
+	// pick: 🕷 (spider) | alt: R
+	"icon.omp": "🕷",
 	// pick: 󰊠 (nf-md-ghost) | alt: 👻
 	"icon.ghost": "\u{f02a0}",
 	// pick:  | alt: 
@@ -1263,7 +1260,7 @@ const ASCII_SYMBOLS: SymbolMap = {
 	"icon.advisor": "(adv)",
 	"icon.advisorClosed": "(adv)",
 	"icon.time": "t:",
-	"icon.omp": "pi",
+	"icon.omp": "R",
 	"icon.ghost": "@",
 	"icon.agents": "AG",
 	"icon.job": "bg",

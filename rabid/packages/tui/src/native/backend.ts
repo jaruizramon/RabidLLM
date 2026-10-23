@@ -458,7 +458,7 @@ export class NativeBackend {
 		surface.acked = surface.seq;
 		surface.focus = null;
 		surface.dirty = false;
-		this.#write("o", { id: surface.id, mode: "inline", title: "omp", role: SESSION_ROLE, adopt: true });
+		this.#write("o", { id: surface.id, mode: "inline", title: "rabid", role: SESSION_ROLE, adopt: true });
 		this.#sendPalette(surface);
 		// After the `o`, as in `start()`.
 		setNativeRendering(true);
@@ -600,7 +600,7 @@ export class NativeBackend {
 	}
 
 	#open(surface: Surface): void {
-		this.#write("o", { id: surface.id, mode: surface.mode, title: "omp", role: surface.role });
+		this.#write("o", { id: surface.id, mode: surface.mode, title: "rabid", role: surface.role });
 		this.#sendPalette(surface);
 	}
 

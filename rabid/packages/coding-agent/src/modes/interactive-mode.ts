@@ -2510,7 +2510,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		// custom messages, branch summaries, and compaction summaries) and the user
 		// set no explicit `mode_change` (which #reconcileModeFromSession just
 		// restored). SDK startup metadata and extension `custom` state entries are
-		// ignored. This way `omp --continue` (or auto-resume) that finds no recent
+		// ignored. This way `rabid --continue` (or auto-resume) that finds no recent
 		// session and creates a fresh one still honors the default, while a session
 		// with restored context or an explicit mode keeps its reconciled mode. Not
 		// part of the switch reconciler above: the plan-approval → execution handoff
@@ -7397,7 +7397,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		await this.ui.terminal.drainInput(1000);
 		// Stop the run-state spinner interval BEFORE restoring the shell title, so a
 		// pending tick cannot re-emit an OSC title after `popTerminalTitle` hands the
-		// terminal back (which would leave the parent shell with a `π ⠋ …` tab).
+		// terminal back (which would leave the parent shell with a `🕷 ⠋ …` tab).
 		disposeTerminalTitleState();
 		disposeProgramStatus();
 		popTerminalTitle();

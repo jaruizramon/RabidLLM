@@ -1,7 +1,7 @@
 /**
  * Web search CLI command handlers.
  *
- * Handles `omp q`/`omp web-search` subcommands for testing web search models.
+ * Handles `rabid q`/`rabid web-search` subcommands for testing web search models.
  */
 
 import { APP_NAME, getProjectDir } from "@oh-my-pi/pi-utils";

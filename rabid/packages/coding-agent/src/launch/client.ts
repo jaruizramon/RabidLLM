@@ -73,7 +73,7 @@ async function readOrCreateToken(runtimeDir: string): Promise<string> {
 		try {
 			// node:fs, not Bun.file().text(): on Windows (Bun 1.4.2) a Bun.file
 			// read that rejects with ENOENT holds no event-loop ref, so the loop
-			// drains mid-await — `omp --smoke-test` exited 1 via the unsettled-entry
+			// drains mid-await — `rabid --smoke-test` exited 1 via the unsettled-entry
 			// guard, and a bare script silently stops at that await.
 			const token = (await fs.readFile(tokenPath, "utf8")).trim();
 			if (token.length > 0) return token;
@@ -299,7 +299,7 @@ class SocketDaemonClient implements DaemonBrokerClient {
 		throw new Error(
 			`Failed to start daemon broker at ${this.#endpoint} after ${CONNECT_TIMEOUT_MS / 1000}s: ` +
 				`${lastError?.message ?? "socket unavailable"}. Scope: ${this.#runtimeDir}. ` +
-				"Run `omp --smoke-test` to verify broker startup, or `omp ps` to inspect supervised processes.",
+				"Run `rabid --smoke-test` to verify broker startup, or `rabid ps` to inspect supervised processes.",
 		);
 	}
 

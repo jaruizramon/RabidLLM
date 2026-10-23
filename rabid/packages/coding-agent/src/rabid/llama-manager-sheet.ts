@@ -291,7 +291,7 @@ export class LlamaManagerSheet implements Component {
 				}),
 				text([span(`ui :${state.server.ui_port}`, "muted")], { wrap: "none" }),
 				node("spacer", { grow: 1 }),
-				text([span(harness ? `omp ${harness.provider}/${harness.id}` : "omp no model", "muted")], {
+				text([span(harness ? `rabid ${harness.provider}/${harness.id}` : "rabid no model", "muted")], {
 					wrap: "none",
 					truncate: "end",
 				}),
@@ -495,7 +495,7 @@ export class LlamaManagerSheet implements Component {
 	async #switch(model: LlamaManagerModel): Promise<void> {
 		try {
 			const target = await switchToLocalModel(this.#host.session, model.id);
-			this.#host.showStatus(`omp is on ${target.provider}/${target.id}.`);
+			this.#host.showStatus(`rabid is on ${target.provider}/${target.id}.`);
 			this.#host.requestRender();
 		} catch (error) {
 			this.#host.showError(errorMessage(error));

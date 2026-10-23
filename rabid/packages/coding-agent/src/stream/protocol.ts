@@ -1,5 +1,5 @@
 /**
- * Local protocol between an interactive session and the `omp stream` process
+ * Local protocol between an interactive session and the `rabid stream` process
  * in the same working directory.
  *
  * Transport: newline-delimited JSON over the native IPC endpoint at

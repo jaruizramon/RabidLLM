@@ -181,7 +181,7 @@ export function streamSimpleOpenAIResponses(
  * `@oh-my-pi/pi-ai` barrel no longer forwards. Each symbol still exists in the
  * host graph — only its root re-export was dropped — so bridging it here keeps
  * legacy extensions importing it from the pi-ai root resolving through Bun's
- * static named-export check (e.g. `omp plugin install pi-blackhole`).
+ * static named-export check (e.g. `rabid plugin install pi-blackhole`).
  *
  * The error-classification predicate `isContextOverflow` (now under
  * `@oh-my-pi/pi-ai/error`) and the JSON-repair helpers (relocated to

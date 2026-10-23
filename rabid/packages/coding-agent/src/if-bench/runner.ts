@@ -1,5 +1,5 @@
 /**
- * Turn engine for `omp if-bench`.
+ * Turn engine for `rabid if-bench`.
  *
  * One model = one growing conversation: the system prompt and every earlier
  * turn stay byte-identical, so the whole prefix is cacheable and turn N only
