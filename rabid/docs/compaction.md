@@ -165,8 +165,9 @@ archive; the fork never writes the script-owned `THOUGHTS.md`.
 #### Deterministic chain compaction
 
 `compaction.turnCardChain: true` removes the summary model call: the handoff/soft preparation reads
-`<session>.chain.md` (every card appended in turn order), tails it to an 8K-token budget, and uses it as the
-compaction summary. If the 8K tail dropped older cards, the previous summary is prepended so older history is not lost. Coverage is checked first — the chain must hold at least as
+`<session>.chain.md` (every card appended in turn order), tails it to a quarter of the resolved compaction
+trigger capped at 8K tokens, and uses it as the compaction summary. If that tail dropped older cards, the
+previous summary is prepended so older history is not lost. Coverage is checked first — the chain must hold at least as
 many cards as the summarized user prompts, or a previous summary must exist; otherwise the LLM path runs. The
 result is marked `details.turnCardChain = true`. `shake` still runs first; the chain only replaces the prose
 summarizer, so compaction is deterministic whenever the cards cover the range.
@@ -379,7 +380,7 @@ The flag never reaches provider wire formats, and flagged pairs are never remove
 3. For a local summary, recover the original entries from `firstKeptEntryId` up to the previous compaction record, then append entries after that record.
 4. For reusable provider-native history, start after `providerReplayThroughEntryId` when it identifies an older snapshot, without crossing the latest reset boundary. This recovers the uncovered snapshot-to-commit interval, not the original messages already covered by native replay. A trailing native compaction record does not make that interval already compacted.
 5. Exclude compaction records and other non-message metadata. Pass the previous summary separately through `previousSummary`; retain message-bearing `custom_message` and `branch_summary` entries.
-6. Adapt `keepRecentTokens` using the measured usage ratio, then run `findCutPoint()` and partition that same sequence into `messagesToSummarize`, `turnPrefixMessages`, and `recentMessages`.
+6. Clamp `keepRecentTokens` to at most a quarter of the resolved trigger so an 8K/32K local window can still summarize, adapt it using the measured usage ratio, then run `findCutPoint()` and partition that same sequence into `messagesToSummarize`, `turnPrefixMessages`, and `recentMessages`.
 
 When updating a local summary, every effective original message belongs to exactly one of those three regions. For example, after `summary(A) + B` grows to `summary(A) + B + C`, the next preparation distributes both B and C, not just C. The new `firstKeptEntryId` refers to an original entry; preparation does not move, duplicate, or rewrite journal entries. This is a local-summary preparation guarantee, not an end-to-end guarantee for provider-native or speculative native replay.
 
@@ -631,7 +632,8 @@ Defined in `packages/coding-agent/src/session/context-settings.ts`:
 - `compaction.methodOrder` = `["remote", "snapcompact", "handoff", "shake", "soft"]`. `remote` uses provider-native server compaction (OpenAI Responses compact, Anthropic compaction beta) when available; unavailable or failed methods advance to the next preference.
 - `compaction.asyncEnabled` = `true`. Async (speculative) compaction: when context enters the pre-threshold band `[threshold − lead, threshold)` (lead = `clamp(threshold × 0.125, 8192, 32000)`), maintenance starts a background summarization for the first configured LLM-backed method (`remote`, `handoff`, or `soft`) off a branch snapshot, isolated from the live turn by a side session id. The armed result is committed instantly when the threshold is actually crossed, hiding summarization latency; post-snapshot turns are appended after the summary unchanged. Armed results are discarded when the branch prefix changes (new compaction, reset boundary, `/tree` navigation), when a provider-native replay payload is no longer readable by the active model, or when context grows past `keepRecentTokens` since compute (a fresh speculation replaces it). Speculation is skipped while an extension registers `session_before_compact`. The status line pulses the auto-compact icon while a speculation runs and holds it in accent when a result is armed.
 - `compaction.reserveTokens` is unset by default. The effective reserve is `max(floor(contextWindow × 0.15), configuredReserve ?? 16384)`. Budget checks use the proportional reserve when the unset default is impractical on a small window, or when the effective reserve reaches/exceeds the whole window. Explicit reserves otherwise retain the 15% floor.
-- `compaction.keepRecentTokens` = `20000`
+- `compaction.keepRecentTokens` = `20000`; capped at a quarter of the resolved trigger for the active model, so a small local window cannot retain its whole history and turn compaction into a no-op.
+- `compaction.maxSummaryTokens` is unset by default (the engine's 16K cap applies). A per-model `profiles.<selector>.compaction.maxSummaryTokens` lowers it further; the effective summary budget is the smaller of the reserve-derived budget, this cap, and 16K.
 - `compaction.autoContinue` = `true`
 - `compaction.midTurnEnabled` = `true`; a `false` value applies to the session that configured it, not to spawned subagents — each subagent keeps mid-run checks so its single-turn assignment still compacts at the configured threshold.
 - `compaction.handoffSaveToDisk` = `false`

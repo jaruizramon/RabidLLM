@@ -34,6 +34,25 @@ profiles:
     tools:
       disabled:
         - task
+  # vLLM presets on the same port. They have 8K/32K windows where the global
+  # 12K tail and 16K summary cap cannot fit; the engine also clamps the tail,
+  # but these keep the summary itself small enough to leave room for input.
+  local-llama/qwen2.5-0.5b-1cat:
+    compaction:
+      keepRecentTokens: 1024
+      maxSummaryTokens: 512
+  local-llama/qwen3.8-27b-fp8-1cat:
+    compaction:
+      keepRecentTokens: 1024
+      maxSummaryTokens: 1024
+  local-llama/qwen3-8b-1cat:
+    compaction:
+      keepRecentTokens: 4096
+      maxSummaryTokens: 2048
+  local-llama/qwen3.8-27b-nvfp4-1cat:
+    compaction:
+      keepRecentTokens: 4096
+      maxSummaryTokens: 2048
 dev:
   autoqaConsent: granted
 compaction:

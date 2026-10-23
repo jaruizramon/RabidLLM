@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added per-model compaction retention and summary budgets: `profiles.<selector>.compaction.keepRecentTokens`, `maxSummaryTokens`, and `reserveTokens` tune an 8K/32K local preset without changing the global policy, and `compaction.maxSummaryTokens` sets a global ceiling below the 16K engine cap
 - Added `/llama` (aliases `/v100`, `/model-manager`): a live V100 model-manager sheet that lists every llama-manager preset with its status, size, measured VRAM, engine, and parked context; loads a preset and switches omp to it, unloads, starts/stops the router, force-clears VRAM, parks/restores/drops contexts, and exposes the SLM worker and log tails. `/preset` now shares the same manager client
 - Added `/artifacts`: a browser gallery window for the images, sprites, SVGs, and webpages this session created, opened from a loopback viewer without leaving the terminal. The browser renders images and SVGs natively and webpages through a cached headless-Chromium screenshot; `o` opens the original, `c` copies its path, and `r` rescans. Files produced by shell or Eval scripts are found by a bounded workspace scan
 - Added `display.artifactPreviews` (default on): a settled write of a visual file shows a preview summary (a webpage's title, an SVG/image hint) instead of its source; `Ctrl+O` expands the source
@@ -32,6 +33,7 @@
 
 ### Fixed
 
+- Compaction no longer silently no-ops on small local windows: `keepRecentTokens` is clamped to a quarter of the resolved trigger, and the deterministic turn-card chain sizes its budget from that trigger instead of a fixed 8K
 - Stopped a cross-turn tool-call loop after the model ignores the loop-guard correction: the first repeat earns the steer, and the next identical call aborts the run instead of redirecting forever
 - A mid-turn steer no longer clears the repeated-failure guard, so an identical blocked call stays blocked until a new turn starts
 - Byte-identical no-op edits now return an error carrying the file content hash and targeted rows instead of a success, so a looping model sees that nothing was applied

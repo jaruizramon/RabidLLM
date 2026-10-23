@@ -51,6 +51,15 @@ export function resolveModelCompactionSettings(
 	if (profile.methodOrder !== undefined) {
 		settings = { ...settings, methodOrder: profile.methodOrder };
 	}
+	if (profile.keepRecentTokens !== undefined) {
+		settings = { ...settings, keepRecentTokens: profile.keepRecentTokens };
+	}
+	if (profile.maxSummaryTokens !== undefined) {
+		settings = { ...settings, maxSummaryTokens: profile.maxSummaryTokens };
+	}
+	if (profile.reserveTokens !== undefined) {
+		settings = { ...settings, reserveTokens: profile.reserveTokens };
+	}
 	return settings;
 }
 

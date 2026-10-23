@@ -183,6 +183,25 @@ function verbatimRequirementBudget(contextWindow: number | null | undefined): nu
 	);
 }
 
+/** Largest turn-card chain a deterministic compaction may read: a quarter of the trigger. */
+const TURN_CARD_CHAIN_MAX_TOKENS = 8192;
+const TURN_CARD_CHAIN_MIN_TOKENS = 1024;
+const TURN_CARD_CHAIN_SHARE = 0.25;
+
+/**
+ * Chain budget for the deterministic turn-card summary on `contextWindow`.
+ * A fixed 8K chain is the whole window on an 8K local preset; scaling it from
+ * the resolved trigger leaves room for the kept tail and the next prompt.
+ */
+export function resolveTurnCardChainBudget(contextWindow: number, settings: EngineCompactionSettings): number {
+	if (!Number.isFinite(contextWindow) || contextWindow <= 0) return TURN_CARD_CHAIN_MAX_TOKENS;
+	const threshold = resolveThresholdTokens(contextWindow, settings);
+	return Math.max(
+		TURN_CARD_CHAIN_MIN_TOKENS,
+		Math.min(TURN_CARD_CHAIN_MAX_TOKENS, Math.floor(threshold * TURN_CARD_CHAIN_SHARE)),
+	);
+}
+
 /** Shared no-op result for dispatcher paths that perform no maintenance. */
 export const COMPACTION_CHECK_NONE: CompactionCheckResult = {
 	continuationScheduled: false,
@@ -3944,7 +3963,8 @@ export class SessionMaintenance {
 		const userTurns = [...preparation.messagesToSummarize, ...preparation.turnPrefixMessages].filter(
 			message => message.role === "user",
 		).length;
-		const { text, blocks, truncated } = await readTurnCardChain(getAgentDir(), this.#host.sessionId(), 8_192);
+		const chainBudget = resolveTurnCardChainBudget(this.#model?.contextWindow ?? 0, preparation.settings);
+		const { text, blocks, truncated } = await readTurnCardChain(getAgentDir(), this.#host.sessionId(), chainBudget);
 		if (!blocks || !text) return undefined;
 		const covered = blocks >= userTurns;
 		if (!covered) {

@@ -308,6 +308,24 @@ export const cfgCompactionKeepRecentTokens = register({
 });
 
 /**
+ * Global ceiling on a generated compaction summary, below the engine's 16K
+ * `MAX_SUMMARY_TOKENS`. Unset keeps the engine cap; a model profile can lower
+ * it further through `profiles.<selector>.compaction.maxSummaryTokens`.
+ */
+export const cfgCompactionMaxSummaryTokens = register({
+	id: "compaction.maxSummaryTokens",
+	type: "number",
+	default: undefined,
+	ui: {
+		tab: "context",
+		group: "Compaction",
+		label: "Max Summary Tokens",
+		description:
+			"Ceiling on a generated compaction summary. Leave default for the 16K engine cap; lower it on small local windows",
+	},
+});
+
+/**
  * Speed-floor trigger: compact when generation sits below `speedFloorTps` for
  * `speedConsecutive` completed turns, above `speedMinTokens` live context.
  * `0` disables it. This catches the "slow but not full" regime that token and
@@ -691,6 +709,7 @@ export const cfgCompaction = combine({
 	thresholdTokens: cfgCompactionThresholdTokens,
 	reserveTokens: cfgCompactionReserveTokens,
 	keepRecentTokens: cfgCompactionKeepRecentTokens,
+	maxSummaryTokens: cfgCompactionMaxSummaryTokens,
 	midTurnEnabled: cfgCompactionMidTurnEnabled,
 	asyncEnabled: cfgCompactionAsyncEnabled,
 	handoffSaveToDisk: cfgCompactionHandoffSaveToDisk,

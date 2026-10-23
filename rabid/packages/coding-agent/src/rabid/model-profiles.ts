@@ -18,6 +18,12 @@ export interface ModelProfileCompaction {
 	thresholdTokens?: number;
 	/** Automatic maintenance fallback order. */
 	methodOrder?: CompactionMethod[];
+	/** Recent history kept verbatim; clamped again to the model's resolved trigger. */
+	keepRecentTokens?: number;
+	/** Per-model summary output ceiling, on top of the reserve budget and the global cap. */
+	maxSummaryTokens?: number;
+	/** Tokens reserved below the window; explicit values disable small-window reserve recovery. */
+	reserveTokens?: number;
 }
 
 /** Per-effort thinking-token budgets; unset efforts keep the global value. */
@@ -47,6 +53,9 @@ const COMPACTION_KEYS: Record<string, true> = {
 	thresholdPercent: true,
 	thresholdTokens: true,
 	methodOrder: true,
+	keepRecentTokens: true,
+	maxSummaryTokens: true,
+	reserveTokens: true,
 };
 const TOOLS_KEYS: Record<string, true> = { disabled: true };
 const SAMPLING_KEYS: Record<string, true> = {
@@ -108,6 +117,14 @@ function normalizeCompaction(scope: string, value: unknown): ModelProfileCompact
 			if (!methods.includes(method)) methods.push(method);
 		}
 		compaction.methodOrder = methods;
+	}
+	for (const key of ["keepRecentTokens", "maxSummaryTokens", "reserveTokens"] as const) {
+		const budget = value[key];
+		if (budget === undefined) continue;
+		if (typeof budget !== "number" || !Number.isSafeInteger(budget) || budget <= 0) {
+			throw new Error(`Invalid ${scope}.${key}: expected a positive integer token count.`);
+		}
+		compaction[key] = budget;
 	}
 	return compaction;
 }
