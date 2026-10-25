@@ -4,7 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Agent, type AgentMessage } from "@oh-my-pi/pi-agent-core";
 import * as compactionModule from "@oh-my-pi/pi-agent-core/compaction";
-import type { AssistantMessage, Context, Model, UserMessage } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, Context, Message, Model, UserMessage } from "@oh-my-pi/pi-ai";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -12,8 +12,10 @@ import { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { type CompactionMethod, withSlmFirst } from "@oh-my-pi/pi-coding-agent/session/compaction-methods";
 import { SessionMaintenance, type SessionMaintenanceHost } from "@oh-my-pi/pi-coding-agent/session/session-maintenance";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
+import { writeTurnCard } from "@oh-my-pi/pi-coding-agent/rabid/turn-cards";
 import { coversOperatorTurns, type SlmHandoffRecord } from "@oh-my-pi/pi-coding-agent/slm/handoff";
 import { parseSlmDevice, slmOffloadArgs } from "@oh-my-pi/pi-coding-agent/slm/server";
+import { getAgentDir, setAgentDir } from "@oh-my-pi/pi-utils";
 
 const CONTEXT_WINDOW = 100_000;
 const THRESHOLD = 50_000;
@@ -194,6 +196,7 @@ describe("slm compaction method", () => {
 		methodOrder: CompactionMethod[];
 		prepareSlmHandoff: () => Promise<SlmHandoffRecord | undefined>;
 		asyncEnabled?: boolean;
+		turnCardChain?: boolean;
 	}): SessionMaintenance {
 		agent = new Agent({ initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] } });
 		const settings = Settings.isolated({
@@ -203,6 +206,7 @@ describe("slm compaction method", () => {
 			"compaction.thresholdPercent": 50,
 			"compaction.keepRecentTokens": 1,
 			"compaction.autoContinue": false,
+			"compaction.turnCardChain": options.turnCardChain ?? false,
 			"compaction.slmHandoff.modelPath": workerModelPath,
 			"compaction.slmHandoff.serverPath": workerServerPath,
 			"compaction.slmHandoff.awaitMs": 50,
@@ -301,6 +305,50 @@ describe("slm compaction method", () => {
 		expect(prepareCalls).toHaveLength(1);
 		expect(compactSpy).not.toHaveBeenCalled();
 		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("keeps the deterministic ledger when the turn-card chain supplies the summary", async () => {
+		const originalAgentDir = getAgentDir();
+		const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "turn-card-chain-"));
+		try {
+			setAgentDir(agentDir);
+			const sessionId = sessionManager.getSessionId();
+			for (const promptText of ["inspect the repo", "copy the fixtures", "keep X"]) {
+				await writeTurnCard(agentDir, sessionId, { prompt: promptText, files: [], operations: [] });
+			}
+			// A developer directive inside the summarized region: the cards never
+			// carry it, so only the deterministic block can keep it.
+			sessionManager.appendMessage(userMessage("continue"));
+			const directive: Message = {
+				role: "developer",
+				content: [{ type: "text", text: "Plan approved. Implement the MOD writer before the XM reader." }],
+				timestamp: Date.now(),
+			};
+			sessionManager.appendMessage(directive);
+			sessionManager.appendMessage(assistantMessage("working", model));
+
+			maintenance = createMaintenance({
+				methodOrder: ["soft"],
+				turnCardChain: true,
+				prepareSlmHandoff: async () => undefined,
+			});
+			const compactSpy = vi
+				.spyOn(compactionModule, "compact")
+				.mockRejectedValue(new Error("the turn-card chain must win over the LLM"));
+
+			await maintenance.runAutoCompaction("threshold", false, { triggerContextTokens: THRESHOLD });
+
+			const entry = latestCompaction();
+			expect(entry.summary).toContain("## Turn cards");
+			expect(entry.summary).toContain("## Standing directives (verbatim; authoritative)");
+			expect(entry.summary).toContain("Implement the MOD writer before the XM reader.");
+			expect(entry.summary).toContain("## User messages (verbatim; authoritative)");
+			expect(entry.summary).toContain("MUST keep X");
+			expect(compactSpy).not.toHaveBeenCalled();
+		} finally {
+			setAgentDir(originalAgentDir);
+			await fs.rm(agentDir, { recursive: true, force: true });
+		}
 	});
 
 	it("never speculates an LLM summary while slm owns the background work", () => {

@@ -6,6 +6,8 @@ export const TOOL_CALL_LOOP_REDIRECT_TYPE = "tool-call-loop-redirect";
 
 /** Structured record of the loop a redirect was issued for. */
 export interface ToolCallLoopRedirectDetails {
+	kind: RepeatedToolCallDetection["kind"];
+	period?: number;
 	toolName: string;
 	count: number;
 	argumentsSummary: string;
@@ -21,6 +23,9 @@ export interface ToolCallLoopRedirectDetails {
  */
 export function renderToolCallLoopRedirect(detection: RepeatedToolCallDetection): string {
 	return prompt.render(toolCallLoopRedirectTemplate, {
+		repeated_cycle: detection.kind === "repeated_tool_cycle",
+		repeated_result: detection.kind === "repeated_tool_result",
+		period: detection.period ?? 0,
 		tool_name: detection.toolName,
 		count: detection.count,
 		arguments_summary: detection.argumentsSummary,
@@ -30,6 +35,8 @@ export function renderToolCallLoopRedirect(detection: RepeatedToolCallDetection)
 
 export function toolCallLoopRedirectDetails(detection: RepeatedToolCallDetection): ToolCallLoopRedirectDetails {
 	return {
+		kind: detection.kind,
+		period: detection.period,
 		toolName: detection.toolName,
 		count: detection.count,
 		argumentsSummary: detection.argumentsSummary,

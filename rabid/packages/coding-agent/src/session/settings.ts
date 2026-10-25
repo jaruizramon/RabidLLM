@@ -332,6 +332,19 @@ export const cfgModelToolCallLoopGuardThreshold = register({
 	},
 });
 
+export const cfgModelToolCallLoopGuardResultThreshold = register({
+	id: "model.toolCallLoopGuard.resultThreshold",
+	type: "number",
+	default: 2,
+	ui: {
+		tab: "model",
+		group: "Thinking",
+		label: "Tool-Output Loop Threshold",
+		description:
+			"Consecutive turns returning identical non-trivial tool output before the corrective steer is injected, even when the arguments changed (0 disables)",
+	},
+});
+
 export const cfgModelToolCallLoopGuardExemptTools = register({
 	id: "model.toolCallLoopGuard.exemptTools",
 	type: "array",

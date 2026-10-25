@@ -4,6 +4,11 @@
 
 ### Added
 
+- Added a 30-second bitch-slap watchdog above the preset row: `can I bitch slap it?` reads `nah` while the agent is progressing and `bitchslapping...` when it is stuck — the same tool call three times, the same or near-duplicate answer twice, repeated tool output three times, or a text-only stop with open todos — at which point it steers a running turn or prompts an idle one; a state that ignores the first slap gets a second, harder corrective naming the open todos, then goes quiet until the transcript moves
+- Added output-based loop detection: `model.toolCallLoopGuard.resultThreshold` (default 2) steers when consecutive turns return identical non-trivial tool output even though the arguments changed, and the same guard now catches a 2–4 probe sequence repeated twice (A→B→C→A→B→C), which never produces two identical consecutive turns; the corrective tells the model to apply what the repeated output proved instead of re-running the probe
+- Added a deterministic ledger to turn-card-chain compactions: user requirements, standing directives (including an approved plan), file actions, and open failures are appended to the card summary, so a summary can no longer drop the plan when cards cover the history
+- Added the file-changing actions taken since the last `todo` update to the mid-run todo nudge, so reconciling the ledger is a reread rather than a memory exercise
+- Added system-prompt rules requiring a parser, serializer, or format reader to be grounded in the authoritative spec or reference implementation, and forbidding a hand-written synthetic fixture in place of the real artifact
 - Added per-model compaction retention and summary budgets: `profiles.<selector>.compaction.keepRecentTokens`, `maxSummaryTokens`, and `reserveTokens` tune an 8K/32K local preset without changing the global policy, and `compaction.maxSummaryTokens` sets a global ceiling below the 16K engine cap
 - Added `/llama` (aliases `/v100`, `/model-manager`): a live V100 model-manager sheet that lists every llama-manager preset with its status, size, measured VRAM, engine, and parked context; loads a preset and switches omp to it, unloads, starts/stops the router, force-clears VRAM, parks/restores/drops contexts, and exposes the SLM worker and log tails. `/preset` now shares the same manager client
 - Added `/artifacts`: a browser gallery window for the images, sprites, SVGs, and webpages this session created, opened from a loopback viewer without leaving the terminal. The browser renders images and SVGs natively and webpages through a cached headless-Chromium screenshot; `o` opens the original, `c` copies its path, and `r` rescans. Files produced by shell or Eval scripts are found by a bounded workspace scan
@@ -35,6 +40,10 @@
 
 ### Fixed
 
+- SLM compaction carries the previous `### Done` ledger forward and removes completed items from `In progress`/`Pending`, so a truncated handoff no longer sends the successor back over already-audited code
+- Compaction summaries append a `Resume point` when the retained tail starts with an assistant tool call, so the successor continues from that result instead of restarting the previous check
+- SLM handoff output defaults to 4096 tokens and no longer shrinks by 10% each turn, preserving completed audit items on long analysis runs
+- SLM handoff accepts a completed read of the relevant code and spec as Done evidence for audits, so verified subsystems stay in the ledger instead of falling back to In progress
 - Compaction no longer silently no-ops on small local windows: `keepRecentTokens` is clamped to a quarter of the resolved trigger, and the deterministic turn-card chain sizes its budget from that trigger instead of a fixed 8K
 - Stopped a cross-turn tool-call loop after the model ignores the loop-guard correction: the first repeat earns the steer, and the next identical call aborts the run instead of redirecting forever
 - A mid-turn steer no longer clears the repeated-failure guard, so an identical blocked call stays blocked until a new turn starts

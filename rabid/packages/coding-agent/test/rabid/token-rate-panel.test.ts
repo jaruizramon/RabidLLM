@@ -85,3 +85,29 @@ describe("TokenRatePanel", () => {
 		expect(visibleWidth(line)).toBe(6);
 	});
 });
+
+describe("TokenRatePanel bitch-slap header", () => {
+	function lines(verdict: "nah" | "bitchslapping"): string[] {
+		const panel = new TokenRatePanel({
+			rate: () => 12.3,
+			mode: () => ({ name: "fast" }),
+			slap: () => verdict,
+		});
+		return panel.render(120).map(line => line.replace(ANSI, ""));
+	}
+
+	it("asks the question above the preset row", () => {
+		const rendered = lines("nah");
+		expect(rendered).toHaveLength(2);
+		expect(rendered[0]).toContain("can I bitch slap it?");
+		expect(rendered[0]).toContain("nah");
+		expect(rendered[1]).toContain("rabid-fast");
+		expect(rendered[1]).not.toContain("can I bitch slap it?");
+	});
+
+	it("switches to bitchslapping while the watchdog acts", () => {
+		const rendered = lines("bitchslapping");
+		expect(rendered[0]).toContain("can I bitch slap it?");
+		expect(rendered[0]).toContain("bitchslapping...");
+	});
+});

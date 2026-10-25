@@ -79,7 +79,7 @@ compaction:
     device: cuda:1
     gpuFreeMiB: 2048
     maxContextTokens: 32768
-    maxHandoffTokens: 2048
+    maxHandoffTokens: 4096
     detail: detailed
     reasoningBudgetTokens: 0
     contractEveryTurns: 1

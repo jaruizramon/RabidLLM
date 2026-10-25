@@ -46,6 +46,7 @@ import {
 	shouldUseProviderNativeCompaction,
 	upsertFileOperations,
 } from "@oh-my-pi/pi-agent-core/compaction";
+import { renderCompactionResumePoint } from "./compaction-resume-point";
 import {
 	DEFAULT_PRUNE_CONFIG,
 	type PruneResult,
@@ -146,6 +147,7 @@ import { cfgRetry, cfgTurnCardsEnabled, cfgTurnCardsMaxTokens, cfgTurnCardsSumma
 import {
 	extractSlmHandoffGoal,
 	isSlmHandoffConfigured,
+	renderStandingDirectives,
 	renderVerbatimUserRequirements,
 	type SlmHandoffRecord,
 } from "../slm/handoff";
@@ -3976,17 +3978,17 @@ export class SessionMaintenance {
 		}
 		// The chain is cumulative; only when its head was dropped do we prepend the
 		// previous summary (duplication is safer than losing older history).
-		const messages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
-		const failures = renderOpenFailures(messages);
 		const summary = [
 			truncated && preparation.previousSummary ? `## Earlier summary\n${preparation.previousSummary}` : "",
 			`## Turn cards\n${text}`,
-			failures,
 		]
 			.filter(section => section !== "")
 			.join("\n\n");
 		return {
-			summary,
+			// Cards are a summary of prose; the ledger the successor needs (user
+			// requirements, standing directives, file actions, open failures) is
+			// deterministic and must not depend on the card chain covering it.
+			summary: this.#withDeterministicBlocks(summary, preparation),
 			shortSummary: "Turn-card chain",
 			firstKeptEntryId: preparation.firstKeptEntryId,
 			tokensBefore: preparation.tokensBefore,
@@ -4006,18 +4008,22 @@ export class SessionMaintenance {
 	 */
 	#withDeterministicBlocks(summary: string, preparation: CompactionPreparation): string {
 		const messages = preparation.messagesToSummarize.concat(preparation.turnPrefixMessages);
-		const requirements = renderVerbatimUserRequirements(
-			messages,
-			verbatimRequirementBudget(this.#model?.contextWindow),
-			preparation.previousSummary,
-		);
+		const budget = verbatimRequirementBudget(this.#model?.contextWindow);
+		const requirements = renderVerbatimUserRequirements(messages, budget, preparation.previousSummary);
+		// The approved plan and harness directives are developer-role messages;
+		// neither the SLM notes nor a turn card ever carries them, so they are
+		// rendered here or they are lost.
+		const directives = renderStandingDirectives(messages, budget, preparation.previousSummary);
 		// File actions are extracted from tool calls, not written by the
 		// summarizer: paths and commands in the summary are then facts.
 		const actions = renderFileActions(messages);
 		// Same for failed and repeated calls: a summarizer cannot turn an
 		// unresolved loop into progress.
 		const failures = renderOpenFailures(messages);
-		return [summary, actions, failures, requirements].filter(block => block !== "").join("\n\n");
+		const resumePoint = renderCompactionResumePoint(preparation.recentMessages);
+		return [summary, actions, failures, directives, requirements, resumePoint]
+			.filter(block => block !== "")
+			.join("\n\n");
 	}
 
 	async #prepareCompactionFromHooks(

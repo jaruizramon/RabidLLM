@@ -25,6 +25,7 @@ import {
 	cfgModelLoopGuardToolCallReminder,
 	cfgModelToolCallLoopGuardEnabled,
 	cfgModelToolCallLoopGuardExemptTools,
+	cfgModelToolCallLoopGuardResultThreshold,
 	cfgModelToolCallLoopGuardThreshold,
 } from "./settings";
 
@@ -159,8 +160,14 @@ export class LoopGuards {
 			// must not make the next, genuinely different attempt look like a loop.
 			this.#toolCallLoopGuard = undefined;
 			this.#toolCallLoopGuardSettingsKey = undefined;
+			const repeated =
+				detection.kind === "repeated_tool_cycle"
+					? `kept repeating the same ${detection.period}-call sequence`
+					: detection.kind === "repeated_tool_result"
+						? "kept returning identical output"
+						: "repeated with identical arguments";
 			this.#host.agent.abort(
-				`Stopped: ${detection.toolName} repeated with identical arguments after the loop-guard correction was ignored`,
+				`Stopped: ${detection.toolName} ${repeated} after the loop-guard correction was ignored`,
 			);
 			return;
 		}
@@ -190,12 +197,13 @@ export class LoopGuards {
 			return undefined;
 		}
 		const threshold = cfgModelToolCallLoopGuardThreshold.get(this.#host.settings);
+		const resultThreshold = cfgModelToolCallLoopGuardResultThreshold.get(this.#host.settings);
 		const exemptTools = cfgModelToolCallLoopGuardExemptTools
 			.get(this.#host.settings)
 			.filter((tool): tool is string => typeof tool === "string" && tool.length > 0);
-		const settingsKey = `${threshold}:${JSON.stringify(exemptTools)}`;
+		const settingsKey = `${threshold}:${resultThreshold}:${JSON.stringify(exemptTools)}`;
 		if (!this.#toolCallLoopGuard || this.#toolCallLoopGuardSettingsKey !== settingsKey) {
-			this.#toolCallLoopGuard = new ToolCallLoopGuard({ threshold, exemptTools });
+			this.#toolCallLoopGuard = new ToolCallLoopGuard({ threshold, resultThreshold, exemptTools });
 			this.#toolCallLoopGuardSettingsKey = settingsKey;
 			this.#redirectIssued = false;
 		}

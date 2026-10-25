@@ -367,3 +367,151 @@ describe("ToolCallLoopGuard multi-call turns", () => {
 		expect(guard.recordTurn(turn(b()))).toBeNull();
 	});
 });
+
+describe("ToolCallLoopGuard output digest", () => {
+	let nextId = 0;
+
+	function toolCall(name: string, args: Record<string, unknown>): ToolCall {
+		return { type: "toolCall", id: `out_${nextId++}`, name, arguments: args };
+	}
+
+	const LONG_OUTPUT =
+		"Probe: size=4096 entries=12 first=0x4d0a second=0x1f03 label=sample-x length=311 finetune=110 volume=116 checksum=snake padding=0123456789abcdef";
+
+	function turn(calls: ToolCall[], output: string) {
+		const message = {
+			role: "assistant",
+			content: calls,
+			api: "openai-responses",
+			provider: "openai",
+			model: "test-model",
+			usage: zeroUsage,
+			stopReason: "toolUse",
+			timestamp: Date.now(),
+		} satisfies AssistantMessage;
+		const toolResults = calls.map((call): ToolResultMessage => ({
+			role: "toolResult",
+			toolCallId: call.id,
+			toolName: call.name,
+			content: [{ type: "text", text: output }],
+			isError: false,
+			timestamp: Date.now(),
+		}));
+		return { message, toolResults };
+	}
+
+	test("detects the same output fed back by different probes", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "xxd a.mod" })], LONG_OUTPUT))).toBeNull();
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "od -c a.mod" })], LONG_OUTPUT))).toEqual({
+			kind: "repeated_tool_result",
+			toolName: "bash",
+			count: 2,
+			resultSummary: expect.stringContaining("Probe: size=4096"),
+			argumentsSummary: '{"command":"od -c a.mod"}',
+		});
+	});
+
+	test("ignores repeated trivial output", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "true" })], "(no output)"))).toBeNull();
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "true" })], "(no output)"))).toBeNull();
+	});
+
+	test("resets the output count when the output changes", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "a" })], LONG_OUTPUT))).toBeNull();
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "b" })], `${LONG_OUTPUT}\nchanged`))).toBeNull();
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "c" })], LONG_OUTPUT))).toBeNull();
+	});
+
+	test("reports the argument repeat when both detectors trip", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 2, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "same" })], LONG_OUTPUT))).toBeNull();
+		expect(guard.recordTurn(turn([toolCall("bash", { command: "same" })], LONG_OUTPUT))).toMatchObject({
+			kind: "repeated_tool_call",
+			count: 2,
+		});
+	});
+});
+
+describe("ToolCallLoopGuard output cycle", () => {
+	let nextId = 0;
+
+	function toolCall(name: string, args: Record<string, unknown>): ToolCall {
+		return { type: "toolCall", id: `cycle_${nextId++}`, name, arguments: args };
+	}
+
+	const PROBE = (label: string, extra: string) => `${label}: size=4096 | first=0x4d0a | count=50 | ${extra}`;
+
+	function turn(command: string, output: string) {
+		const call = toolCall("bash", { command });
+		const message = {
+			role: "assistant",
+			content: [call],
+			api: "openai-responses",
+			provider: "openai",
+			model: "test-model",
+			usage: zeroUsage,
+			stopReason: "toolUse",
+			timestamp: Date.now(),
+		} satisfies AssistantMessage;
+		return {
+			message,
+			toolResults: [
+				{
+					role: "toolResult",
+					toolCallId: call.id,
+					toolName: call.name,
+					content: [{ type: "text", text: output }],
+					isError: false,
+					timestamp: Date.now(),
+				},
+			] satisfies ToolResultMessage[],
+		};
+	}
+
+	const A = () => turn("analyze-header", PROBE("analyze", "name=sample-x len=311"));
+	const B = () => turn("check-size", PROBE("size", "after=1000 expected=1020 diff=20"));
+	const C = () => turn("parse-extra", PROBE("parse", "after=1020 record0=452"));
+
+	test("detects a three-probe sequence repeated twice", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(A())).toBeNull();
+		expect(guard.recordTurn(B())).toBeNull();
+		expect(guard.recordTurn(C())).toBeNull();
+		expect(guard.recordTurn(A())).toBeNull();
+		expect(guard.recordTurn(B())).toBeNull();
+		expect(guard.recordTurn(C())).toMatchObject({
+			kind: "repeated_tool_cycle",
+			period: 3,
+			count: 6,
+			toolName: "bash",
+		});
+	});
+
+	test("detects an alternating two-probe sequence", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(A())).toBeNull();
+		expect(guard.recordTurn(B())).toBeNull();
+		expect(guard.recordTurn(A())).toBeNull();
+		expect(guard.recordTurn(B())).toMatchObject({ kind: "repeated_tool_cycle", period: 2, count: 4 });
+	});
+
+	test("does not flag a cycle whose outputs keep changing", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(turn("analyze-header", PROBE("analyze", "len=1")))).toBeNull();
+		expect(guard.recordTurn(turn("check-size", PROBE("size", "diff=4")))).toBeNull();
+		expect(guard.recordTurn(turn("analyze-header", PROBE("analyze", "len=2")))).toBeNull();
+		expect(guard.recordTurn(turn("check-size", PROBE("size", "diff=8")))).toBeNull();
+	});
+
+	test("clears the cycle window on a turn with no tool calls", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 5, resultThreshold: 2, exemptTools: [] });
+		expect(guard.recordTurn(A())).toBeNull();
+		expect(guard.recordTurn(B())).toBeNull();
+		expect(guard.recordTurn({ message: { ...A().message, content: [] }, toolResults: [] })).toBeNull();
+		expect(guard.recordTurn(A())).toBeNull();
+		expect(guard.recordTurn(B())).toBeNull();
+	});
+});

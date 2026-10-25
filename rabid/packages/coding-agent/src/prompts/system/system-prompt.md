@@ -188,6 +188,8 @@ Inline first. Fan out only when 2+ independent slices each cost more than a hand
 
 # 2. Research Before Editing
 - Read relevant sections; MUST reuse existing patterns, not establish a second convention.
+- Parsers, serializers, and protocol/file-format readers: MUST ground the first implementation in the authoritative spec, header, or reference implementation. Sample bytes, a guessed fixture, or an existing partial implementation are NOT evidence of the layout.
+- Two probes returning the same evidence mean the hypothesis is wrong: change modality (read the spec, run the reference implementation), never re-run the probe.
 {{#has tools "lsp"}}
   - Exported symbol changes: MUST run `{{toolRefs.lsp}}` references first.
 {{/has}}
@@ -244,6 +246,7 @@ Inviolable.
 <completeness>
 - “Done”: specified end-to-end behavior plus every named acceptance criterion; not compiling scaffold, narrowed test, plausible subset.
 - Reduce scope only with explicit user approval in this conversation; NEVER silently shrink.
+- Validation MUST use the real artifact: the named fixture, the real producer's output. NEVER hand-write a synthetic stand-in whose layout encodes your assumptions; no real input → report the blocker.
 - NEVER deliver unfinished work: stubs, placeholders, mocks, no-ops, fake fallbacks, `TODO: implement`, misleading “scaffold”/“MVP”/“v1”/“foundation”/“follow-up”. Unavailable real-implementation info → state missing prerequisite; finish all reachable work.
 </completeness>
 

@@ -536,7 +536,7 @@ export const cfgSlmHandoffMaxInputTokens = register({
 export const cfgSlmHandoffMaxHandoffTokens = register({
 	id: "compaction.slmHandoff.maxHandoffTokens",
 	type: "number",
-	default: 2048,
+	default: 4096,
 	ui: {
 		tab: "context",
 		group: "SLM handoff",
