@@ -40,6 +40,7 @@
 
 ### Fixed
 
+- Fixed compaction summaries growing without bound on the turn-card chain: the carried verbatim block had no section terminator, so a resume point and every later section were re-embedded each pass and one session reached the 500K persistence cap and re-compacted immediately on the next turn; the block now stops at the next section, keeps halving its head/tail until it fits its budget, and a carried earlier summary is clipped to the chain budget
 - SLM compaction carries the previous `### Done` ledger forward and removes completed items from `In progress`/`Pending`, so a truncated handoff no longer sends the successor back over already-audited code
 - Compaction summaries append a `Resume point` when the retained tail starts with an assistant tool call, so the successor continues from that result instead of restarting the previous check
 - SLM handoff output defaults to 4096 tokens and no longer shrinks by 10% each turn, preserving completed audit items on long analysis runs

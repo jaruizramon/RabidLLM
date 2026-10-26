@@ -344,6 +344,38 @@ describe("renderVerbatimUserRequirements", () => {
 		expect(rendered).toContain("requirement-5");
 		expect(rendered).not.toContain("requirement-3");
 	});
+
+	it("stops at the next section instead of carrying it forward", () => {
+		const previousSummary = [
+			"## User messages (verbatim; authoritative)",
+			"",
+			"### User message 1",
+			"MUST use port 8451 for the test server.",
+			"",
+			"## Resume point",
+			"The retained history begins with an assistant message.",
+		].join("\n");
+
+		const rendered = renderVerbatimUserRequirements([], 4_096, previousSummary);
+
+		expect(verbatimRequirementBodies(rendered)).toEqual(["MUST use port 8451 for the test server."]);
+		expect(rendered).not.toContain("retained history");
+	});
+
+	it("keeps a carried block inside its budget instead of growing every pass", () => {
+		const messages = Array.from({ length: 40 }, (_, index) =>
+			userMessage(`requirement-${index + 1} ${"x".repeat(900)}`),
+		);
+
+		const rendered = renderVerbatimUserRequirements(messages, 1_024);
+
+		expect(rendered.length).toBeLessThanOrEqual(1_024 * 4 + 64);
+		expect(rendered).toContain("… middle user messages omitted …");
+
+		// Re-compacting its own output must not grow it.
+		const again = renderVerbatimUserRequirements([], 1_024, rendered);
+		expect(again.length).toBeLessThanOrEqual(rendered.length + 64);
+	});
 });
 
 describe("renderStandingDirectives", () => {

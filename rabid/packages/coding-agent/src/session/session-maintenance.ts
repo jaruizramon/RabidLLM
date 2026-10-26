@@ -74,6 +74,7 @@ import type { CompactionRummageTracker } from "../rabid/compaction-rummage";
 import { getAgentDir } from "@oh-my-pi/pi-utils";
 import { advanceSpeedTrigger, type SpeedTriggerState } from "../rabid/compaction-speed";
 import {
+	clipMiddle,
 	parseTurnCard,
 	readTurnCardChain,
 	renderFileActions,
@@ -3977,13 +3978,14 @@ export class SessionMaintenance {
 			return undefined;
 		}
 		// The chain is cumulative; only when its head was dropped do we prepend the
-		// previous summary (duplication is safer than losing older history).
-		const summary = [
-			truncated && preparation.previousSummary ? `## Earlier summary\n${preparation.previousSummary}` : "",
-			`## Turn cards\n${text}`,
-		]
-			.filter(section => section !== "")
-			.join("\n\n");
+		// previous summary (duplication is safer than losing older history). Clip it
+		// to the chain budget: an earlier pass could leave a summary at the
+		// persistence cap, and re-embedding it whole would repeat forever.
+		const earlier =
+			truncated && preparation.previousSummary
+				? `## Earlier summary\n${clipMiddle(preparation.previousSummary, chainBudget * 4)}`
+				: "";
+		const summary = [earlier, `## Turn cards\n${text}`].filter(section => section !== "").join("\n\n");
 		return {
 			// Cards are a summary of prose; the ledger the successor needs (user
 			// requirements, standing directives, file actions, open failures) is

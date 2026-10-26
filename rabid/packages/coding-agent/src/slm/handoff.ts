@@ -431,8 +431,12 @@ function renderVerbatimSection(bodies: readonly string[], maxTokens: number, hea
 			.join("\n\n");
 	let body = render(0, bodies.length);
 	const budget = maxTokens * CHARS_PER_TOKEN;
-	if (body.length > budget && bodies.length > 2) {
-		const keep = Math.max(1, Math.floor(bodies.length / 2));
+	let keep = bodies.length;
+	// Shrink the kept head/tail until the block fits. Halving once left the
+	// middle-truncated body far over budget (174 turns at 2,000 chars each), and
+	// the overflow was carried into the next compaction.
+	while (body.length > budget && keep > 1) {
+		keep = Math.max(1, Math.floor(keep / 2));
 		body = [render(0, keep), VERBATIM_OMISSION, render(bodies.length - keep, bodies.length)].join("\n\n");
 	}
 	return `${heading}\n\n${body}`;
@@ -443,8 +447,15 @@ function verbatimSectionBodies(section: string | undefined, heading: string, lab
 	if (!section) return [];
 	const start = section.indexOf(heading);
 	if (start === -1) return [];
+	const rest = section.slice(start + heading.length);
+	// Stop at the next top-level section. The summary continues with file
+	// actions, open failures, directives and the resume point; swallowing them
+	// into the last body fed them back on the next compaction, and every pass
+	// re-embedded the previous headings until the summary hit the persistence cap.
+	const end = rest.search(/^## /m);
+	const scoped = end === -1 ? rest : rest.slice(0, end);
 	const bodies: string[] = [];
-	for (const part of section.slice(start + heading.length).split(new RegExp(`^### ${label} \\d+$`, "m"))) {
+	for (const part of scoped.split(new RegExp(`^### ${label} \\d+$`, "m"))) {
 		// A part may carry the omission marker that followed the previous body.
 		const text = part.replace(VERBATIM_OMISSION, "").trim();
 		if (text !== "") bodies.push(text);
