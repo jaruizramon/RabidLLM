@@ -8,6 +8,10 @@ import { matchModelProfile } from "./model-profiles";
 import type { ScopeLike } from "../config/registry";
 import { cfgToolsDisabled } from "../tools/settings";
 import { cfgRabidMode, rabidModePolicy } from "./rabid-modes";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
+import { isEnoent, logger } from "@oh-my-pi/pi-utils";
 import {
 	cfgSampling,
 	cfgThinkingBudgets,
@@ -46,4 +50,34 @@ export function resolveModelSampling(scope: ScopeLike, model: ModelLike): Sampli
 	const withProfile = profileSampling ? { ...configured, ...profileSampling } : configured;
 	const modeSampling = rabidModePolicy(cfgRabidMode.get(scope))?.sampling;
 	return modeSampling ? { ...withProfile, ...modeSampling } : withProfile;
+}
+
+/**
+ * Text of the matching profile's `systemPromptAppend` file, or undefined.
+ *
+ * The file is read on every prompt rebuild rather than cached, so editing a
+ * model's discipline block applies on the next turn. A missing file is logged
+ * and skipped: a bad path must not cost the session its prompt.
+ */
+export async function loadModelSystemPromptAppend(
+	scope: ScopeLike,
+	model: ModelLike,
+	agentDir: string,
+): Promise<string | undefined> {
+	const configured = model
+		? matchModelProfile(cfgModelProfiles.get(scope), model)?.profile.systemPromptAppend
+		: undefined;
+	if (!configured) return undefined;
+	const expanded = configured.startsWith("~") ? path.join(os.homedir(), configured.slice(1)) : configured;
+	const resolved = path.isAbsolute(expanded) ? expanded : path.resolve(agentDir, expanded);
+	try {
+		const content = (await fs.readFile(resolved, "utf8")).trim();
+		return content === "" ? undefined : content;
+	} catch (error) {
+		if (isEnoent(error)) {
+			logger.warn("Model profile systemPromptAppend file is missing", { path: resolved });
+			return undefined;
+		}
+		throw error;
+	}
 }

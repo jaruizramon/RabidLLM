@@ -385,7 +385,7 @@ describe("renderStandingDirectives", () => {
 			{
 				role: "developer",
 				content: [
-					{ type: "text", text: "Plan approved. Full plan inlined.\n- ship MOD writer\n- verify with libopenmpt" },
+					{ type: "text", text: "Plan approved. Two steps remain.\n- update the parser\n- run the round-trip" },
 				],
 				timestamp: 2,
 			} as unknown as AgentMessage,
@@ -400,7 +400,7 @@ describe("renderStandingDirectives", () => {
 
 		expect(rendered).toContain("## Standing directives (verbatim; authoritative)");
 		expect(rendered).toContain("### Directive 1");
-		expect(rendered).toContain("ship MOD writer");
+		expect(rendered).toContain("update the parser");
 		expect(rendered).not.toContain("operator request");
 		expect(rendered).not.toContain("assistant prose");
 	});
@@ -410,16 +410,16 @@ describe("renderStandingDirectives", () => {
 			"## Standing directives (verbatim; authoritative)",
 			"",
 			"### Directive 1",
-			"Approved plan: build the tracker.",
+			"Approved plan: finish the parser.",
 		].join("\n");
 
 		const rendered = renderStandingDirectives([], 4_096, previousSummary);
 
-		expect(rendered).toContain("Approved plan: build the tracker.");
+		expect(rendered).toContain("Approved plan: finish the parser.");
 	});
 
 	it("does not duplicate a directive the previous block already holds", () => {
-		const directive = "Approved plan: build the tracker.";
+		const directive = "Approved plan: finish the parser.";
 		const previousSummary = `## Standing directives (verbatim; authoritative)\n\n### Directive 1\n${directive}`;
 		const developer = {
 			role: "developer",

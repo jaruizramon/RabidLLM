@@ -334,6 +334,7 @@ import {
 } from "./tools/settings";
 import { cfgToolsFormat } from "./session/context-settings";
 import {
+	loadModelSystemPromptAppend,
 	resolveDisabledToolNames,
 	resolveModelSampling,
 	resolveModelThinkingBudgets,
@@ -3965,6 +3966,10 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			const appendParts: string[] = [];
 			if (memoryInstructions) appendParts.push(memoryInstructions);
 			if (autoLearnInstructions) appendParts.push(autoLearnInstructions);
+			// Per-model discipline block (`profiles.<selector>.systemPromptAppend`),
+			// read fresh on every rebuild so an edit applies without a restart.
+			const modelPromptAppend = await loadModelSystemPromptAppend(settings, agent?.state.model ?? model, agentDir);
+			if (modelPromptAppend) appendParts.push(modelPromptAppend);
 			// List each mounted MCP tool once. A routed tool that the xd:// catalog
 			// would list carries its catalog summary on the route line and gets no
 			// catalog line; a tool the route bound omits keeps its catalog line.

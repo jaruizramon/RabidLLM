@@ -46,9 +46,21 @@ export interface ModelProfile {
 	thinkingBudgets?: ModelProfileThinkingBudgets;
 	tools?: { disabled?: string[] };
 	sampling?: ModelProfileSampling;
+	/**
+	 * Markdown file appended to this model's system prompt. Relative paths resolve
+	 * against the agent dir; `~` expands. Read at every prompt rebuild, so an edit
+	 * applies on the next turn without a restart.
+	 */
+	systemPromptAppend?: string;
 }
 
-const PROFILE_KEYS: Record<string, true> = { compaction: true, thinkingBudgets: true, tools: true, sampling: true };
+const PROFILE_KEYS: Record<string, true> = {
+	compaction: true,
+	thinkingBudgets: true,
+	tools: true,
+	sampling: true,
+	systemPromptAppend: true,
+};
 const COMPACTION_KEYS: Record<string, true> = {
 	thresholdPercent: true,
 	thresholdTokens: true,
@@ -217,6 +229,12 @@ export function normalizeModelProfiles(value: unknown): Record<string, ModelProf
 		if (entry.sampling !== undefined) {
 			profile.sampling = normalizeSampling(`profiles["${key}"].sampling`, entry.sampling);
 		}
+		if (entry.systemPromptAppend !== undefined) {
+			if (typeof entry.systemPromptAppend !== "string" || entry.systemPromptAppend.trim() === "") {
+				throw new Error(`Invalid profiles["${key}"].systemPromptAppend: expected a non-empty path.`);
+			}
+			profile.systemPromptAppend = entry.systemPromptAppend.trim();
+		}
 		profiles[key] = profile;
 	}
 	return profiles;
@@ -247,6 +265,7 @@ function mergeProfile(into: ModelProfile, from: ModelProfile): ModelProfile {
 		merged.tools = { disabled: [...new Set([...(into.tools?.disabled ?? []), ...from.tools.disabled])] };
 	}
 	if (from.sampling) merged.sampling = { ...into.sampling, ...from.sampling };
+	if (from.systemPromptAppend !== undefined) merged.systemPromptAppend = from.systemPromptAppend;
 	return merged;
 }
 
