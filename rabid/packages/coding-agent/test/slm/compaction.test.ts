@@ -321,7 +321,7 @@ describe("slm compaction method", () => {
 			sessionManager.appendMessage(userMessage("continue"));
 			const directive: Message = {
 				role: "developer",
-				content: [{ type: "text", text: "Plan approved. Implement the MOD writer before the XM reader." }],
+				content: [{ type: "text", text: "Plan approved. Implement the parser before the renderer." }],
 				timestamp: Date.now(),
 			};
 			sessionManager.appendMessage(directive);
@@ -341,7 +341,7 @@ describe("slm compaction method", () => {
 			const entry = latestCompaction();
 			expect(entry.summary).toContain("## Turn cards");
 			expect(entry.summary).toContain("## Standing directives (verbatim; authoritative)");
-			expect(entry.summary).toContain("Implement the MOD writer before the XM reader.");
+			expect(entry.summary).toContain("Implement the parser before the renderer.");
 			expect(entry.summary).toContain("## User messages (verbatim; authoritative)");
 			expect(entry.summary).toContain("MUST keep X");
 			expect(compactSpy).not.toHaveBeenCalled();

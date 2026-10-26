@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added `calculate`: a deterministic slider-sweep tool — one arithmetic expression over up to eight named axes with an optional `compare` column set (`compare`/`delta`/`ratio`), no I/O or clock, so identical calls print identical tables; useful for timing-model comparisons and fixed race schedules
+- Added `profiles.<selector>.systemPromptAppend`: a per-model markdown block appended to the system prompt (relative paths resolve against the agent dir, `~` expands, and the file is re-read on every rebuild), so one model can carry its own operating discipline without replacing the global `SYSTEM.md`
 - Added a 30-second bitch-slap watchdog above the preset row: `can I bitch slap it?` reads `nah` while the agent is progressing and `bitchslapping...` when it is stuck — the same tool call three times, the same or near-duplicate answer twice, repeated tool output three times, or a text-only stop with open todos — at which point it steers a running turn or prompts an idle one; a state that ignores the first slap gets a second, harder corrective naming the open todos, then goes quiet until the transcript moves
 - Added output-based loop detection: `model.toolCallLoopGuard.resultThreshold` (default 2) steers when consecutive turns return identical non-trivial tool output even though the arguments changed, and the same guard now catches a 2–4 probe sequence repeated twice (A→B→C→A→B→C), which never produces two identical consecutive turns; the corrective tells the model to apply what the repeated output proved instead of re-running the probe
 - Added a deterministic ledger to turn-card-chain compactions: user requirements, standing directives (including an approved plan), file actions, and open failures are appended to the card summary, so a summary can no longer drop the plan when cards cover the history
@@ -25,6 +27,7 @@
 
 ### Changed
 
+- Rabid balanced mode now caps thinking at 2,048 tokens at every level (was 4,096), matching fast; deep keeps 32,768
 - Rebranded the visible product from omp to rabid: `rabid` is the process title, CLI name in help and command examples, User-Agent, notification title, log filename prefix, and XDG data/state/cache root; the on-disk config root stays `.omp` for compatibility
 - Onboarding no longer links providers or a default model: setup now covers glyph mode, composer shape, and theme only; provider sign-in remains available on demand through `/setup providers` and `/login`
 - Turn cards are distilled by the local SLM worker: `turnCards.enabled` no longer falls back to the main model or a network provider, so per-prompt summarization stays on the worker (a missing worker skips the card instead of invoking the inference card or a remote model)

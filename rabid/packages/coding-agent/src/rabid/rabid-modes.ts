@@ -22,11 +22,11 @@ export const cfgRabidMode = register({
 		group: "RabidAI",
 		label: "Speed Mode",
 		description:
-			"Request-side policy applied to the loaded local model: fast (2048 thinking tokens, temp 0.7/0.8/20), balanced (4096), deep (32768). Off uses only the model profile and global settings. Does not load or unload a model.",
+			"Request-side policy applied to the loaded local model: fast (2048 thinking tokens, temp 0.7/0.8/20), balanced (2048), deep (32768). Off uses only the model profile and global settings. Does not load or unload a model.",
 		options: [
 			{ value: "off", label: "Off", description: "Use the model profile / global thinking and sampling settings." },
 			{ value: "fast", label: "Fast", description: "2048-token budget, temp 0.7, top-p 0.8, top-k 20." },
-			{ value: "balanced", label: "Balanced", description: "4096-token budget." },
+			{ value: "balanced", label: "Balanced", description: "2048-token budget." },
 			{ value: "deep", label: "Deep", description: "32768-token budget (effectively uncapped)." },
 		],
 	},
@@ -47,7 +47,7 @@ export const RABID_MODE_POLICIES: Record<Exclude<RabidMode, "off">, RabidModePol
 		disabledTools: ["task"],
 	},
 	balanced: {
-		thinkingBudgets: { minimal: 4_096, low: 4_096, medium: 4_096, high: 4_096, xhigh: 4_096, max: 4_096 },
+		thinkingBudgets: { minimal: 2_048, low: 2_048, medium: 2_048, high: 2_048, xhigh: 2_048, max: 2_048 },
 		disabledTools: ["task"],
 	},
 	deep: {
