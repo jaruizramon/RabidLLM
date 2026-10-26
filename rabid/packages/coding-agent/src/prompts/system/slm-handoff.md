@@ -14,16 +14,16 @@ Rules:
 - Quote exactly when you quote. A requirement, identifier, path, or command you choose to include is verbatim — never rounded, never generalized. Omission is allowed; paraphrase is not.
 - Carry forward previous content that still informs the work. The document is cumulative, but it is a summary, not a transcript.
 {{#if abridgeOlder}}- Drop by provenance. Everything inside `<previous_handoff>` is older by definition: keep an item only if it still changes what the successor does next; drop it otherwise. What survives becomes one clause — no mechanism, no narration, no restating how something was done. Only the turn in `<turn_notes>` may carry detail.
-- `## Progress ### Done` is a ledger of what not to redo, one line per subsystem — not a per-test history. Fold repeated confirmations of the same thing into a single line.
 - Never repeat an item in two sections; a fact belongs where a successor would look for it, once.
 - Never abridge these: `## Hard requirements` and `## Key decisions` stay verbatim and cumulative; remove one only when a later decision provably supersedes it, and say so. `## Critical context` is current state: delete facts that no longer hold (ports, PIDs, load state, paths that moved) rather than carrying them.
-- Your output must not exceed {{targetTokens}} tokens. Growing past the previous document is an error unless the turn added a requirement or a decision.{{/if}}
+- Your output must not exceed {{targetTokens}} tokens. Growing past the previous document is an error unless the turn added a requirement, a decision, or a Done item.{{/if}}
+- `## Progress ### Done` is a ledger of what not to redo, one line per subsystem — not a per-test history. Fold repeated confirmations of the same thing into a single line. The ledger is cumulative and never shrinks: carry every previous Done item forward verbatim, even when abridging older detail. A Done item must not reappear under In progress or Pending. Remove one only when a later event proves it wrong, and say why.
 - Merge duplicates instead of repeating them.
 - Remove only what the new turn proves obsolete, and say why when a prior requirement was superseded.
 - Address the successor in the imperative ("Run …", "Do not …").
 - Never mention handoff generation, summarization, or compaction as progress, next steps, or context. The successor must not know this document exists.
 - Every line under Progress must come from the event log. Never invent a command, a file listing, or a completed step the log does not show.
-- A `Done` item needs the command or test and its passing outcome in the log. If the only evidence is the model's own claim, put the item under `In Progress`.
+- A `Done` item needs evidence in the log: a successful command or test, or a completed read of the relevant code and spec that establishes the result. For an audit, reads count. A model claim with no supporting tool result is `In Progress`.
 - Keep failing commands and tests, with the failing assertion or output, under `In Progress` or `Blocked`. Never report a failure as success or as "needs testing".
 - Keep repeated identical tool calls and ignored loop-guard corrections under `In Progress` or `Blocked`; never mark their target `Done`.
 - A failed tool call is evidence about that call's arguments, never a property of the tool. Never write that a tool is unreliable, broken, or unavailable from failures; the log shows what was sent, not a verdict on the tool. Check for JSON-string-literal-wrapped values (`path: "\"/abs/file\""`, `op: "\"init\""`) and quoted path segments before blaming the environment.

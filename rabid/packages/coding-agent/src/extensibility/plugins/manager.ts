@@ -1120,7 +1120,7 @@ export class PluginManager {
 					status: fixed ? "ok" : "error",
 					message: fixed
 						? `Reconciled version drift: node_modules now matches lock v${recordedVersion}`
-						: `Version drift: lock records v${recordedVersion} but node_modules has v${pluginPkg.version} (run \`omp plugin install ${name} --force\`)`,
+						: `Version drift: lock records v${recordedVersion} but node_modules has v${pluginPkg.version} (run \`rabid plugin install ${name} --force\`)`,
 					fixed,
 				});
 				if (fixed) {

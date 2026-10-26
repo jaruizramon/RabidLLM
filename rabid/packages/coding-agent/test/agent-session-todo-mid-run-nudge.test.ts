@@ -52,9 +52,9 @@ describe("AgentSession mid-run todo reconciliation nudge", () => {
 	const MAX_PER_CYCLE = 2; // mirrors MID_RUN_TODO_NUDGE_MAX_PER_CYCLE
 	const NUDGE_TYPE = "mid-run-todo-nudge"; // mirrors MID_RUN_TODO_NUDGE_MESSAGE_TYPE
 
-	function toolUseAssistant(toolName: string): AssistantMessage {
+	function toolUseAssistant(toolName: string, args: Record<string, unknown> = {}): AssistantMessage {
 		const id = `call_${toolName}_${Date.now()}_${Math.random()}`;
-		const toolCall: ToolCall = { type: "toolCall", id, name: toolName, arguments: {} };
+		const toolCall: ToolCall = { type: "toolCall", id, name: toolName, arguments: args };
 		return {
 			role: "assistant",
 			content: [toolCall],
@@ -100,9 +100,9 @@ describe("AgentSession mid-run todo reconciliation nudge", () => {
 	}
 
 	/** Production-shaped tool round trip: assistant toolCall turn + toolResult. */
-	function emitToolResult(toolName: string, opts?: { isError?: boolean }): void {
+	function emitToolResult(toolName: string, opts?: { isError?: boolean; args?: Record<string, unknown> }): void {
 		const toolCallId = `call_${toolName}_${Date.now()}_${Math.random()}`;
-		session.agent.emitExternalEvent({ type: "message_end", message: toolUseAssistant(toolName) });
+		session.agent.emitExternalEvent({ type: "message_end", message: toolUseAssistant(toolName, opts?.args) });
 		const content: TextContent[] = [{ type: "text", text: "ok" }];
 		session.agent.emitExternalEvent({
 			type: "message_end",
@@ -241,6 +241,18 @@ describe("AgentSession mid-run todo reconciliation nudge", () => {
 		// Counter reset: another full runway is required before the next nudge,
 		// so an immediate poll right after firing must NOT re-inject.
 		expect(await drainNudges()).toEqual([]);
+	});
+
+	it("hands the model the actions that landed since the last todo update", async () => {
+		for (let i = 0; i < THRESHOLD; i++) {
+			emitToolResult("edit", { args: { path: "src/app.ts" } });
+		}
+
+		const nudges = await drainNudges();
+		const text = typeof nudges[0]?.content === "string" ? nudges[0].content : "";
+
+		expect(text).toContain(`${THRESHOLD} file-changing tool call(s)`);
+		expect(text).toContain("edit `src/app.ts`");
 	});
 
 	it("errored mutating results do not tick the counter", async () => {

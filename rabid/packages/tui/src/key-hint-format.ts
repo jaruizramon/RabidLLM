@@ -1,6 +1,6 @@
 /**
  * Key-hint formatting, kept free of the native addon: it imports only types
- * plus the theme symbol mirror, so addon-free CLI paths (`omp --version`,
+ * plus the theme symbol mirror, so addon-free CLI paths (`rabid --version`,
  * help text in cli/command-help.ts) can format keys without loading
  * `@oh-my-pi/pi-natives` through the keybindings registry.
  */

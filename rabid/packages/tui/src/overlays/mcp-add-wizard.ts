@@ -225,7 +225,7 @@ const TRANSPORTS: readonly TransportType[] = ["stdio", "http", "sse"];
 
 /** How each transport reads as a choice and in the review. */
 const TRANSPORT_CHOICES: Readonly<Record<TransportType, { icon: string; label: string; description: string }>> = {
-	stdio: { icon: "terminal", label: "Local command", description: "omp starts it on this machine" },
+	stdio: { icon: "terminal", label: "Local command", description: "rabid starts it on this machine" },
 	http: { icon: "globe", label: "Remote server", description: "Streamable HTTP endpoint" },
 	sse: { icon: "broadcast", label: "Server-sent events", description: "Older HTTP servers" },
 };
@@ -964,7 +964,7 @@ export class MCPAddWizard extends OverlayPanel {
 			{
 				phase: PHASE_REVIEW,
 				title: "Review and save",
-				lead: "omp connects to the server as soon as it is saved.",
+				lead: "rabid connects to the server as soon as it is saved.",
 				body: [
 					node(
 						"kv",
@@ -1450,7 +1450,7 @@ export class MCPAddWizard extends OverlayPanel {
 			phase: PHASE_CONNECTION,
 			title: "Trying the connection",
 			tone: "accent",
-			lead: "omp connects once to see whether the server needs credentials.",
+			lead: "rabid connects once to see whether the server needs credentials.",
 			ansi: new Text(theme.fg("muted", `Connecting to ${sanitize(target)}…`), 0, 0),
 			native: [statusRow("busy", [span("Connecting to "), span(replaceTabs(target), "mono")])],
 		});
@@ -1541,7 +1541,7 @@ export class MCPAddWizard extends OverlayPanel {
 					phase: PHASE_CONNECTION,
 					title: "Couldn't connect",
 					tone: "warning",
-					lead: "omp saves the server anyway; fix it later with /mcp.",
+					lead: "rabid saves the server anyway; fix it later with /mcp.",
 					ansi: failureBody,
 					native: [errorBlock(nativeErrorText(error)), statusRow("busy", "Adding the server anyway…")],
 				});
@@ -1724,7 +1724,7 @@ export class MCPAddWizard extends OverlayPanel {
 				phase: PHASE_AUTH,
 				title: "Checking the server",
 				tone: "success",
-				lead: "omp tries the new credentials before saving.",
+				lead: "rabid tries the new credentials before saving.",
 				ansi: healthBody,
 				native: [checks(statusRow("busy", "Waiting for the server to answer…", "health"))],
 			});

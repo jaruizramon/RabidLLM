@@ -2,8 +2,8 @@
  * Print mode (single-shot): Send prompts, output result, exit.
  *
  * Used for:
- * - `omp -p "prompt"` - text output
- * - `omp --mode json "prompt"` - JSON event stream
+ * - `rabid -p "prompt"` - text output
+ * - `rabid --mode json "prompt"` - JSON event stream
  */
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { ImageContent } from "@oh-my-pi/pi-ai";

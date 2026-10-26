@@ -1,5 +1,5 @@
 /**
- * `omp auth-broker` command handlers.
+ * `rabid auth-broker` command handlers.
  *
  * Sub-verbs:
  *   - `serve [--bind=…] [--trust-proxy-headers]` — boots the broker against the local SQLite store.
@@ -100,7 +100,7 @@ async function ensureToken(): Promise<string> {
 }
 
 /**
- * OAuth refresh handler for `omp auth-broker serve`'s {@link AuthStorage}.
+ * OAuth refresh handler for `rabid auth-broker serve`'s {@link AuthStorage}.
  *
  * The vault holds provider OAuth rows AND OMP-managed `mcp_oauth:*` rows.
  * Provider rows refresh through the per-provider registry. MCP rows are
@@ -127,7 +127,7 @@ export function refreshBrokerOAuthCredential(
 	return refreshOAuthToken(provider as OAuthProvider, credential);
 }
 
-/** The `omp auth-broker serve` vault: tokens refresh in this process through {@link refreshBrokerOAuthCredential}. */
+/** The `rabid auth-broker serve` vault: tokens refresh in this process through {@link refreshBrokerOAuthCredential}. */
 export function createBrokerAuthStorage(store: SqliteAuthCredentialStore): AuthStorage {
 	return new AuthStorage(store, {
 		refreshOAuthCredential: (provider, _credentialId, credential, signal) =>
@@ -580,7 +580,7 @@ async function runMigrate(flags: AuthBrokerCommandArgs["flags"]): Promise<void> 
 	}
 	if (flags.fromLocal !== true) {
 		throw new Error(
-			"`omp auth-broker migrate` requires an explicit source. Pass `--from-local` to migrate from the local SQLite store and env vars.",
+			"`rabid auth-broker migrate` requires an explicit source. Pass `--from-local` to migrate from the local SQLite store and env vars.",
 		);
 	}
 

@@ -18,14 +18,14 @@ export default class Read extends Command {
 	};
 
 	static examples = [
-		"omp read src/foo.ts",
-		"omp read src/foo.ts:50-100",
-		"omp read src/foo.ts:raw",
-		"omp read https://example.com",
-		"omp read omp://",
-		"omp read issue://123",
-		"omp read path/to/archive.zip:dir/file.ts",
-		"omp read path/to/db.sqlite:users:42",
+		"rabid read src/foo.ts",
+		"rabid read src/foo.ts:50-100",
+		"rabid read src/foo.ts:raw",
+		"rabid read https://example.com",
+		"rabid read omp://",
+		"rabid read issue://123",
+		"rabid read path/to/archive.zip:dir/file.ts",
+		"rabid read path/to/db.sqlite:users:42",
 	];
 
 	async run(): Promise<void> {

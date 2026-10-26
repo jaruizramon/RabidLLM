@@ -1,5 +1,5 @@
 /**
- * CLI handler for `omp grievances` — view, clean, and manually push reported tool issues.
+ * CLI handler for `rabid grievances` — view, clean, and manually push reported tool issues.
  */
 import chalk from "@oh-my-pi/pi-utils/chalk";
 import { Settings } from "../config/settings";
@@ -167,7 +167,7 @@ export async function cleanGrievances(options: CleanGrievancesOptions): Promise<
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Manual push (`omp grievances push`)
+// Manual push (`rabid grievances push`)
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -255,7 +255,7 @@ export async function pushGrievances(options: PushGrievancesOptions): Promise<vo
 		if (rejected > 0) {
 			console.log(
 				chalk.yellow(
-					`${rejected} grievance${rejected === 1 ? " was" : "s were"} refused by the server and marked rejected (see \`omp grievances list\`).`,
+					`${rejected} grievance${rejected === 1 ? " was" : "s were"} refused by the server and marked rejected (see \`rabid grievances list\`).`,
 				),
 			);
 		}

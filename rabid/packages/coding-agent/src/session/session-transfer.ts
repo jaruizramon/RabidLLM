@@ -1,5 +1,5 @@
 /**
- * Moving a session between machines (`omp session pack|unpack|moved`).
+ * Moving a session between machines (`rabid session pack|unpack|moved`).
  *
  * A session archive is a plain tar:
  *

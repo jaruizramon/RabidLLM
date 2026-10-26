@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Replaced the π brand mark with an ASCII spider and the `omp` wordmark with `rabid` across the welcome banner, setup splash, outro, and setup header; the native welcome lockup now uses the same ASCII mark instead of the terminal-provided `omp` image
+- Notification titles, native surface titles, OSC 99 app names, the TSP `app` field, and debug markers now say `rabid`; the status-line brand and terminal-title prefix use the spider glyph (`🕷`, or `R` in ASCII glyph mode)
 - Settled writes of images, SVGs, and webpages now draw a preview summary instead of their source; `Ctrl+O` reveals the source
 
 ## [18.11.3] - 2026-10-16

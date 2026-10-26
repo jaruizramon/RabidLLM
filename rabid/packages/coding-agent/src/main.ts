@@ -247,7 +247,7 @@ async function checkForNewVersion(currentVersion: string): Promise<string | unde
 		if (isSourceCheckout() || (await managedInstallName(process.execPath))) return;
 		const channel = cfgUpdateChannel.get(settings);
 		// A compiled binary updates from the build service; naming the running
-		// version lets the service prepare the patch `omp update` will then use.
+		// version lets the service prepare the patch `rabid update` will then use.
 		const { version } = isCompiledBinary()
 			? await fetchBuild({ channel }, { timeoutMs: 5_000, fromVersion: currentVersion })
 			: await getLatestRelease({ timeoutMs: 5_000, channel });
@@ -741,7 +741,7 @@ async function runInteractiveMode(
 			await mode.maybeAutoCreateWorktree();
 		}
 
-		// `omp join <link>`: dispatch through the same builtin path as a typed
+		// `rabid join <link>`: dispatch through the same builtin path as a typed
 		// `/join` so collab guards and error rendering stay in one place.
 		if (joinLink !== undefined) {
 			const executeBuiltinSlashCommand = await loadBuiltinSlashCommandExecutor();
@@ -1083,7 +1083,7 @@ export interface ScopedModelSink {
  * whose model first materializes through runtime discovery (e.g.
  * `opencode-go/ox-alpha-free` on a fresh launch with no cache row) is absent from
  * the frozen scoped `/models` list even though it is in `enabledModels`, invokable
- * via `--model`, and listed by `omp models find`. Once the initial refresh settles,
+ * via `--model`, and listed by `rabid models find`. Once the initial refresh settles,
  * re-resolve the scope and, when the set changed, push the fuller list into the
  * session so the scoped picker and Ctrl+P cycle include it. A scope that resolved
  * to zero models may become active here when the startup discovery pass returned
@@ -1185,7 +1185,7 @@ export function normalizeContinueSessionArgs(parsed: Args, rawArgs?: readonly st
 	parsed.messages.splice(messageIndex, 1);
 }
 const SESSION_NOT_FOUND_HINT =
-	"Run `omp --resume` without an argument to pick from recent sessions, or `omp` to start a new one.";
+	"Run `rabid --resume` without an argument to pick from recent sessions, or `omp` to start a new one.";
 
 function validateSessionPersistenceArgs(parsed: Pick<Args, "continue" | "noSession" | "resume">): void {
 	if (!parsed.noSession) return;
@@ -2382,7 +2382,7 @@ export async function runRootCommand(
 					process.stderr.write(`${chalk.yellow(`${message}\n`)}`);
 				}
 			}
-			// Fail fast on stale/typo flags (e.g. `omp --list-models`) and invalid
+			// Fail fast on stale/typo flags (e.g. `rabid --list-models`) and invalid
 			// built-in enum values now that we know the real extension flag set —
 			// an extension may shadow `--mode`/`--thinking`/`--approval-mode`, so
 			// neither can be judged by the pre-extension parse. Without this check

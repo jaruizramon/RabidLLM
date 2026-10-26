@@ -5,6 +5,7 @@ import type { Settings } from "../config/settings";
 import eagerTaskPrompt from "../prompts/system/eager-task.md" with { type: "text" };
 import eagerTodoPrompt from "../prompts/system/eager-todo.md" with { type: "text" };
 import midRunTodoNudgePrompt from "../prompts/system/mid-run-todo-nudge.md" with { type: "text" };
+import { renderFileActions } from "../rabid/turn-cards";
 import { getLatestTodoPhasesFromEntries, isTodoPhase } from "../tools/todo";
 import { type TodoItem, type TodoPhase } from "@oh-my-pi/pi-tui/tools/todo";
 import { buildNamedToolChoice } from "../utils/tool-choice";
@@ -16,6 +17,8 @@ import { cfgTodoEager, cfgTodoEnabled, cfgTodoReminders, cfgTodoRemindersMax } f
 
 const MID_RUN_NUDGE_MUTATION_THRESHOLD = 12;
 const MID_RUN_NUDGE_MAX_PER_CYCLE = 2;
+/** Actions listed in a nudge: enough to reconcile the ledger, short enough to read. */
+const MID_RUN_NUDGE_ACTION_LIMIT = 8;
 const MUTATING_TOOLS: Record<string, true> = {
 	bash: true,
 	eval: true,
@@ -313,6 +316,26 @@ export class TodoTracker {
 		return true;
 	}
 
+	/**
+	 * Deterministic record of what the agent actually did since its last `todo`
+	 * call. The harness cannot infer task completion, but it can hand the model
+	 * the concrete file actions so reconciling the ledger is a reread, not a
+	 * memory exercise.
+	 */
+	#actionsSinceLastTodoUpdate(): string {
+		const messages = this.#host.agent.state.messages;
+		let start = 0;
+		for (let index = messages.length - 1; index >= 0; index--) {
+			const message = messages[index];
+			if (message?.role !== "assistant" || !Array.isArray(message.content)) continue;
+			if (message.content.some(part => isRecord(part) && part.type === "toolCall" && part.name === "todo")) {
+				start = index + 1;
+				break;
+			}
+		}
+		return renderFileActions(messages.slice(start), MID_RUN_NUDGE_ACTION_LIMIT);
+	}
+
 	/** Takes the next hidden mid-run reconciliation nudge, if its budget and guards allow. */
 	takeMidRunNudge(): AgentMessage | null {
 		if (this.#mutationsSinceLastTouch < MID_RUN_NUDGE_MUTATION_THRESHOLD) return null;
@@ -323,6 +346,8 @@ export class TodoTracker {
 			.flatMap(phase => phase.tasks)
 			.filter(task => task.status === "pending" || task.status === "in_progress");
 		if (incomplete.length === 0) return null;
+		const mutations = this.#mutationsSinceLastTouch;
+		const recentActions = this.#actionsSinceLastTodoUpdate();
 		this.#mutationsSinceLastTouch = 0;
 		this.#midRunNudgeCount++;
 		const { toolRefs } = this.#buildEagerPreludeContext();
@@ -330,6 +355,8 @@ export class TodoTracker {
 			toolRefs,
 			incompleteCount: incomplete.length,
 			plural: incomplete.length !== 1,
+			mutations,
+			recentActions,
 		});
 		logger.debug("Mid-run todo nudge fired", {
 			incomplete: incomplete.length,

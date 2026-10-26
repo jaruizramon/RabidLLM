@@ -1,6 +1,6 @@
 /**
  * How soon an account's saved rate-limit resets expire, and whether anything
- * will spend them first. Shared by `omp usage` and the TUI status line so both
+ * will spend them first. Shared by `rabid usage` and the TUI status line so both
  * warn about the accounts the salvage planners would act on.
  */
 import type {

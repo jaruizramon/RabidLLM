@@ -107,7 +107,7 @@ function normalizeTinyTitleGenerateOptions(
 
 // ── Device / dtype resolution ────────────────────────────────────────
 
-/** Setting value (its env var included); only the env var when settings are uninitialized (e.g. `omp --smoke-test`). */
+/** Setting value (its env var included); only the env var when settings are uninitialized (e.g. `rabid --smoke-test`). */
 function readTinyModelSetting(setting: Setting<string>): string | undefined {
 	return isSettingsInitialized() ? setting.get(settings) : setting.envValue();
 }

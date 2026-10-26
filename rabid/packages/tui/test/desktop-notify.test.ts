@@ -105,10 +105,10 @@ describe("buildDesktopNotifyCommand", () => {
 		expect(buildDesktopNotifyCommand(notifySend, "ping")).toEqual([
 			"/usr/bin/notify-send",
 			"--app-name",
-			"omp",
+			"rabid",
 			"--urgency=normal",
 			"--expire-time=5000",
-			"omp",
+			"rabid",
 			"ping",
 		]);
 	});
@@ -123,7 +123,7 @@ describe("buildDesktopNotifyCommand", () => {
 		).toEqual([
 			"/usr/bin/notify-send",
 			"--app-name",
-			"omp",
+			"rabid",
 			"--urgency=critical",
 			"--expire-time=5000",
 			"Session 12",
@@ -135,16 +135,16 @@ describe("buildDesktopNotifyCommand", () => {
 		expect(buildDesktopNotifyCommand(notifySend, { title: "   ", body: "Waiting for input" })).toEqual([
 			"/usr/bin/notify-send",
 			"--app-name",
-			"omp",
+			"rabid",
 			"--urgency=normal",
 			"--expire-time=5000",
-			"omp",
+			"rabid",
 			"Waiting for input",
 		]);
 	});
 
 	it("produces a freedesktop Notify call for gdbus including the urgency hint byte", () => {
-		expect(buildDesktopNotifyCommand(gdbus, { title: "omp", body: "ping", urgency: "low" })).toEqual([
+		expect(buildDesktopNotifyCommand(gdbus, { title: "rabid", body: "ping", urgency: "low" })).toEqual([
 			"/usr/bin/gdbus",
 			"call",
 			"--session",
@@ -154,10 +154,10 @@ describe("buildDesktopNotifyCommand", () => {
 			"/org/freedesktop/Notifications",
 			"--method",
 			"org.freedesktop.Notifications.Notify",
-			"omp",
+			"rabid",
 			"0",
 			"",
-			"omp",
+			"rabid",
 			"ping",
 			"[]",
 			'{"urgency": <byte 0>}',
@@ -193,7 +193,7 @@ describe("sendDesktopNotification", () => {
 		expect(opts.cmd).toEqual([
 			"/usr/bin/notify-send",
 			"--app-name",
-			"omp",
+			"rabid",
 			"--urgency=normal",
 			"--expire-time=5000",
 			"Session",

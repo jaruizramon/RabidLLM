@@ -5,6 +5,7 @@
 ### Changed
 
 - Compaction and handoff prompts now require verification evidence for Done items and record failed tests and ignored loop-guard corrections instead of summarizing them as success
+- Compaction caps the retained tail at a quarter of the resolved trigger (`resolveKeepRecentTokens`), so a window smaller than `keepRecentTokens` still produces a cut point instead of a no-op, and `CompactionSettings.maxSummaryTokens` / `SummaryOptions.maxSummaryTokens` bound a small model's summary output
 
 ## [18.11.3] - 2026-10-16
 

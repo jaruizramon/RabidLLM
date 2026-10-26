@@ -231,8 +231,8 @@ export class WelcomeComponent implements Component {
 
 	/**
 	 * A `card` (`omp.welcome`) mirroring the terminal banner: the lockup
-	 * (`omp.welcome.lockup`: the terminal's builtin `omp` mark, which it animates,
-	 * beside the wordmark with the version under it) and the tip of the session.
+	 * (`omp.welcome.lockup`: the spider mark, animated beside the wordmark
+	 * with the version under it) and the tip of the session.
 	 * Roles carry the look (gradient logo, type scale); a "[NEW]" tip
 	 * carries a terminal-clocked shimmering tag.
 	 */
@@ -245,17 +245,7 @@ export class WelcomeComponent implements Component {
 		const lockupRow = keyed(
 			row(
 				[
-					node(
-						"image",
-						{
-							builtin: "omp",
-							alt: APP_NAME,
-							w: 128,
-							role: "omp.welcome.logo",
-						},
-						undefined,
-						"logo",
-					),
+					keyed(logoNode(RABID_LOGO, true), "logo"),
 					keyed(
 						col(
 							[
@@ -408,17 +398,23 @@ export class WelcomeComponent implements Component {
 	}
 }
 
-/** Block-grid brand mark shared by the welcome and setup surfaces. */
-export const PI_LOGO = ["████████████", "   ██  ██   ", "   ██  ██   ", "   ▒▒  ██   ", "       ██   "];
-
-/** Columns of {@link PI_LOGO}. */
-const LOGO_WIDTH = Math.max(...PI_LOGO.map(row => row.length));
-
 /**
- * The `omp` wordmark in half-blocks, set beside {@link PI_LOGO} from its second
- * row: the `p` descends into the fourth, the version takes the fifth.
+ * Block-grid brand mark shared by the welcome and setup surfaces: a top-down
+ * spider, four legs up and four down around a striped body.
  */
-const WORDMARK = ["▄▀▀▄ █▀▄▀▄ █▀▀▄", "▀▄▄▀ █ █ █ █▄▄▀", "           █"];
+export const RABID_LOGO = [
+	"  /\\  /\\  /\\  /\\    ",
+	" /  \\/  \\/  \\/  \\   ",
+	" \\   \\  ████  /  /  ",
+	"  \\  /██████\\  /    ",
+	"   \\/  ████  \\/     ",
+];
+
+/** Columns of {@link RABID_LOGO}. */
+const LOGO_WIDTH = Math.max(...RABID_LOGO.map(row => row.length));
+
+/** The `rabid` wordmark in half-blocks, set beside {@link RABID_LOGO}. */
+const WORDMARK = ["█▀▄ ▄▀▄ █▀▄ █ ▄▀▄", "█▀▄ █▀█ █▀▄ █ █ █", "▀ ▀ ▀ ▀ ▀▀  ▀ ▀▀ "];
 
 /** Columns of {@link WORDMARK}. */
 const WORDMARK_WIDTH = Math.max(...WORDMARK.map(row => row.length));
@@ -578,11 +574,11 @@ function introLogoFrame(progress: number): string[] {
 	const phase = ((((1 - eased) * INTRO_SWEEPS) % 1) + 1) % 1;
 	const shinePos = (((progress * INTRO_SHINE_TRAVERSALS) % 1) + 1) % 1;
 	const shineStrength = (1 - eased) ** 1.5;
-	return gradientLogo(PI_LOGO, phase, {
+	return gradientLogo(RABID_LOGO, phase, {
 		strength: shineStrength,
 		pos: shinePos,
 	});
 }
 
 /** Resting gradient frame, cached for re-renders outside of the intro. */
-const REST_FRAME = gradientLogo(PI_LOGO, 0);
+const REST_FRAME = gradientLogo(RABID_LOGO, 0);

@@ -1,8 +1,8 @@
 # RabidLLM
 
-The rig and harness I call **RabidAI**, kept in one repository: a duplicator for this box, the background compaction
-handoff it runs, and the harness those two live in. Three things, because they only work
-together — a single inference GPU, a gaming card, and local models.
+This repository contains the rig and harness I call **RabidAI**: a duplicator for this box, the background
+compaction handoff it runs, and the harness those two live in. They share a repository because they only
+work together — one inference GPU, one gaming card, and local models.
 
 > The harness is built on [oh-my-pi](https://github.com/can1357/oh-my-pi) (MIT) and that debt
 > is the largest one here. Attribution, what is upstream and what is mine:
@@ -16,7 +16,7 @@ together — a single inference GPU, a gaming card, and local models.
 | **3. The setup duplicator** | The serving stack for a new rig: manager web page, llama.cpp routers and presets, tool filter, wrappers, an idempotent installer, and the exact `hf download` line for every weight. | [`rig/`](rig), [`rig/README.md`](rig/README.md) |
 
 Clone it on a new machine, run [`rig/install.sh`](rig/install.sh), install the
-weights it lists by name, and the harness plus the rig come up the same way they do here.
+weights the installer lists by name, and the harness and rig come up the same way they do here.
 The mechanism ships inside the harness, so the two are never out of step; the rig is what
 the harness talks to.
 
@@ -36,10 +36,19 @@ requirement outright; a 3B invented a command it never ran. So the design splits
 | File paths, commands | **harness** — extracted from tool calls | a path in the summary is a path the session touched |
 | Goal, progress, decisions, context, next steps | **worker model** | judgment is what the model is for |
 | "Learned / Implemented" prose | **worker model**, grounded in the action log | constrained to paths it was given |
+| Resume point | **harness** — only when the retained tail starts mid-turn | continues the in-flight tool call instead of restarting |
 
-Every text compaction carries both harness blocks — `slm`, `handoff`, `soft`, and
-provider-native `remote` — so the fidelity guarantee does not depend on running a worker at
-all.
+Every text compaction — `slm`, `handoff`, `soft`, and provider-native `remote` — carries the
+harness blocks, so the fidelity guarantee does not depend on running a worker at all.
+
+### Local compaction
+
+The same policy has to survive 8K and 32K local presets, not only a 128K cloud window:
+
+- `compaction.keepRecentTokens` is capped at one quarter of the model's resolved trigger. Without that cap, an 8K preset can retain its entire history, `findCutPoint` returns no cut, and compaction silently no-ops.
+- Summary output is the smaller of the reserve budget, `compaction.maxSummaryTokens`, the model's own `maxTokens`, and half its window. An 8K model is never asked for a 16K summary.
+- `profiles.<selector>.compaction` adds `keepRecentTokens`, `maxSummaryTokens`, and `reserveTokens`, so the shipped 8K/32K vLLM presets carry their own budgets.
+- The deterministic turn-card chain sizes its tail from the resolved trigger instead of a fixed 8K.
 
 ## How it works
 
@@ -60,6 +69,8 @@ flowchart LR
 - **Two stages, one judgment.** Each turn the worker writes **notes** — statements transcribed, thoughts summarised to one line, tool outcomes recorded — and nothing else. At compaction it writes the **contract** from those notes: that selection is the only non-deterministic step in the handoff, and it never runs on the main model's critical path.
 - **Selection is enforced, not requested.** A small model asked to summarise a log copies it, and a token cap only compresses the copy. Documents containing three or more copied `THOUGHT:`/`CALL`/`RESULT` lines are retried once with a stricter instruction, then the copied lines are stripped; requirements and file actions live in the harness blocks either way.
 - **The worker selects; the harness records.** The model's job is to choose what a successor needs to continue — objective, decisions and their reasons, binding constraints, verified facts, next step — and to drop routine reads, repeats and superseded plans. It can be selective because the exact record is kept outside the document: the user's own words and the turn's file actions. Quote exactly when quoting; omit rather than paraphrase.
+- **The ledger survives truncation.** The previous handoff's `### Done` entries are merged back into every new document, and completed items are removed from `In progress`/`Pending`. A worker that hits its output cap therefore cannot turn an already-audited subsystem back into an outstanding one; an audit read of the code and spec counts as evidence for `Done`.
+- **The resume point.** If the retained tail starts with an assistant message (the cut kept it for its tool call), the committed summary ends with a deterministic `## Resume point` telling the successor to continue from that call and its result, not to restart the checks the ledger already covers.
 - **The worker reads a scratchpad, not the turn.** Each event becomes one bounded line — `USER`, `THOUGHT`, `CALL tool(target)`, `RESULT`, `CONCLUSION` — and the pad keeps the newest that fit. Measured: 316 messages / 142 K tokens of raw content → 26 K-token pad → 16.3 K after bounding, so an 88 K turn cannot overflow the worker.
 - **Stateless runs.** Each request is `system + previous document + new turns`. The model
   never sees its own earlier answers, so there is no self-reinforcing thought loop; the
@@ -71,10 +82,10 @@ flowchart LR
   admission. Compaction waits up to `awaitMs` for a stale document before falling back to
   the next method — and when it waits, it re-derives from the region it is about to discard
   rather than trusting a chain that may have drifted.
-- **Isolation.** Files are keyed by the transcript id plus a SHA-256 digest (a fork, an
-  SDK-supplied provider id, or punctuation-only id differences cannot share or collide);
-  the RAM copy is namespaced per agent dir; a copy whose metadata names another session is
-  refused on read rather than merged.
+- **Isolation.** Files are keyed by the transcript id plus a SHA-256 digest, so a fork, an
+  SDK-supplied provider id, or a punctuation-only id difference cannot share or collide.
+  The RAM copy is namespaced per agent dir, and a copy whose metadata names another session
+  is refused on read rather than merged.
 
 ## Test results
 
@@ -114,10 +125,10 @@ same prompt, second request (steady state), card otherwise idle at ~1.97 GB of d
 
 So `11.6 tok/s` is the *starved* configuration, not the 3070: a 4B Q4 at 8K context needs
 ≈2.7 GB resident, and a reservation that leaves it ~1 GB pushes most layers to the CPU. Two
-other effects are worth knowing: the historic 11.6 rows above were measured with **Laya
-holding 2.8 GB** of the card *and* a 2048 reservation that then left only ~1.2 GB; and with
-Laya co-resident (both fitting in VRAM) the same worker measured 63.2 tok/s instead of 95.9 —
-co-residency costs ~34 % throughput even when nothing spills.
+other effects are worth knowing. The historic 11.6 rows above were measured with **Laya
+holding 2.8 GB** of the card *and* a 2048 reservation that then left only ~1.2 GB. With
+Laya co-resident (both fitting in VRAM), the same worker measured 63.2 tok/s instead of
+95.9 — co-residency costs ~34 % throughput even when nothing spills.
 
 Rule of thumb: leave the worker `reservation ≤ card − 3.2 GB` (weights + KV + context), i.e.
 2048 on an otherwise idle 8 GB card, and do not co-locate a 2.8 GB service with it if you
@@ -171,6 +182,9 @@ records; missing cells are unmeasured, not zero.
 # ~/.rabid/agent/config.yml   (the `rabid` launcher's agent dir)
 compaction:
   methodOrder: [slm, shake, handoff, soft]   # slm first, real fallbacks behind it
+  keepRecentTokens: 12000                    # capped at 25% of the resolved trigger
+  maxSummaryTokens: 8192                     # optional global cap below the 16K engine ceiling
+  turnCardChain: true                        # deterministic chain before an LLM summary
   modelThresholds:
     llama-rabid/*: f88000                    # fixed context target (overrides thresholdPercent)
   speedFloorTps: 20                          # also compact when decode decays below this
@@ -179,9 +193,17 @@ compaction:
     device: cuda:1            # cpu | cuda | cuda:N   (never the inference card by default)
     gpuFreeMiB: 2048          # leave this much VRAM free; -1 offloads everything
     maxContextTokens: 16384   # one run only reads the delta, not the whole window
+    maxHandoffTokens: 4096    # cumulative Done ledger needs room
     reasoningBudgetTokens: 0  # 1024 for richer merges, ~4x the wall time
     detail: detailed          # concise | standard | detailed prose register
     awaitMs: 300000
+
+# Small local presets override retention and summary size per route.
+profiles:
+  "local-llama/*":
+    compaction:
+      keepRecentTokens: 4096
+      maxSummaryTokens: 2048
 ```
 
 `/models-worker` downloads the default GGUF, loads and holds a worker, puts `slm` first in
@@ -197,7 +219,7 @@ git clone https://github.com/jaruizramon/RabidLLM.git && cd RabidLLM
 # llama.cpp stock + PrismML fork under ~/.local/opt, `bun`, `python3`, `hf`
 hf download …                   # the lines install.sh printed for missing weights
 llama-manager start             # http://localhost:8090
-rabid                        # the launcher: PI_CONFIG_DIR=.rabid → ~/.rabid
+rabid                           # the launcher: PI_CONFIG_DIR=.rabid → ~/.rabid
 ```
 
 ## The rig
@@ -222,11 +244,13 @@ memory).
 ```
 rabid/                      the modified oh-my-pi tree, self-contained
   packages/coding-agent/
-    src/slm/                handoff.ts (coordinator, format, isolation), server.ts (supervised
-                            worker), worker-command.ts (/models-worker)
+    src/slm/                handoff.ts (coordinator, format, isolation), handoff-summary.ts
+                            (deterministic Done ledger), server.ts (supervised worker),
+                            worker-command.ts (/models-worker)
     src/rabid/              fork-only modules: turn cards, compaction rummage, speed floor,
                             rabid modes, model profiles, llama presets, TUI panels
-    src/prompts/system/     slm-handoff*.md (three prose registers), turn-card.md
+    src/prompts/system/     slm-handoff*.md (three prose registers), compaction-resume-point.md,
+                            turn-card.md
     test/{slm,rabid}/       tests for both components
   packages/ crates/ scripts/ sdk/ python/ types/ assets/ infra/ nix/ bazel/ patches/
   docs/                     upstream documentation (compaction.md, settings.md, …)
@@ -257,8 +281,8 @@ third-party tools and the model weights this repo does *not* ship — is in
 The harness keeps upstream paths on purpose: `git fetch upstream && git merge upstream/main`
 stays reviewable, and [`docs/FORK.md`](docs/FORK.md) is the inventory of what a
 merge has to reconcile. `rig/`, `src/slm/`, `src/rabid/` and the harness changes listed there are mine.
-Profile, directory and binary names inside still say `rabid` — that is the setup's own name,
-not the repository's.
+The on-disk config root remains `.omp` for compatibility; the visible product name is
+`rabid`.
 
 ## Status and limits
 
@@ -269,5 +293,6 @@ not the repository's.
   long-running sessions get the chain; the compaction path always awaits.
 - The manager's worker and the session's worker are independent processes; run one or the
   other on a given GPU budget.
-- Handoff prose is capped by `maxHandoffTokens` (2 048 by default) and the detail register;
-  verbose output costs successor context.
+- Handoff prose is capped by `maxHandoffTokens` (4 096 by default) and the detail register;
+  verbose output costs successor context. The `### Done` ledger is merged deterministically,
+  so truncation cannot erase a prior completed check.

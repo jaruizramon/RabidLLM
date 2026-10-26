@@ -3,7 +3,7 @@
  *
  * Each isolation base dir (`ensureIsolation` in {@link ./worktree}) holds a
  * compact `m` mount plus this marker file naming the omp process that created
- * it. `omp worktree clear` consults the marker so it can distinguish a live
+ * it. `rabid worktree clear` consults the marker so it can distinguish a live
  * subagent's sandbox from a crashed run's leftover instead of deleting both.
  */
 import * as path from "node:path";
@@ -64,7 +64,7 @@ async function processStartToken(pid: number): Promise<string | null> {
  * Record the current process as owner of the sandbox rooted at `baseDir`.
  *
  * Written before the isolation backend materialises `m` so a concurrent
- * `omp worktree clear` never sees an owner-less sandbox mid-creation.
+ * `rabid worktree clear` never sees an owner-less sandbox mid-creation.
  */
 export async function writeIsolationOwner(baseDir: string, id: string): Promise<void> {
 	const startToken = await processStartToken(process.pid);
@@ -112,7 +112,7 @@ export async function hasLiveIsolationOwner(baseDir: string): Promise<boolean> {
 export const RETAINED_BACKEND_FILE = ".omp-retained-backend.json";
 
 /**
- * Backends whose workspaces `omp worktree clear` must not remove with plain
+ * Backends whose workspaces `rabid worktree clear` must not remove with plain
  * recursive `rm`, but route through native `isoStop` teardown instead:
  * mounts (overlayfs, projfs), where `rm` destroys the preserved layer and
  * fails on the mountpoint, and Btrfs subvolumes, whose root is only removable

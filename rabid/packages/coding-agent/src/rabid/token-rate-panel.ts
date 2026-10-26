@@ -13,6 +13,8 @@ import { theme } from "@oh-my-pi/pi-tui/theme";
 
 import { formatNumber } from "@oh-my-pi/pi-utils";
 
+import type { BitchSlapVerdict } from "./bitch-slap";
+
 const NUMBER = new Intl.NumberFormat("en-US");
 /** Cells in each gauge. */
 const CELLS = 10;
@@ -43,6 +45,8 @@ export interface TokenRatePanelHost {
 	mode?(): RabidModeReadout | undefined;
 	reasoning?(): ReasoningReadout | undefined;
 	context?(): ContextReadout | undefined;
+	/** Watchdog readout for the header row: can I bitch slap it? */
+	slap?(): BitchSlapVerdict | undefined;
 }
 
 /** `█` filled, `░` empty, `┊` at the threshold cell (takes precedence). */
@@ -99,6 +103,13 @@ export class TokenRatePanel implements Component {
 			parts.push(`${theme.fg("muted", label)} ${theme.fg(due ? "warning" : "dim", gauge(fraction))}`);
 		}
 		if (rate !== null) parts.push(theme.fg("dim", `${rate.toFixed(1)} tok/s`));
-		return [truncateToWidth(`${padding(1)}${parts.join(theme.fg("muted", " · "))}`, width)];
+		const row = truncateToWidth(`${padding(1)}${parts.join(theme.fg("muted", " · "))}`, width);
+		const slap = this.#host.slap?.();
+		if (slap === undefined) return [row];
+		const header = `${theme.fg("muted", "can I bitch slap it?")}  ${theme.fg(
+			slap === "nah" ? "dim" : "warning",
+			slap === "nah" ? "nah" : "bitchslapping...",
+		)}`;
+		return [truncateToWidth(`${padding(1)}${header}`, width), row];
 	}
 }

@@ -1566,7 +1566,7 @@ export class CommandController {
 	}
 
 	/**
-	 * `/fork` inside a Tern pane: ask Tern to run `omp --fork` of this session in a new pane beside
+	 * `/fork` inside a Tern pane: ask Tern to run `rabid --fork` of this session in a new pane beside
 	 * this one, which keeps the original session. False means fork in place instead: outside Tern,
 	 * an unsaved session, a Tern without `fork`, or Tern refusing it. Once the request is out, an
 	 * unconfirmed one is reported rather than retried in place, since Tern may still open the pane.

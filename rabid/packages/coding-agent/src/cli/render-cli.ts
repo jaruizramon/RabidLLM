@@ -1,5 +1,5 @@
 /**
- * `omp render` — draw a session's entire thread through the production
+ * `rabid render` — draw a session's entire thread through the production
  * transcript pipeline, headlessly.
  *
  * Replays the session into a real `InteractiveMode` + `TUI` wired to an
@@ -247,7 +247,7 @@ export async function runRenderCommand(args: RenderCommandArgs): Promise<number>
 			mode?.stop();
 			await session?.dispose();
 		} catch (err) {
-			logger.debug("omp render teardown failed", { error: String(err) });
+			logger.debug("rabid render teardown failed", { error: String(err) });
 		}
 		tempDir.removeSync();
 	}

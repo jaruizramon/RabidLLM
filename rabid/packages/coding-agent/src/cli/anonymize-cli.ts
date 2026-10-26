@@ -1,5 +1,5 @@
 /**
- * `omp anonymize` — write a shareable copy of a session (and its subagent
+ * `rabid anonymize` — write a shareable copy of a session (and its subagent
  * transcripts) with turn contents redacted and metadata preserved.
  */
 import * as fs from "node:fs/promises";

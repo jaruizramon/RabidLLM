@@ -1,5 +1,5 @@
 /**
- * `omp --restore`: a session goes on with what its last process left unfinished when
+ * `rabid --restore`: a session goes on with what its last process left unfinished when
  * it ended ({@link restoreSession}): the turn it was in
  * ({@link AgentSession.restoreInterruptedTurn}) and the subagents it was running.
  *
@@ -33,7 +33,7 @@ export interface RestoreOptions {
 	subagentEventBus?: EventBus;
 }
 
-/** What `omp --restore` went on with. */
+/** What `rabid --restore` went on with. */
 export interface RestoreOutcome {
 	/** The session's own interrupted turn goes on. */
 	turn: boolean;

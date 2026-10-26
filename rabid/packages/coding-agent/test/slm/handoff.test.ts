@@ -10,6 +10,7 @@ import {
 	isSlmHandoffConfigured,
 	parseSlmHandoffFile,
 	readSlmHandoff,
+	renderStandingDirectives,
 	renderVerbatimUserRequirements,
 	resolveSlmServerConfig,
 	slmHandoffFilePaths,
@@ -342,6 +343,91 @@ describe("renderVerbatimUserRequirements", () => {
 		expect(rendered).toContain("… middle user messages omitted …");
 		expect(rendered).toContain("requirement-5");
 		expect(rendered).not.toContain("requirement-3");
+	});
+
+	it("stops at the next section instead of carrying it forward", () => {
+		const previousSummary = [
+			"## User messages (verbatim; authoritative)",
+			"",
+			"### User message 1",
+			"MUST use port 8451 for the test server.",
+			"",
+			"## Resume point",
+			"The retained history begins with an assistant message.",
+		].join("\n");
+
+		const rendered = renderVerbatimUserRequirements([], 4_096, previousSummary);
+
+		expect(verbatimRequirementBodies(rendered)).toEqual(["MUST use port 8451 for the test server."]);
+		expect(rendered).not.toContain("retained history");
+	});
+
+	it("keeps a carried block inside its budget instead of growing every pass", () => {
+		const messages = Array.from({ length: 40 }, (_, index) =>
+			userMessage(`requirement-${index + 1} ${"x".repeat(900)}`),
+		);
+
+		const rendered = renderVerbatimUserRequirements(messages, 1_024);
+
+		expect(rendered.length).toBeLessThanOrEqual(1_024 * 4 + 64);
+		expect(rendered).toContain("… middle user messages omitted …");
+
+		// Re-compacting its own output must not grow it.
+		const again = renderVerbatimUserRequirements([], 1_024, rendered);
+		expect(again.length).toBeLessThanOrEqual(rendered.length + 64);
+	});
+});
+
+describe("renderStandingDirectives", () => {
+	it("keeps developer directives verbatim and ignores other roles", () => {
+		const messages = [
+			userMessage("operator request"),
+			{
+				role: "developer",
+				content: [
+					{ type: "text", text: "Plan approved. Full plan inlined.\n- ship MOD writer\n- verify with libopenmpt" },
+				],
+				timestamp: 2,
+			} as unknown as AgentMessage,
+			{
+				role: "assistant",
+				content: [{ type: "text", text: "assistant prose" }],
+				timestamp: 3,
+			} as unknown as AgentMessage,
+		];
+
+		const rendered = renderStandingDirectives(messages, 4_096);
+
+		expect(rendered).toContain("## Standing directives (verbatim; authoritative)");
+		expect(rendered).toContain("### Directive 1");
+		expect(rendered).toContain("ship MOD writer");
+		expect(rendered).not.toContain("operator request");
+		expect(rendered).not.toContain("assistant prose");
+	});
+
+	it("carries an earlier compaction's directives forward", () => {
+		const previousSummary = [
+			"## Standing directives (verbatim; authoritative)",
+			"",
+			"### Directive 1",
+			"Approved plan: build the tracker.",
+		].join("\n");
+
+		const rendered = renderStandingDirectives([], 4_096, previousSummary);
+
+		expect(rendered).toContain("Approved plan: build the tracker.");
+	});
+
+	it("does not duplicate a directive the previous block already holds", () => {
+		const directive = "Approved plan: build the tracker.";
+		const previousSummary = `## Standing directives (verbatim; authoritative)\n\n### Directive 1\n${directive}`;
+		const developer = {
+			role: "developer",
+			content: [{ type: "text", text: directive }],
+			timestamp: 1,
+		} as unknown as AgentMessage;
+
+		expect(renderStandingDirectives([developer], 4_096, previousSummary).match(/Approved plan/g)).toHaveLength(1);
 	});
 });
 

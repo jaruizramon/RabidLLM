@@ -1,6 +1,6 @@
 import { centerLine } from "../../utils";
 import { padToWidth } from "../../render/utils";
-import { gradientLogo, logoNode, PI_LOGO } from "../../prompt/welcome";
+import { gradientLogo, logoNode, RABID_LOGO } from "../../prompt/welcome";
 import { theme } from "../../theme/theme";
 import { col, node, span, text } from "../../native/describe";
 import type { NativeNode } from "../../native/node";
@@ -22,7 +22,7 @@ export function describeSetupOutro(): NativeNode {
 		col(
 			[
 				node("spacer", { grow: 1 }),
-				logoNode(PI_LOGO, true),
+				logoNode(RABID_LOGO, true),
 				text([span(saved, "success strong")], { wrap: "none" }),
 				text([span("Handing off to the normal CLI…", "muted")], { wrap: "none" }),
 				node("progress", { value: null, max: { w: "48ch" } }),
@@ -37,7 +37,7 @@ export function renderSetupOutro(width: number, height: number, elapsedMs: numbe
 	const frame = Math.floor(elapsedMs / SETUP_TICK_MS);
 	const lines = renderStarfield(width, height, frame + 1000);
 	const progress = Math.max(0, Math.min(1, elapsedMs / SETUP_OUTRO_MS));
-	const logo = gradientLogo(PI_LOGO, progress * 1.2, { pos: (progress * 2) % 1, strength: 1 - progress });
+	const logo = gradientLogo(RABID_LOGO, progress * 1.2, { pos: (progress * 2) % 1, strength: 1 - progress });
 	const title = theme.bold(theme.fg("success", `${theme.status.success} Setup saved`));
 	const subtitle = theme.fg("muted", "Handing off to the normal CLI…");
 	const sweepWidth = Math.max(1, Math.min(width - 8, Math.floor((width - 8) * progress)));

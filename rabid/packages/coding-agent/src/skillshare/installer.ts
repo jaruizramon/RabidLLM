@@ -3,7 +3,7 @@
  * into the shared store, and maintain `skills.json` / `skills.lock.json`.
  *
  * The `*SkillPackages` / `format*` / `listInstalledSkills` functions return
- * data and report through {@link SkillInstallHooks}, so both the `omp skill`
+ * data and report through {@link SkillInstallHooks}, so both the `rabid skill`
  * CLI (the exit-code wrappers at the bottom) and the TUI `/skills` command
  * share one implementation.
  */
@@ -150,7 +150,7 @@ export async function storeSkillVersion(
 /**
  * Remove store dirs this operation stopped referencing, unless the global or
  * current project lock still uses them. Other projects' dirs are restored on
- * their next `omp skill update` / `omp skill install`.
+ * their next `rabid skill update` / `rabid skill install`.
  */
 async function pruneReleased(
 	released: ReadonlyArray<{ id: string; version: string }>,

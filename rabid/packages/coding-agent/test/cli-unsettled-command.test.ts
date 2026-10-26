@@ -98,7 +98,7 @@ describe("one-shot CLI command settlement", () => {
 
 		expect(run.exitCode, run.stderr).toBe(1);
 		// Names the stalled subcommand so automation logs show what failed, without its arguments.
-		expect(run.stderr).toContain(`\`omp config\` ${DIAGNOSTIC}`);
+		expect(run.stderr).toContain(`\`rabid config\` ${DIAGNOSTIC}`);
 		expect(run.stderr).not.toContain("collab.autoStart");
 		expect(run.stdout).toBe("");
 		expect(fs.existsSync(run.configPath)).toBe(false);

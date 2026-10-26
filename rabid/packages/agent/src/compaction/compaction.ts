@@ -190,6 +190,13 @@ export interface CompactionSettings {
 	reserveTokens?: number;
 	keepRecentTokens: number;
 	/**
+	 * Per-model ceiling on a generated summary, applied on top of the reserve
+	 * budget and {@link MAX_SUMMARY_TOKENS}. Small local windows cannot spend a
+	 * 16k-token summary on a 6k-token trigger; a model profile can lower it
+	 * without changing the global cap.
+	 */
+	maxSummaryTokens?: number;
+	/**
 	 * Whether the active session model may be an implicit compaction candidate.
 	 * An explicit `compactionModel` naming it still wins; this only excludes it
 	 * from the fallback chain (roles and the largest-context scan). Defaults to
@@ -217,6 +224,25 @@ export const DEFAULT_RESERVE_TOKENS = 16384;
  * mirrors {@link DEFAULT_RESERVE_TOKENS} so this adds no new tuning constant.
  */
 export const MAX_SUMMARY_TOKENS = DEFAULT_RESERVE_TOKENS;
+
+/**
+ * Effective output budget for one summarization call: the reserve-derived
+ * base, the configured/global cap, the model's own output limit, and half the
+ * model window. The window term keeps a 16K global cap from asking an 8K local
+ * model for a summary larger than its whole context.
+ */
+export function summaryTokenBudget(model: Model, base: number, cap: number): number {
+	let budget = Math.min(base, cap, MAX_SUMMARY_TOKENS);
+	const modelMax = model.maxTokens;
+	if (typeof modelMax === "number" && Number.isFinite(modelMax) && modelMax > 0) {
+		budget = Math.min(budget, modelMax);
+	}
+	const contextWindow = model.contextWindow;
+	if (typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0) {
+		budget = Math.min(budget, Math.max(1, Math.floor(contextWindow * 0.5)));
+	}
+	return Math.max(1, budget);
+}
 
 // reserveTokens is deliberately absent: an unset reserve is what marks it as
 // defaulted, which resolveBudgetReserveTokens needs to distinguish "user never
@@ -389,6 +415,29 @@ export function compactionContextTokens(providerContextTokens: number, storedCon
  */
 export function promptBudgetTokens(contextWindow: number, settings: CompactionSettings): number {
 	return Math.max(0, Math.min(contextWindow - 1, contextWindow - resolveBudgetReserveTokens(contextWindow, settings)));
+}
+
+/**
+ * Largest share of the resolved trigger the retained recent tail may take.
+ *
+ * A tail larger than the trigger leaves nothing to summarize: `findCutPoint`
+ * walks back past every message, `messagesToSummarize` is empty, and
+ * `prepareCompaction` returns undefined — a silent no-op on small local
+ * windows. Keeping the tail at a quarter of the trigger leaves the rest to
+ * compact while still protecting the newest turn group.
+ */
+export const MAX_KEEP_RECENT_SHARE = 0.25;
+
+/**
+ * The retained-tail budget for one model window: the configured value, capped
+ * at {@link MAX_KEEP_RECENT_SHARE} of the resolved trigger. Unknown windows
+ * keep the configured value.
+ */
+export function resolveKeepRecentTokens(contextWindow: number, settings: CompactionSettings): number {
+	const configured = Math.max(1, Math.floor(settings.keepRecentTokens));
+	if (!Number.isFinite(contextWindow) || contextWindow <= 0) return configured;
+	const threshold = resolveThresholdTokens(contextWindow, settings);
+	return Math.min(configured, Math.max(1, Math.floor(threshold * MAX_KEEP_RECENT_SHARE)));
 }
 
 export function resolveThresholdTokens(contextWindow: number, settings: CompactionSettings): number {
@@ -734,6 +783,13 @@ export interface SummaryOptions {
 	thinkingLevel?: ThinkingLevel;
 	/** Session routing key for remote compaction transports with sticky provider sessions. */
 	sessionId?: string;
+	/**
+	 * Lower ceiling on this summarization call's output tokens. Per-model
+	 * profiles set it through `CompactionSettings.maxSummaryTokens`; the
+	 * effective value is the smaller of this, {@link MAX_SUMMARY_TOKENS}, and
+	 * the reserve-derived budget.
+	 */
+	maxSummaryTokens?: number;
 	/** Prompt-cache key for remote compaction transports that support provider prefix caching. */
 	promptCacheKey?: string;
 	/** Mutable provider state used to keep Codex compaction on the live session identity. */
@@ -906,7 +962,11 @@ export async function generateSummary(
 	previousSummary?: string,
 	options?: SummaryOptions,
 ): Promise<string> {
-	const maxTokens = Math.min(Math.floor(0.8 * reserveTokens), MAX_SUMMARY_TOKENS);
+	const maxTokens = summaryTokenBudget(
+		model,
+		Math.floor(0.8 * reserveTokens),
+		options?.maxSummaryTokens ?? MAX_SUMMARY_TOKENS,
+	);
 
 	// Serialize conversation to text so model doesn't try to continue it
 	// Convert to LLM messages first (handles custom app messages when caller provides a transformer).
@@ -1215,7 +1275,11 @@ async function generateShortSummary(
 	signal?: AbortSignal,
 	options?: SummaryOptions,
 ): Promise<string> {
-	const maxTokens = Math.min(512, Math.floor(0.2 * reserveTokens));
+	const maxTokens = summaryTokenBudget(
+		model,
+		Math.min(512, Math.floor(0.2 * reserveTokens)),
+		options?.maxSummaryTokens ?? MAX_SUMMARY_TOKENS,
+	);
 	const llmMessages = (options?.convertToLlm ?? defaultConvertToLlm)(recentMessages);
 	const conversationText = serializeConversationForSummary(llmMessages, preferredDialect(model.id));
 
@@ -1456,7 +1520,7 @@ export function prepareCompaction(
 
 	const lastUsage = getLastAssistantUsage(pathEntries);
 	const tokensBefore = lastUsage ? calculateContextTokens(lastUsage) : 0;
-	let keepRecentTokens = settings.keepRecentTokens;
+	let keepRecentTokens = resolveKeepRecentTokens(activeModel?.contextWindow ?? 0, settings);
 	if (lastUsage) {
 		const estimatedTokens = tokenizer.countMessages(compactionMessages);
 		const promptTokens = calculatePromptTokens(lastUsage);
@@ -1673,6 +1737,7 @@ export async function compact(
 		// at the call sites, leaked back in here. See resolveCompactionEffort.
 		thinkingLevel: options?.thinkingLevel,
 		sessionId: options?.sessionId,
+		maxSummaryTokens: settings.maxSummaryTokens,
 		promptCacheKey: options?.promptCacheKey,
 		providerSessionState: options?.providerSessionState,
 		preferWebsockets: options?.preferWebsockets,
@@ -2127,7 +2192,11 @@ export async function compact(
 						customInstructions,
 						formatAdditionalContext(summaryOptions.extraContext).trim() || undefined,
 					),
-					maxTokens: Math.min(Math.floor(0.8 * reserveTokens), MAX_SUMMARY_TOKENS),
+					maxTokens: summaryTokenBudget(
+						model,
+						Math.floor(0.8 * reserveTokens),
+						summaryOptions.maxSummaryTokens ?? MAX_SUMMARY_TOKENS,
+					),
 					reasoning: resolveCompactionEffort(model, summaryOptions.thinkingLevel),
 				},
 				signal,
@@ -2284,7 +2353,11 @@ async function generateTurnPrefixSummary(
 	signal?: AbortSignal,
 	options?: SummaryOptions,
 ): Promise<string> {
-	const maxTokens = Math.min(Math.floor(0.5 * reserveTokens), MAX_SUMMARY_TOKENS); // Smaller budget for turn prefix
+	const maxTokens = summaryTokenBudget(
+		model,
+		Math.floor(0.5 * reserveTokens),
+		options?.maxSummaryTokens ?? MAX_SUMMARY_TOKENS,
+	); // Smaller budget for turn prefix
 
 	const llmMessages = (options?.convertToLlm ?? defaultConvertToLlm)(messages);
 	const conversationText = serializeConversationForSummary(llmMessages, preferredDialect(model.id));

@@ -260,6 +260,7 @@ import { SessionInfoOverlay } from "@oh-my-pi/pi-tui/overlays/session-info-overl
 import { JobsSheet } from "@oh-my-pi/pi-tui/overlays/jobs-panel";
 import { SkillMessageComponent } from "@oh-my-pi/pi-tui/chat/skill-message";
 import { StatusLineComponent } from "@oh-my-pi/pi-tui/status-line";
+import { BITCH_SLAP_INTERVAL_MS, BitchSlapWatchdog } from "../rabid/bitch-slap";
 import { CompactionRummagePanel } from "../rabid/compaction-rummage-panel";
 import { TokenRatePanel } from "../rabid/token-rate-panel";
 import { statusLineHost } from "./status-line-host";
@@ -1213,6 +1214,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	rummageContainer: Container;
 	readonly #tokenRatePanel: TokenRatePanel;
 	readonly #rummagePanel: CompactionRummagePanel;
+	readonly #bitchSlap = new BitchSlapWatchdog();
+	#bitchSlapTimer: NodeJS.Timeout | undefined;
 	/** Whether {@link statusContainer} rendered lines in the latest frame; the band composer's editor top gap collapses only then. */
 	statusRowOccupied = false;
 	todoContainer: Container;
@@ -1376,6 +1379,35 @@ export class InteractiveMode implements InteractiveModeContext {
 					? (compaction.thresholdPercent / 100) * usage.contextWindow
 					: undefined;
 		return { tokens: usage.tokens, contextWindow: usage.contextWindow, thresholdTokens };
+	}
+	/**
+	 * One watchdog tick: sample the live branch and slap once per stuck state.
+	 * A running session receives the corrective as a steer; an idle session is
+	 * prompted, or the corrective would sit in a queue nobody drains.
+	 */
+	#runBitchSlap(): void {
+		const session = this.viewSession;
+		if (session.isDisposed) return;
+		const openTasks = session
+			.getTodoPhases()
+			.flatMap(phase =>
+				phase.tasks
+					.filter(task => task.status === "pending" || task.status === "in_progress")
+					.map(task => `${phase.name}: ${task.content}`),
+			);
+		const decision = this.#bitchSlap.evaluate({
+			messages: session.agent.state.messages,
+			isStreaming: session.isStreaming,
+			incompleteTasks: openTasks.length,
+			openTasks,
+			now: Date.now(),
+		});
+		if (!decision.slap || !decision.text) return;
+		this.ui.requestRender();
+		const delivered = session.isStreaming
+			? session.sendUserMessage(decision.text, { deliverAs: "steer" })
+			: session.prompt(decision.text);
+		void delivered.catch(error => logger.warn("Bitch slap failed", { error: String(error) }));
 	}
 	/** Right-docked suffix of the working row: the band-mode title. */
 	#workingRowTrailer(): string | undefined {
@@ -1911,7 +1943,9 @@ export class InteractiveMode implements InteractiveModeContext {
 			mode: () => this.#rabidModeForPanel(),
 			reasoning: () => this.#reasoningForPanel(),
 			context: () => this.#contextForPanel(),
+			slap: () => this.#bitchSlap.verdict(),
 		});
+		this.#bitchSlapTimer = setInterval(() => this.#runBitchSlap(), BITCH_SLAP_INTERVAL_MS);
 		this.#rummagePanel = new CompactionRummagePanel({
 			status: () => this.session.getCompactionRummage?.(),
 			requestRender: () => this.ui.requestRender(),
@@ -2510,7 +2544,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		// custom messages, branch summaries, and compaction summaries) and the user
 		// set no explicit `mode_change` (which #reconcileModeFromSession just
 		// restored). SDK startup metadata and extension `custom` state entries are
-		// ignored. This way `omp --continue` (or auto-resume) that finds no recent
+		// ignored. This way `rabid --continue` (or auto-resume) that finds no recent
 		// session and creates a fresh one still honors the default, while a session
 		// with restored context or an explicit mode keeps its reconciled mode. Not
 		// part of the switch reconciler above: the plan-approval → execution handoff
@@ -7146,6 +7180,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#cancelGoalContinuation();
 		clearInterval(this.#jobsSheetTimer);
 		this.#jobsSheetTimer = undefined;
+		clearInterval(this.#bitchSlapTimer);
+		this.#bitchSlapTimer = undefined;
 		if (this.#sttController) {
 			this.#sttController.dispose();
 			this.#sttController = undefined;
@@ -7397,7 +7433,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		await this.ui.terminal.drainInput(1000);
 		// Stop the run-state spinner interval BEFORE restoring the shell title, so a
 		// pending tick cannot re-emit an OSC title after `popTerminalTitle` hands the
-		// terminal back (which would leave the parent shell with a `π ⠋ …` tab).
+		// terminal back (which would leave the parent shell with a `🕷 ⠋ …` tab).
 		disposeTerminalTitleState();
 		disposeProgramStatus();
 		popTerminalTitle();

@@ -1,7 +1,7 @@
 /**
  * Config CLI command handlers.
  *
- * Handles `omp config <command>` subcommands for managing settings.
+ * Handles `rabid config <command>` subcommands for managing settings.
  * The settings registry (`config/registry.ts`) is the source of truth for available settings.
  */
 

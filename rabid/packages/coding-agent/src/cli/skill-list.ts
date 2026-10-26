@@ -92,7 +92,7 @@ function toTerminalSafe(value: string): string {
 }
 
 /**
- * `omp skill list [dir] [--json]`: report the skills a session in `dir` would
+ * `rabid skill list [dir] [--json]`: report the skills a session in `dir` would
  * resolve. Terminal output is one `name<TAB>description` row per skill on
  * stdout, with notices and warnings on stderr; `--json` emits the full result
  * including discovery warnings.

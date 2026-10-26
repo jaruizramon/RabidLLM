@@ -41,7 +41,7 @@ export default class Say extends Command {
 
 	static examples = [
 		'omp say "hello world"',
-		"omp say --file notes.md --voice bm_fable --speed 1.25",
+		"rabid say --file notes.md --voice bm_fable --speed 1.25",
 		'omp say "hello world" --out /tmp/hello.wav',
 	];
 
@@ -160,7 +160,7 @@ export default class Say extends Command {
 	#synthesisFailed(model: string): void {
 		process.stderr.write(
 			chalk.red(
-				`error: could not synthesize with local TTS model "${model}". Run \`omp setup speech\` to install it.\n`,
+				`error: could not synthesize with local TTS model "${model}". Run \`rabid setup speech\` to install it.\n`,
 			),
 		);
 	}

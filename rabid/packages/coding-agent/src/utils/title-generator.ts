@@ -37,11 +37,11 @@ import { cfgRetryModelFallback } from "../session/settings";
 const TITLE_SYSTEM_PROMPT = prompt.render(titleSystemPrompt);
 const TITLE_MARKER_INSTRUCTION = prompt.render(titleMarkerInstruction);
 
-// Plain π, not the nerd-font `icon.omp` glyph: window/tab titles render in the
-// OS UI font, which has no nerd-font PUA coverage.
-const DEFAULT_TERMINAL_TITLE = "π";
+// Spider brand, not the nerd-font `icon.omp` glyph: window/tab titles render in
+// the OS UI font, which has no nerd-font PUA coverage.
+const DEFAULT_TERMINAL_TITLE = "🕷";
 /** The native tab title without a session name. */
-const NATIVE_TERMINAL_TITLE = "omp";
+const NATIVE_TERMINAL_TITLE = "rabid";
 const TERMINAL_TITLE_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
 
 interface WindowsConsoleTitleApi {
@@ -694,7 +694,7 @@ let reportedCwd: string | undefined;
  * Name the live session's source. Every session title update (start, new
  * session, resume, cwd switch) and {@link reportTernSession} re-read it and, in
  * Tern, report what changed: the file, so Tern's daemon can relaunch
- * `omp --resume <file>` after it restarts, and the directory, which Tern names
+ * `rabid --resume <file>` after it restarts, and the directory, which Tern names
  * in omp's composer bar.
  */
 export function setTerminalSessionSource(source: TerminalSessionSource | undefined): void {
@@ -831,13 +831,13 @@ const terminalTitleRuntime: {
 };
 
 /**
- * Compose the terminal title from the `π` brand, a state-carrying separator, and
+ * Compose the terminal title from the `🕷` brand, a state-carrying separator, and
  * the session label. Pure (no I/O) so the state→separator contract is testable:
- *   - `idle` (user's turn):  `π > label`;
- *   - `working`:             `π ⠋ label` (static `π : label` under WSL, or on Windows once the native title path has failed);
- *   - `attention`:           `π ! label`;
- *   - disabled:              `π: label`.
- * Without a label the separator trails the brand (`π >`) so the state stays visible.
+ *   - `idle` (user's turn):  `🕷 > label`;
+ *   - `working`:             `🕷 ⠋ label` (static `🕷 : label` under WSL, or on Windows once the native title path has failed);
+ *   - `attention`:           `🕷 ! label`;
+ *   - disabled:              `🕷: label`.
+ * Without a label the separator trails the brand (`🕷 >`) so the state stays visible.
  * The `working` separator cycles `TERMINAL_TITLE_SPINNER_STYLES[style]`; `style`
  * defaults to `braille` so existing 5-arg callers keep the historical frames.
  */
@@ -996,7 +996,7 @@ export function initTerminalTitleState(): void {
 	// state — a frozen spinner frame. Mirror the enable path and re-arm.
 	if (terminalTitleRuntime.state === "working" && terminalTitleRuntime.enabled) startTerminalTitleSpinner();
 	// A TSP terminal takes the plain native title while it renders; the
-	// classic `π > label` (and its spinner) comes back when it stops.
+	// classic `🕷 > label` (and its spinner) comes back when it stops.
 	terminalTitleRuntime.unwatchNative ??= onNativeRenderingChange(native => {
 		if (native) stopTerminalTitleSpinner();
 		else if (terminalTitleRuntime.state === "working" && terminalTitleRuntime.enabled) startTerminalTitleSpinner();
@@ -1008,7 +1008,7 @@ export function initTerminalTitleState(): void {
  * Stop the spinner timer and latch the runtime off; call on session/UI teardown.
  * The latch is the load-bearing half: `shutdown()` disposes and restores the shell
  * title BEFORE it unsubscribes the session, so a live `#handleAgentStart` in that
- * window would otherwise re-arm the spinner and write `π ⠋ …` into the parent
+ * window would otherwise re-arm the spinner and write `🕷 ⠋ …` into the parent
  * shell's tab. Released only by {@link initTerminalTitleState}.
  */
 export function disposeTerminalTitleState(): void {

@@ -4,6 +4,12 @@
 
 ### Added
 
+- Added a 30-second bitch-slap watchdog above the preset row: `can I bitch slap it?` reads `nah` while the agent is progressing and `bitchslapping...` when it is stuck — the same tool call three times, the same or near-duplicate answer twice, repeated tool output three times, or a text-only stop with open todos — at which point it steers a running turn or prompts an idle one; a state that ignores the first slap gets a second, harder corrective naming the open todos, then goes quiet until the transcript moves
+- Added output-based loop detection: `model.toolCallLoopGuard.resultThreshold` (default 2) steers when consecutive turns return identical non-trivial tool output even though the arguments changed, and the same guard now catches a 2–4 probe sequence repeated twice (A→B→C→A→B→C), which never produces two identical consecutive turns; the corrective tells the model to apply what the repeated output proved instead of re-running the probe
+- Added a deterministic ledger to turn-card-chain compactions: user requirements, standing directives (including an approved plan), file actions, and open failures are appended to the card summary, so a summary can no longer drop the plan when cards cover the history
+- Added the file-changing actions taken since the last `todo` update to the mid-run todo nudge, so reconciling the ledger is a reread rather than a memory exercise
+- Added system-prompt rules requiring a parser, serializer, or format reader to be grounded in the authoritative spec or reference implementation, and forbidding a hand-written synthetic fixture in place of the real artifact
+- Added per-model compaction retention and summary budgets: `profiles.<selector>.compaction.keepRecentTokens`, `maxSummaryTokens`, and `reserveTokens` tune an 8K/32K local preset without changing the global policy, and `compaction.maxSummaryTokens` sets a global ceiling below the 16K engine cap
 - Added `/llama` (aliases `/v100`, `/model-manager`): a live V100 model-manager sheet that lists every llama-manager preset with its status, size, measured VRAM, engine, and parked context; loads a preset and switches omp to it, unloads, starts/stops the router, force-clears VRAM, parks/restores/drops contexts, and exposes the SLM worker and log tails. `/preset` now shares the same manager client
 - Added `/artifacts`: a browser gallery window for the images, sprites, SVGs, and webpages this session created, opened from a loopback viewer without leaving the terminal. The browser renders images and SVGs natively and webpages through a cached headless-Chromium screenshot; `o` opens the original, `c` copies its path, and `r` rescans. Files produced by shell or Eval scripts are found by a bounded workspace scan
 - Added `display.artifactPreviews` (default on): a settled write of a visual file shows a preview summary (a webpage's title, an SVG/image hint) instead of its source; `Ctrl+O` expands the source
@@ -19,6 +25,8 @@
 
 ### Changed
 
+- Rebranded the visible product from omp to rabid: `rabid` is the process title, CLI name in help and command examples, User-Agent, notification title, log filename prefix, and XDG data/state/cache root; the on-disk config root stays `.omp` for compatibility
+- Onboarding no longer links providers or a default model: setup now covers glyph mode, composer shape, and theme only; provider sign-in remains available on demand through `/setup providers` and `/login`
 - Turn cards are distilled by the local SLM worker: `turnCards.enabled` no longer falls back to the main model or a network provider, so per-prompt summarization stays on the worker (a missing worker skips the card instead of invoking the inference card or a remote model)
 - Compaction no longer falls back to the active session model: `compaction.allowMainModel: false` keeps the dense chat model out of the implicit candidate chain, so `slm` or an explicit `compactionModel` does the work (an explicit `compactionModel` naming the active model is still honored)
 - The `slm` worker can be capped to a fixed VRAM headroom on a shared or gaming card: `compaction.slmHandoff.gpuFreeMiB` (default 2048) makes llama.cpp offload only the layers that fit and spill the rest to the CPU, so a small quant of a 4B model does not evict the desktop
@@ -32,6 +40,12 @@
 
 ### Fixed
 
+- Fixed compaction summaries growing without bound on the turn-card chain: the carried verbatim block had no section terminator, so a resume point and every later section were re-embedded each pass and one session reached the 500K persistence cap and re-compacted immediately on the next turn; the block now stops at the next section, keeps halving its head/tail until it fits its budget, and a carried earlier summary is clipped to the chain budget
+- SLM compaction carries the previous `### Done` ledger forward and removes completed items from `In progress`/`Pending`, so a truncated handoff no longer sends the successor back over already-audited code
+- Compaction summaries append a `Resume point` when the retained tail starts with an assistant tool call, so the successor continues from that result instead of restarting the previous check
+- SLM handoff output defaults to 4096 tokens and no longer shrinks by 10% each turn, preserving completed audit items on long analysis runs
+- SLM handoff accepts a completed read of the relevant code and spec as Done evidence for audits, so verified subsystems stay in the ledger instead of falling back to In progress
+- Compaction no longer silently no-ops on small local windows: `keepRecentTokens` is clamped to a quarter of the resolved trigger, and the deterministic turn-card chain sizes its budget from that trigger instead of a fixed 8K
 - Stopped a cross-turn tool-call loop after the model ignores the loop-guard correction: the first repeat earns the steer, and the next identical call aborts the run instead of redirecting forever
 - A mid-turn steer no longer clears the repeated-failure guard, so an identical blocked call stays blocked until a new turn starts
 - Byte-identical no-op edits now return an error carrying the file content hash and targeted rows instead of a success, so a looping model sees that nothing was applied

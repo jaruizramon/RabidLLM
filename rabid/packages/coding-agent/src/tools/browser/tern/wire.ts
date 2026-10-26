@@ -8,7 +8,7 @@
  * `{"id":N,KIND:ANSWER}` correlated by `id`, where ANSWER is `{"ok": result}`
  * or `{"error": {"kind", "message"}}`:
  * - `browser`: Tern's browser op protocol, REQUEST `{"op": …}`.
- * - `fork`: REQUEST `{"block":P,"dir":"right"|"down"}` opens `omp --fork` of
+ * - `fork`: REQUEST `{"block":P,"dir":"right"|"down"}` opens `rabid --fork` of
  *   pane P's session in a new pane beside it; result `{"block":M}`.
  *
  * Members and message kinds either side does not know are skipped, so the
@@ -205,7 +205,7 @@ export interface TernRequestOptions {
 	onLateAnswer?: (value: unknown) => void;
 }
 
-/** A `fork` request: open `omp --fork` of pane `block`'s session in a new pane beside it. */
+/** A `fork` request: open `rabid --fork` of pane `block`'s session in a new pane beside it. */
 export interface TernForkRequest {
 	/** The pane whose omp session to fork (`TERN_PANE`). */
 	block: number;

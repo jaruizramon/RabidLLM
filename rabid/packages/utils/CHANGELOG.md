@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `APP_NAME` and `USER_AGENT` are now `rabid`, and log files use the `rabid.<day>.<pid>.log` prefix; `CONFIG_DIR_NAME` stays `.omp` so existing installs keep their config and sessions
+
 ## [18.11.3] - 2026-10-16
 
 ### Fixed

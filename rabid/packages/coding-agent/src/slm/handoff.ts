@@ -20,6 +20,7 @@ import slmHandoffSystemPrompt from "../prompts/system/slm-handoff.md" with { typ
 import slmNotesInputPrompt from "../prompts/system/slm-notes-input.md" with { type: "text" };
 import slmNotesSystemPrompt from "../prompts/system/slm-notes.md" with { type: "text" };
 import { expandTilde } from "../tools/path-utils";
+import { mergeHandoffDone } from "./handoff-summary";
 import {
 	cfgCompaction,
 	cfgCompactionEnabled,
@@ -408,7 +409,11 @@ export async function writeSlmHandoff(agentDir: string, sessionId: string, recor
 
 /** Heading that marks the deterministic requirement block in a committed summary. */
 const VERBATIM_HEADING = "## User messages (verbatim; authoritative)";
-/** Marker inserted when the middle of a long user-message list is dropped. */
+const VERBATIM_LABEL = "User message";
+/** Heading that marks the deterministic operator-directive block (approved plans, harness directives). */
+const DIRECTIVE_HEADING = "## Standing directives (verbatim; authoritative)";
+const DIRECTIVE_LABEL = "Directive";
+/** Marker inserted when the middle of a long verbatim list is dropped. */
 const VERBATIM_OMISSION = "… middle user messages omitted …";
 
 /**
@@ -417,34 +422,50 @@ const VERBATIM_OMISSION = "… middle user messages omitted …";
  * The SLM paraphrases — that is the point of a small model — so the user's own
  * words ride along unparaphrased and survive a dropped or softened constraint.
  */
-function renderVerbatimSection(bodies: readonly string[], maxTokens: number): string {
+function renderVerbatimSection(bodies: readonly string[], maxTokens: number, heading: string, label: string): string {
 	if (bodies.length === 0) return "";
 	const render = (from: number, to: number): string =>
 		bodies
 			.slice(from, to)
-			.map((text, offset) => `### User message ${from + offset + 1}\n${text}`)
+			.map((text, offset) => `### ${label} ${from + offset + 1}\n${text}`)
 			.join("\n\n");
 	let body = render(0, bodies.length);
 	const budget = maxTokens * CHARS_PER_TOKEN;
-	if (body.length > budget && bodies.length > 2) {
-		const keep = Math.max(1, Math.floor(bodies.length / 2));
+	let keep = bodies.length;
+	// Shrink the kept head/tail until the block fits. Halving once left the
+	// middle-truncated body far over budget (174 turns at 2,000 chars each), and
+	// the overflow was carried into the next compaction.
+	while (body.length > budget && keep > 1) {
+		keep = Math.max(1, Math.floor(keep / 2));
 		body = [render(0, keep), VERBATIM_OMISSION, render(bodies.length - keep, bodies.length)].join("\n\n");
 	}
-	return `${VERBATIM_HEADING}\n\n${body}`;
+	return `${heading}\n\n${body}`;
 }
 
 /** Message bodies of an already-rendered verbatim section, in order. */
-export function verbatimRequirementBodies(section: string | undefined): string[] {
+function verbatimSectionBodies(section: string | undefined, heading: string, label: string): string[] {
 	if (!section) return [];
-	const start = section.indexOf(VERBATIM_HEADING);
+	const start = section.indexOf(heading);
 	if (start === -1) return [];
+	const rest = section.slice(start + heading.length);
+	// Stop at the next top-level section. The summary continues with file
+	// actions, open failures, directives and the resume point; swallowing them
+	// into the last body fed them back on the next compaction, and every pass
+	// re-embedded the previous headings until the summary hit the persistence cap.
+	const end = rest.search(/^## /m);
+	const scoped = end === -1 ? rest : rest.slice(0, end);
 	const bodies: string[] = [];
-	for (const part of section.slice(start + VERBATIM_HEADING.length).split(/^### User message \d+$/m)) {
+	for (const part of scoped.split(new RegExp(`^### ${label} \\d+$`, "m"))) {
 		// A part may carry the omission marker that followed the previous body.
 		const text = part.replace(VERBATIM_OMISSION, "").trim();
 		if (text !== "") bodies.push(text);
 	}
 	return bodies;
+}
+
+/** Message bodies of an already-rendered verbatim section, in order. */
+export function verbatimRequirementBodies(section: string | undefined): string[] {
+	return verbatimSectionBodies(section, VERBATIM_HEADING, VERBATIM_LABEL);
 }
 
 /**
@@ -478,7 +499,36 @@ export function renderVerbatimUserRequirements(
 				: text;
 		if (!bodies.includes(clipped)) bodies.push(clipped);
 	}
-	return renderVerbatimSection(bodies, maxTokens);
+	return renderVerbatimSection(bodies, maxTokens, VERBATIM_HEADING, VERBATIM_LABEL);
+}
+
+/**
+ * Deterministic directive block for a committed summary: developer-role
+ * messages (the approved plan, harness-injected operating directives) this pass
+ * plus every body already recorded by an earlier compaction.
+ *
+ * The summarizers are told to preserve requirements, but the SLM and turn-card
+ * paths never see developer text at all, so an approved plan could disappear
+ * while its file link went stale. Rendering it here makes the plan part of the
+ * committed summary regardless of which summarizer ran.
+ */
+export function renderStandingDirectives(
+	messages: readonly AgentMessage[],
+	maxTokens: number,
+	previousSummary?: string,
+): string {
+	const bodies = verbatimSectionBodies(previousSummary, DIRECTIVE_HEADING, DIRECTIVE_LABEL);
+	for (const message of messages) {
+		if (message.role !== "developer") continue;
+		const text = messageText(message.content).trim();
+		if (text === "") continue;
+		const clipped =
+			text.length > USER_MESSAGE_CLIP
+				? `${text.slice(0, USER_MESSAGE_CLIP)}… [${text.length - USER_MESSAGE_CLIP} chars omitted]`
+				: text;
+		if (!bodies.includes(clipped)) bodies.push(clipped);
+	}
+	return renderVerbatimSection(bodies, maxTokens, DIRECTIVE_HEADING, DIRECTIVE_LABEL);
 }
 
 /** Tilde-expanded GGUF path for the worker. */
@@ -867,14 +917,11 @@ export class SlmHandoffCoordinator {
 		const agentDir = this.#options.agentDir();
 		const detail = cfgSlmHandoffDetail.get(this.#options.settings);
 		const abridgeOlder = cfgSlmHandoffAbridgeOlder.get(this.#options.settings);
-		// A hard decay budget is the only thing that reliably shrinks the document: an
-		// instruction alone measured longer than no instruction (5 711 vs 4 173 chars).
-		// The new turn gets an allowance; everything older must fit in the remainder.
-		const previousTokens = previous === undefined ? 0 : Math.ceil(previous.length / CHARS_PER_TOKEN);
-		const targetTokens = Math.min(
-			config.maxHandoffTokens,
-			previousTokens === 0 ? config.maxHandoffTokens : Math.max(600, Math.round(previousTokens * 0.9) + 300),
-		);
+		// Keep the full output budget. A 10% per-turn decay made the worker shrink
+		// the cumulative `### Done` ledger, which is exactly what sent a successor
+		// back over already-audited code. Prose still shrinks through
+		// `abridgeOlder`; the ledger is folded deterministically afterwards.
+		const targetTokens = config.maxHandoffTokens;
 		const systemPrompt = prompt.render(slmHandoffSystemPrompt, {
 			maxHandoffTokens: config.maxHandoffTokens,
 			targetTokens,
@@ -917,6 +964,14 @@ export class SlmHandoffCoordinator {
 				document: result.document.length,
 			});
 			result = { ...result, document: stripLogEchoes(result.document) };
+		}
+		const merged = mergeHandoffDone(previous, result.document);
+		if (merged !== result.document) {
+			logger.debug("SLM contract restored completed ledger items", {
+				before: result.document.length,
+				after: merged.length,
+			});
+			result = { ...result, document: merged };
 		}
 		const record: SlmHandoffRecord = {
 			document: result.document,

@@ -1,6 +1,6 @@
 import { centerLine, visibleWidth } from "../../utils";
 import { padToWidth } from "../../render/utils";
-import { gradientEscape, gradientLogo, logoNode, PI_LOGO, type ShineConfig } from "../../prompt/welcome";
+import { gradientEscape, gradientLogo, logoNode, RABID_LOGO, type ShineConfig } from "../../prompt/welcome";
 import { theme } from "../../theme/theme";
 import { formatKeyHint } from "../../app-keybindings";
 import { col, node, span, text } from "../../native/describe";
@@ -11,7 +11,7 @@ export const SETUP_SPLASH_MS = 2600;
 export const SETUP_TICK_MS = 33;
 
 /** Brand mark at 2x: every glyph doubled horizontally, every row doubled vertically. */
-const LARGE_LOGO = PI_LOGO.flatMap(line => {
+const LARGE_LOGO = RABID_LOGO.flatMap(line => {
 	let wide = "";
 	for (const char of line) {
 		wide += char === " " ? "  " : `${char}${char}`;
@@ -158,7 +158,7 @@ function resetCells(width: number, height: number): string[][] {
 let diagonalEscapes: (string | undefined)[] = [];
 
 /**
- * Animated setup splash, in the spirit of the omp landing page: the brand π
+ * Animated setup splash, in the spirit of the omp landing page: the spider
  * mark rendered with the live diagonal gradient + shine sweep, rising out of a
  * rippling, gradient-lit water surface, under a faint twinkling starfield. The
  * mark and water share one continuous gradient so the sweep reads across the
@@ -263,7 +263,7 @@ export function describeSetupSplash(): NativeNode {
 			[
 				node("spacer", { grow: 1 }),
 				logoNode(LARGE_LOGO, true),
-				text([span("O h   M y   P i", "strong")], { wrap: "none" }),
+				text([span("R a b i d", "strong")], { wrap: "none" }),
 				node("spacer", { grow: 1 }),
 				text([span(hint, "dim")], { wrap: "none" }),
 			],
@@ -274,8 +274,8 @@ export function describeSetupSplash(): NativeNode {
 
 /** Centered fallback for windows too small to hold the full scene. */
 function renderCompactSplash(width: number, height: number, phase: number, shine: ShineConfig): string[] {
-	const art = height >= 14 ? LARGE_LOGO : PI_LOGO;
-	const content = [...gradientLogo(art, phase, shine), "", theme.bold("O h   M y   P i")];
+	const art = height >= 14 ? LARGE_LOGO : RABID_LOGO;
+	const content = [...gradientLogo(art, phase, shine), "", theme.bold("R a b i d")];
 	const start = Math.max(0, Math.floor((height - content.length) / 2));
 	const lines: string[] = [];
 	for (let y = 0; y < height; y++) {

@@ -65,7 +65,7 @@ export class CollabController {
 
 	constructor(ctx: InteractiveModeContext) {
 		this.#ctx = ctx;
-		// 64 random bits: unique per process on one machine, short enough for `omp collab link <id>` and socket paths.
+		// 64 random bits: unique per process on one machine, short enough for `rabid collab link <id>` and socket paths.
 		this.instanceId = randomBytes(8).toString("hex");
 	}
 

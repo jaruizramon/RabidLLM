@@ -105,7 +105,7 @@ export const INTERRUPTED_TURN_ERROR = "Previous OMP process exited before comple
 export interface InterruptedTurnOptions {
 	/**
 	 * The branch's writer is gone even without a `session_exit` after its tail (a
-	 * crash, SIGKILL or power loss records none): `omp --restore` says so.
+	 * crash, SIGKILL or power loss records none): `rabid --restore` says so.
 	 */
 	assumeExit?: boolean;
 }
@@ -182,7 +182,7 @@ export function isInterruptedTurnAbort(message: AgentMessage): boolean {
 }
 
 /**
- * Whether `omp --restore` has a turn to go on with on this branch: one its last
+ * Whether `rabid --restore` has a turn to go on with on this branch: one its last
  * process left unfinished ({@link findUnfinishedTurn}, the exit assumed), or one exit
  * recovery already closed that nothing followed, not even a normal exit.
  */

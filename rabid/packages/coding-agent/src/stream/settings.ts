@@ -17,7 +17,7 @@ export const cfgStreamServerUrl = register({
 		group: "Stream",
 		label: "Stream Server",
 		description:
-			"Live stream server used by `omp stream` (https://host[:port]); viewers watch at <base>/<your Stencil username>",
+			"Live stream server used by `rabid stream` (https://host[:port]); viewers watch at <base>/<your Stencil username>",
 	},
 });
 

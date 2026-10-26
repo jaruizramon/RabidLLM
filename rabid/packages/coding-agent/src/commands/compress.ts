@@ -18,11 +18,11 @@ export default class Compress extends Command {
 	};
 
 	static examples = [
-		"omp compress prompts/tools/read.md",
-		"omp compress notes.md -o notes.compressed.md",
-		"omp compress 'src/prompts/**/*.md' -i",
-		"omp compress a.md b.md c.md -i -n 8",
-		"omp compress spec.md -r 5 -m opus",
+		"rabid compress prompts/tools/read.md",
+		"rabid compress notes.md -o notes.compressed.md",
+		"rabid compress 'src/prompts/**/*.md' -i",
+		"rabid compress a.md b.md c.md -i -n 8",
+		"rabid compress spec.md -r 5 -m opus",
 	];
 
 	async run(): Promise<void> {

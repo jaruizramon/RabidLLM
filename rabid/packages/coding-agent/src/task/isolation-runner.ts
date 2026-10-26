@@ -289,7 +289,7 @@ async function writeIsolationPatch(
  * isolated run with the same id cannot wipe it: `ensureIsolation`
  * unconditionally removes the deterministic base dir before writing its
  * owner marker. The owner marker, `m` mount, and backend sidecar move along,
- * so `omp worktree clear` still classifies and reclaims the workspace with
+ * so `rabid worktree clear` still classifies and reclaims the workspace with
  * native teardown. Backends needing it (mounts, Btrfs subvolumes) record the
  * sidecar BEFORE the move so it travels atomically — a crash between rename
  * and a later write would leave a mounted workspace with a dead owner and

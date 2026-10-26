@@ -260,7 +260,7 @@ export class MCPManager {
 
 	/**
 	 * Install or clear a loader that creates the process-global instance on first {@link load}, so a
-	 * one-shot host (`omp read`) starts MCP servers only when a request actually reaches them.
+	 * one-shot host (`rabid read`) starts MCP servers only when a request actually reaches them.
 	 */
 	static setDeferredInstance(load: (() => Promise<MCPManager>) | undefined): void {
 		MCPManager.#deferred = load;
@@ -1281,7 +1281,7 @@ export class MCPManager {
 	/**
 	 * Wait for every in-flight connect, tool load, and reconnect to settle.
 	 *
-	 * One-shot callers (e.g. `omp read <mcp-resource>`) discover servers and read
+	 * One-shot callers (e.g. `rabid read <mcp-resource>`) discover servers and read
 	 * immediately; a server whose handshake outlasts the {@link connectServers}
 	 * startup race is still tracked in {@link #pendingConnections} /
 	 * {@link #pendingToolLoads} and therefore invisible to

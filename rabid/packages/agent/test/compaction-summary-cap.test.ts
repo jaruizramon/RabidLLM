@@ -96,4 +96,44 @@ describe("compaction summary output budget", () => {
 		await generateSummary(messages, getModel(), 10_000, "test-key");
 		expect(spy.mock.calls[0]?.[2]?.maxTokens).toBe(8_000);
 	});
+
+	test("never asks a small window for a summary larger than half of it", async () => {
+		const spy = vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("summary"));
+		const small = { ...getModel(), contextWindow: 8_192, maxTokens: 32_768 };
+		await generateSummary(messages, small, 150_000, "test-key");
+		expect(spy.mock.calls[0]?.[2]?.maxTokens).toBe(4_096);
+	});
+
+	test("honors a per-model summary cap below the global ceiling", async () => {
+		const spy = vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("summary"));
+		await generateSummary(messages, getModel(), 150_000, "test-key", undefined, undefined, undefined, {
+			maxSummaryTokens: 2_048,
+		});
+		expect(spy.mock.calls[0]?.[2]?.maxTokens).toBe(2_048);
+	});
+
+	test("propagates the per-model cap through compact", async () => {
+		const spy = vi.spyOn(ai, "completeSimple").mockResolvedValue(createAssistantMessage("summary"));
+		const preparation: CompactionPreparation = {
+			firstKeptEntryId: "kept",
+			messagesToSummarize: messages,
+			turnPrefixMessages: [],
+			recentMessages: [{ role: "user", content: "recent", timestamp: 3 }],
+			isSplitTurn: false,
+			tokensBefore: 900_000,
+			fileOps: createFileOps(),
+			settings: {
+				...DEFAULT_COMPACTION_SETTINGS,
+				reserveTokens: 150_000,
+				remoteEnabled: false,
+				maxSummaryTokens: 2_048,
+			},
+		};
+
+		await compact(preparation, getModel(), "test-key");
+
+		const caps = spy.mock.calls.map(call => call[2]?.maxTokens);
+		expect(caps).toContain(2_048);
+		expect(caps).toContain(512);
+	});
 });

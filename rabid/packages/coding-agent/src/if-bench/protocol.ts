@@ -1,5 +1,5 @@
 /**
- * Prompt construction and scoring for `omp if-bench`.
+ * Prompt construction and scoring for `rabid if-bench`.
  *
  * Each turn scores two independent contracts from a single reply: the working
  * memory one (the array inside `<...>` must equal the locally computed result)

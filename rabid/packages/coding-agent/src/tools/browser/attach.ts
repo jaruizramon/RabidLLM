@@ -594,7 +594,7 @@ export function describeRelayTargets(targets: readonly RelayTarget[]): string {
 /** The pages of the user's Chrome the relay at `relayJson` can adopt. */
 export async function listRelayTargets(relayJson: string, signal?: AbortSignal): Promise<RelayTarget[]> {
 	const entries = await fetchRelayEntries(relayJson, signal);
-	if (!entries) throw new ToolError(`omp browser relay at ${relayJson} did not list its pages (GET /json failed).`);
+	if (!entries) throw new ToolError(`rabid browser relay at ${relayJson} did not list its pages (GET /json failed).`);
 	return relayTargets(entries);
 }
 

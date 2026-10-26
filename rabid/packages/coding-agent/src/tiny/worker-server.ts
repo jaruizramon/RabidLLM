@@ -25,7 +25,7 @@ export class TinyWorkerServer {
 			name: "tiny-worker",
 			cleanupLabel: "tiny-worker",
 			idleMs: options.idleMs,
-			banner: endpoint => `omp tiny worker listening on ${endpoint}`,
+			banner: endpoint => `rabid tiny worker listening on ${endpoint}`,
 			onRequest: (request, reply) => this.#dispatch(request, reply),
 		});
 	}

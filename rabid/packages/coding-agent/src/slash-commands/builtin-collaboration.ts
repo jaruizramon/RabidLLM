@@ -322,7 +322,7 @@ export const BUILTIN_COLLABORATION_SLASH_COMMANDS: ReadonlyArray<SlashCommandSpe
 		inlineHint: "[start|view|list|stop|status] [relayUrl]",
 		subcommands: [
 			{ name: "view", description: "Share a read-only link (guests can watch, not prompt)" },
-			{ name: "list", description: "List active local Collab hosts (no links; use `omp collab link`)" },
+			{ name: "list", description: "List active local Collab hosts (no links; use `rabid collab link`)" },
 			{ name: "status", description: "Show link + participants" },
 			{ name: "stop", description: "Stop sharing" },
 		],
@@ -366,8 +366,8 @@ export const BUILTIN_COLLABORATION_SLASH_COMMANDS: ReadonlyArray<SlashCommandSpe
 				return;
 			}
 			if (verb === "list") {
-				// Same registry as `omp collab list`: metadata only, never a link. A
-				// link is a deliberate per-host act (`omp collab link <id> [--view]`),
+				// Same registry as `rabid collab list`: metadata only, never a link. A
+				// link is a deliberate per-host act (`rabid collab link <id> [--view]`),
 				// so a listing can be shown or logged without granting anything.
 				if (rest.trim()) {
 					ctx.showError(`Usage: /collab list — for links or JSON use \`${APP_NAME} collab link|list\``);

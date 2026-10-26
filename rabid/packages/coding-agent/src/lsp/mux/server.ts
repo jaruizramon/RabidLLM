@@ -689,7 +689,7 @@ export async function startLspMuxFromEnvironment(): Promise<void> {
 	if (!endpoint || !projectDir) throw new Error("LSP mux environment is incomplete");
 	delete process.env[LSP_MUX_SOCKET_ENV];
 	delete process.env[LSP_MUX_PROJECT_DIR_ENV];
-	setProcessName("omp lsp mux");
+	setProcessName("rabid lsp mux");
 	const server = new LspMuxServer();
 	const stopped = Promise.withResolvers<void>();
 	server.onIdle = () => {

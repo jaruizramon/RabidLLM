@@ -7,7 +7,7 @@
 # What it sets up:
 #   ~/.local/share/llama-v100/   manager, presets, proxy, tool filter (paths @HOME@-templated)
 #   ~/.local/bin/                llama-manager, llama-server, llama-server-stock, llama-proxy, llama-toolfilter
-#   ~/.omp/profiles/rabid/agent/ config.yml + models.yml for the rabid profile (only if absent)
+#   ~/.rabid/agent/ config.yml + models.yml for the rabid profile (only if absent)
 #   ~/models/                    created empty — weights are installed by hand (see rig/models.list)
 #
 # What it does NOT do: download weights, install llama.cpp, or start anything.
@@ -119,5 +119,5 @@ say "Done. Next:"
 say "  1. install the missing weights above (any llama.cpp-compatible GGUF)",
 say "  2. edit $app_dir/models.ini if your model ids/paths differ"
 say "  3. llama-manager start   → http://localhost:8090"
-say "  4. omp --profile rabid   (the SLM worker auto-loads on the first turn)"
+say "  4. rabid   (the SLM worker auto-loads on the first turn)"
 [ "$missing" = 0 ] && say "" || say "\n$missing model file(s) still missing."

@@ -1,5 +1,5 @@
 /**
- * Semantic search from the shell: `omp find "<query>" [path]`.
+ * Semantic search from the shell: `rabid find "<query>" [path]`.
  */
 
 import { Args, Command, Flags } from "@oh-my-pi/pi-utils/cli";

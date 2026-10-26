@@ -1,5 +1,5 @@
 /**
- * Data layer shared by the `omp ps` renderers (plain CLI and interactive TUI):
+ * Data layer shared by the `rabid ps` renderers (plain CLI and interactive TUI):
  * broker-scope discovery and daemon snapshot collection.
  *
  * Collection never spawns a broker: live scopes are queried over the broker

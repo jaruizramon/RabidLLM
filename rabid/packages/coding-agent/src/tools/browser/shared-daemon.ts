@@ -38,7 +38,7 @@ const ENSURE_ATTEMPTS = 3;
  */
 const PROFILE_CLAIM_WAIT_MS = READY_TIMEOUT_MS + 15_000;
 const PROFILE_CLAIM_RETRY_MS = 100;
-/** Grace `restartSharedBrowser` gives Chrome to exit before the broker kills it; matches `omp ps stop`. */
+/** Grace `restartSharedBrowser` gives Chrome to exit before the broker kills it; matches `rabid ps stop`. */
 const RESTART_STOP_TIMEOUT_MS = 5_000;
 /**
  * Hard bound on one post-cleanup reachability check, covering both probes and
@@ -167,7 +167,7 @@ async function claimProfile(userDataDir: string, signal?: AbortSignal): Promise<
 }
 
 /**
- * Restart a project-shared browser for `omp ps`. The broker's own restart
+ * Restart a project-shared browser for `rabid ps`. The broker's own restart
  * relaunches the persisted spec on the same profile, where Chromium would
  * reopen every page the stopped process had open. This holds the profile
  * claim throughout, so no other client starts Chrome in between, stops the

@@ -1,5 +1,5 @@
 /**
- * `omp skill <action>` handlers: publish and manage packages on a Skillshare
+ * `rabid skill <action>` handlers: publish and manage packages on a Skillshare
  * registry, and dispatch install/update/uninstall/search/info to the installer.
  */
 import * as path from "node:path";
@@ -275,7 +275,7 @@ async function handlePublish(cmd: SkillCommandArgs): Promise<number> {
 			});
 		} catch (error) {
 			if (error instanceof SkillshareError && error.status === 409) {
-				throw new Error(`${error.message} (versions are immutable; bump with \`omp skill version patch\`)`);
+				throw new Error(`${error.message} (versions are immutable; bump with \`rabid skill version patch\`)`);
 			}
 			throw error;
 		}
@@ -510,7 +510,7 @@ async function dispatch(cmd: SkillCommandArgs): Promise<number> {
 }
 
 /**
- * Run one `omp skill` action and return the process exit code. Usage mistakes
+ * Run one `rabid skill` action and return the process exit code. Usage mistakes
  * propagate as {@link CliUsageError}; registry and validation failures are
  * printed as `skill <action>: <message>` and yield 1.
  */

@@ -1115,7 +1115,7 @@ export async function runBenchCommand(command: BenchCommandArgs, deps: BenchDepe
 	const now = deps.now ?? (() => performance.now());
 	const interactive = deps.stdoutIsTTY ?? process.stdout.isTTY === true;
 	if (command.models.length === 0) {
-		throw new Error("Pass at least one model selector, e.g. `omp bench opus gpt-5.2`");
+		throw new Error("Pass at least one model selector, e.g. `rabid bench opus gpt-5.2`");
 	}
 	// One row per model, filled as runs finish. Outside cache mode the comparison
 	// table doubles as the live footer; cache mode shows a one-line status.

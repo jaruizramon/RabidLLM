@@ -1,5 +1,5 @@
 /**
- * Render `omp gallery` output to PNG screenshots via VHS.
+ * Render `rabid gallery` output to PNG screenshots via VHS.
  *
  * ANSI escapes are invisible to anything that can only read raw bytes (e.g.
  * agents), so `--screenshot` drives the rendered gallery through a real virtual
@@ -63,7 +63,7 @@ export async function captureGalleryScreenshots(
 	const vhs = $which("vhs");
 	if (!vhs) {
 		throw new Error(
-			"`omp gallery --screenshot` requires VHS, which is not installed. " +
+			"`rabid gallery --screenshot` requires VHS, which is not installed. " +
 				"Install it (e.g. `brew install vhs`, or see https://github.com/charmbracelet/vhs) and retry.",
 		);
 	}

@@ -260,7 +260,7 @@ export async function startTinyWorkerFromEnvironment(): Promise<void> {
 	if (!isTinyLocalModelKey(modelKey)) throw new Error(`Unknown tiny local model: ${modelKey}`);
 	const spec = getTinyLocalModelSpec(modelKey);
 	if (!spec) throw new Error(`Unknown tiny local model: ${modelKey}`);
-	setProcessName(`omp tiny ${modelKey}`);
+	setProcessName(`rabid tiny ${modelKey}`);
 	const model = new OnnxModel(modelKey, spec, resolveTinyModelDevicePreference(), resolveTinyModelDtypeOverride());
 	const server = new TinyWorkerServer({
 		tag,

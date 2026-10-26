@@ -21,7 +21,7 @@ export const cfgSkillsRegistryUrl = register({
 		group: "Skills",
 		label: "Skill Registry",
 		description:
-			"Skillshare registry used by `omp skill` to install, search, and publish skills (https://host[:port])",
+			"Skillshare registry used by `rabid skill` to install, search, and publish skills (https://host[:port])",
 	},
 });
 
@@ -80,7 +80,7 @@ export const cfgSkillsIncludeSkills = register({
 	default: EMPTY_STRING_ARRAY,
 });
 
-/** Skill discovery options (`skills.*` except the `omp skill` registry URL). */
+/** Skill discovery options (`skills.*` except the `rabid skill` registry URL). */
 export const cfgSkills = combine({
 	enabled: cfgSkillsEnabled,
 	enableSkillCommands: cfgSkillsEnableSkillCommands,

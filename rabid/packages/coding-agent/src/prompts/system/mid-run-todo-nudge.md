@@ -1,3 +1,6 @@
 <system-reminder>
-{{incompleteCount}} todo item{{#if plural}}s{{else}}{{/if}} still open. If you finished a task since last `{{toolRefs.todo}}` update, mark it done now so progress stays visible; otherwise keep working.
+{{incompleteCount}} todo item{{#if plural}}s{{else}}{{/if}} still open, and {{mutations}} file-changing tool call(s) landed since your last `{{toolRefs.todo}}` update. If you finished a task, mark it done now so progress stays visible; otherwise keep working.
+{{#if recentActions}}
+{{recentActions}}
+{{/if}}
 </system-reminder>

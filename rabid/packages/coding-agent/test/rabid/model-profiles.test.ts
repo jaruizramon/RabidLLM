@@ -39,6 +39,9 @@ const PROFILE = {
 	compaction: {
 		thresholdPercent: 60,
 		methodOrder: ["handoff", "shake", "soft"],
+		keepRecentTokens: 4000,
+		maxSummaryTokens: 2048,
+		reserveTokens: 8000,
 	},
 	thinkingBudgets: { high: 4096 },
 	tools: { disabled: ["task"] },
@@ -64,6 +67,9 @@ describe("profiles", () => {
 		expect(resolveModelCompactionSettings(settings, localModel)).toMatchObject({
 			thresholdPercent: 60,
 			methodOrder: ["handoff", "shake", "soft"],
+			keepRecentTokens: 4000,
+			maxSummaryTokens: 2048,
+			reserveTokens: 8000,
 		});
 		expect(resolveModelThinkingBudgets(settings, localModel).high).toBe(4096);
 		expect(resolveDisabledToolNames(settings, localModel)).toEqual(["browser", "task"]);
@@ -117,6 +123,15 @@ describe("profiles", () => {
 		);
 		expect(() => normalizeModelProfiles({ "local-llama/*": { compaction: { methodOrder: ["nope"] } } })).toThrow(
 			/compaction method/,
+		);
+		expect(() => normalizeModelProfiles({ "local-llama/*": { compaction: { keepRecentTokens: 0 } } })).toThrow(
+			/keepRecentTokens/,
+		);
+		expect(() => normalizeModelProfiles({ "local-llama/*": { compaction: { maxSummaryTokens: -1 } } })).toThrow(
+			/maxSummaryTokens/,
+		);
+		expect(() => normalizeModelProfiles({ "local-llama/*": { compaction: { reserveTokens: 1.5 } } })).toThrow(
+			/reserveTokens/,
 		);
 	});
 });

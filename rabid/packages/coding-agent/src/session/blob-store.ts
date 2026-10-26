@@ -12,7 +12,7 @@ export const BLOB_HASH_RE = /^[a-f0-9]{64}$/;
 
 /**
  * A reused blob older than this gets its mtime refreshed (metadata only, never
- * its bytes) so `omp gc`'s write-grace window still covers a blob whose new
+ * its bytes) so `rabid gc`'s write-grace window still covers a blob whose new
  * reference has not reached a session file yet. Younger blobs are left alone.
  */
 const BLOB_REUSE_TOUCH_MS = 60_000;
@@ -20,7 +20,7 @@ const BLOB_REUSE_TOUCH_MS = 60_000;
 /**
  * Staging file an atomic blob or sidecar write renames into place:
  * `.<hash>[.<ext>].<snowflake>.tmp`. Only a killed or crashed writer leaves one
- * behind, so `omp gc` removes the ones older than its write grace.
+ * behind, so `rabid gc` removes the ones older than its write grace.
  */
 export const BLOB_STAGING_RE = /^\.[a-f0-9]{64}(?:\.[A-Za-z0-9][A-Za-z0-9._-]{0,31})?\.[0-9a-f]{16}\.tmp$/;
 
