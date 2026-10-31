@@ -19,6 +19,8 @@ const MID_RUN_NUDGE_MUTATION_THRESHOLD = 12;
 const MID_RUN_NUDGE_MAX_PER_CYCLE = 2;
 /** Actions listed in a nudge: enough to reconcile the ledger, short enough to read. */
 const MID_RUN_NUDGE_ACTION_LIMIT = 8;
+/** Open todo items named in a nudge; the rest stay one `todo view` away. */
+const MID_RUN_NUDGE_ITEM_LIMIT = 12;
 const MUTATING_TOOLS: Record<string, true> = {
 	bash: true,
 	eval: true,
@@ -342,24 +344,34 @@ export class TodoTracker {
 		if (this.#midRunNudgeCount >= MID_RUN_NUDGE_MAX_PER_CYCLE) return null;
 		if (!cfgTodoEnabled.get(this.#host.settings) || !cfgTodoReminders.get(this.#host.settings)) return null;
 		if (this.#host.planModeEnabled() || !this.#host.getActiveToolNames().includes("todo")) return null;
-		const incomplete = this.#phases
-			.flatMap(phase => phase.tasks)
-			.filter(task => task.status === "pending" || task.status === "in_progress");
-		if (incomplete.length === 0) return null;
+		const open = this.#phases.flatMap(phase =>
+			phase.tasks
+				.filter(task => task.status === "pending" || task.status === "in_progress")
+				.map(task => ({ phase: phase.name, task })),
+		);
+		if (open.length === 0) return null;
 		const mutations = this.#mutationsSinceLastTouch;
 		const recentActions = this.#actionsSinceLastTodoUpdate();
 		this.#mutationsSinceLastTouch = 0;
 		this.#midRunNudgeCount++;
 		const { toolRefs } = this.#buildEagerPreludeContext();
+		const shown = open.slice(0, MID_RUN_NUDGE_ITEM_LIMIT);
+		const openList = [
+			...shown.map(({ phase, task }) => `- [${task.status}] ${task.content} (${phase})`),
+			...(open.length > shown.length
+				? [`- … ${open.length - shown.length} more; call \`${toolRefs.todo}\` to view the full list.`]
+				: []),
+		].join("\n");
 		const reminder = prompt.render(midRunTodoNudgePrompt, {
 			toolRefs,
-			incompleteCount: incomplete.length,
-			plural: incomplete.length !== 1,
+			incompleteCount: open.length,
+			plural: open.length !== 1,
 			mutations,
+			openList,
 			recentActions,
 		});
 		logger.debug("Mid-run todo nudge fired", {
-			incomplete: incomplete.length,
+			incomplete: open.length,
 			nudge: this.#midRunNudgeCount,
 		});
 		return {

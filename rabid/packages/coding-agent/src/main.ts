@@ -2142,33 +2142,26 @@ export async function runRootCommand(
 		// and the deferred persistence check below (after extension flag ownership is
 		// resolved) rejects a native --resume, so the picker must not run first.
 		if (parsedArgs.resume === true && !parsedArgs.fork && !parsedArgs.noSession) {
-			const folderSessions = await logger.time(
-				"SessionManager.listForPicker",
-				SessionManager.listForPicker,
-				cwd,
-				parsedArgs.sessionDir,
-			);
-			let preloadedAllSessions: SessionInfo[] | undefined;
-			if (folderSessions.length === 0) {
-				// Probe globally so we can exit fast when the user has no sessions at
-				// all, but never auto-switch the picker into all-projects scope — that
-				// silently surfaced other projects' history when the cwd was empty
-				// (issue #3099). The preloaded list also makes the user's Tab switch
-				// instant on the way in.
-				preloadedAllSessions = await logger.time(
-					"SessionManager.listAllForPicker",
-					SessionManager.listAllForPicker,
-				);
-				if (preloadedAllSessions.length === 0) {
-					writeStartupNotice(parsedArgs, `${chalk.dim("No sessions found")}\n`);
-					stopStartupWatchdog();
-					process.exit(0);
-				}
+			// Load both scopes up front. `--resume` opens in all-projects scope so
+			// sessions started from another cwd (the iPhone web terminal often starts
+			// in $HOME, the desktop in a repo) are immediately discoverable; Tab
+			// still narrows back to the current folder. This intentionally differs
+			// from issue #3099's empty-folder-only global probe: the shared history
+			// is the point, not an empty-state fallback.
+			const [folderSessions, allSessions] = await Promise.all([
+				logger.time("SessionManager.listForPicker", SessionManager.listForPicker, cwd, parsedArgs.sessionDir),
+				logger.time("SessionManager.listAllForPicker", SessionManager.listAllForPicker),
+			]);
+			if (allSessions.length === 0) {
+				writeStartupNotice(parsedArgs, `${chalk.dim("No sessions found")}\n`);
+				stopStartupWatchdog();
+				process.exit(0);
 			}
 			pauseStartupWatchdog();
 			const selectSessionImpl = deps.selectSession ?? (await loadSessionPicker());
 			const selected = await logger.time("selectSession", selectSessionImpl, folderSessions, {
-				allSessions: preloadedAllSessions,
+				allSessions,
+				initialScope: "all",
 			});
 			resumeStartupWatchdog();
 			if (!selected) {

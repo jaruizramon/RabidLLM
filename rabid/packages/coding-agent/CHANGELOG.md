@@ -4,6 +4,8 @@
 
 ### Added
 
+- Image attachments and user corrections now carry hidden deterministic notices: an image triggers the visual-grounding protocol (original attachment, bbox/crop, flat-vs-perspective, raycast/DOM hit-test), and a correction tells the model to restate the corrected fact, discard the contradicted hypothesis, and change method
+- Model-boundary images are now lossy-compressed before every provider request: max 640 px on the long edge, 128 KiB cap, 8-bit palette/JPEG/PNG, and WebP excluded for local decoders. The system prompt marks colors and fine detail as approximate.
 - Added `calculate`: a deterministic slider-sweep tool — one arithmetic expression over up to eight named axes with an optional `compare` column set (`compare`/`delta`/`ratio`), no I/O or clock, so identical calls print identical tables; useful for timing-model comparisons and fixed race schedules
 - Added `profiles.<selector>.systemPromptAppend`: a per-model markdown block appended to the system prompt (relative paths resolve against the agent dir, `~` expands, and the file is re-read on every rebuild), so one model can carry its own operating discipline without replacing the global `SYSTEM.md`
 - Added a 30-second bitch-slap watchdog above the preset row: `can I bitch slap it?` reads `nah` while the agent is progressing and `bitchslapping...` when it is stuck — the same tool call three times, the same or near-duplicate answer twice, repeated tool output three times, or a text-only stop with open todos — at which point it steers a running turn or prompts an idle one; a state that ignores the first slap gets a second, harder corrective naming the open todos, then goes quiet until the transcript moves
@@ -27,6 +29,7 @@
 
 ### Changed
 
+- `rabid --resume` now opens in all-projects scope, so conversations started from another working directory — a desktop repo versus the iPhone web terminal in `$HOME` — are visible immediately; `Tab` still narrows the list to the current folder
 - Rabid balanced mode now caps thinking at 2,048 tokens at every level (was 4,096), matching fast; deep keeps 32,768
 - Rebranded the visible product from omp to rabid: `rabid` is the process title, CLI name in help and command examples, User-Agent, notification title, log filename prefix, and XDG data/state/cache root; the on-disk config root stays `.omp` for compatibility
 - Onboarding no longer links providers or a default model: setup now covers glyph mode, composer shape, and theme only; provider sign-in remains available on demand through `/setup providers` and `/login`
@@ -43,6 +46,13 @@
 
 ### Fixed
 
+- Long `i` intent labels are truncated instead of rejecting the tool call; repeated `edit` failures now name the missing `[PATH#HASH]` header and the stale-tag recovery.
+- Repeated tool-failure steering for `edit` now directs the model to re-read the current `[PATH#TAG]` and use range replacement or `write`, instead of claiming an argument-shape bug.
+- Compaction no longer reuses a stale turn-card chain: the chain is accepted only when its newest card is at least as new as the summarized region, so a mid-turn compaction falls back to the summarizer instead of summarizing an earlier turn
+- Committed compaction summaries now include the live todo ledger (open items with phase and status), so a resumed session knows its task position without calling `todo view`
+- The mid-run todo nudge names the open items (up to 12) instead of only their count, so reconciling the ledger no longer starts from “I don’t know what the items are”
+- Harness repeated-failure notices are no longer carried into `Standing directives` as authoritative directives; open-failure tracking already clears them when the same tool later succeeds
+- The file-action ledger recovers the edited path from the `edit` tool’s `[path#tag]` patch header, so summaries no longer print `edit \`edit\`` for anchored edits
 - Fixed compaction summaries growing without bound on the turn-card chain: the carried verbatim block had no section terminator, so a resume point and every later section were re-embedded each pass and one session reached the 500K persistence cap and re-compacted immediately on the next turn; the block now stops at the next section, keeps halving its head/tail until it fits its budget, and a carried earlier summary is clipped to the chain budget
 - SLM compaction carries the previous `### Done` ledger forward and removes completed items from `In progress`/`Pending`, so a truncated handoff no longer sends the successor back over already-audited code
 - Compaction summaries append a `Resume point` when the retained tail starts with an assistant tool call, so the successor continues from that result instead of restarting the previous check

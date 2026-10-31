@@ -192,6 +192,8 @@ import goalTodoContextPrompt from "../prompts/goals/goal-todo-context.md" with {
 import anthropicUsageWrapUpPrompt from "../prompts/system/anthropic-usage-wrap-up.md" with { type: "text" };
 import autoContinuePrompt from "../prompts/system/auto-continue.md" with { type: "text" };
 import checkpointActiveNoticeTemplate from "../prompts/system/checkpoint-active-notice.md" with { type: "text" };
+import correctionNoticePrompt from "../prompts/system/correction-notice.md" with { type: "text" };
+import visualGroundingNoticePrompt from "../prompts/system/visual-grounding-notice.md" with { type: "text" };
 import interruptedThinkingTemplate from "../prompts/system/interrupted-thinking.md" with { type: "text" };
 import planModeActivePrompt from "../prompts/system/plan-mode-active.md" with { type: "text" };
 import planModeReferencePrompt from "../prompts/system/plan-mode-reference.md" with { type: "text" };
@@ -493,6 +495,7 @@ function jobSnapshotItem(job: AsyncJob): AsyncJobSnapshotItem {
 }
 
 import { LoopGuards, type StreamGuardsHost, StreamingEditGuard } from "./stream-guards";
+import { isUserCorrection } from "./correction-notice";
 import { EAGER_TODO_PRELUDE_MESSAGE_TYPE, TodoTracker, type TodoTrackerHost } from "./todo-tracker";
 import { TtsrCoordinator, type TtsrCoordinatorHost } from "./ttsr-coordinator";
 
@@ -2532,6 +2535,7 @@ export class AgentSession implements SettingsScope {
 				this.#todo.syncFromBranch();
 				this.#modelMentions.syncFromBranch();
 			},
+			getTodoPhases: () => this.#todo.phases,
 			resetAdvisorRuntimes: (reason, options) => this.#advisors.resetAllRuntimes(reason, options),
 			rebaseAdvisorPrefix: reason => this.#advisors.rebaseDeliveredPrefixes(reason),
 			rebaseAfterCompaction: () => this.#stats.rebaseAfterCompaction(),
@@ -7661,13 +7665,42 @@ export class AgentSession implements SettingsScope {
 		// user's message that steer this turn. User-authored prompts only — synthetic /
 		// agent-initiated turns never trigger them.
 		const keywordNotices = options?.synthetic ? [] : this.#createMagicKeywordNotices(expandedText);
+		// Deterministic turn-shape notices: an attached image gets the grounding
+		// protocol, and a correction gets "drop the contradicted hypothesis".
+		const visualGroundingNotice: CustomMessage | undefined =
+			!options?.synthetic && options?.images?.length
+				? {
+						role: "custom",
+						customType: "visual-grounding-notice",
+						content: visualGroundingNoticePrompt,
+						display: false,
+						attribution: "user",
+						timestamp: Date.now(),
+					}
+				: undefined;
+		const correctionNotice: CustomMessage | undefined =
+			!options?.synthetic && isUserCorrection(expandedText) && this.#findLastAssistantMessage()
+				? {
+						role: "custom",
+						customType: "correction-notice",
+						content: correctionNoticePrompt,
+						display: false,
+						attribution: "user",
+						timestamp: Date.now(),
+					}
+				: undefined;
 
 		// A `^` mention in a non-synthetic prompt mints a new alias. The hidden
 		// session-agent notice (which tells the model about the alias) must ride
 		// with the message via prependMessages — not as a separate steer — so the
 		// model sees both in the same turn (#14093).
 		const sessionAgentNotice = options?.synthetic ? undefined : this.#tools.takeSessionAgentNotice();
-		const prependNotices = sessionAgentNotice ? [...keywordNotices, sessionAgentNotice] : keywordNotices;
+		const prependNotices = [
+			...keywordNotices,
+			...(visualGroundingNotice ? [visualGroundingNotice] : []),
+			...(correctionNotice ? [correctionNotice] : []),
+			...(sessionAgentNotice ? [sessionAgentNotice] : []),
+		];
 
 		// A user-initiated prompt (typed message or the `.`/`c` continue shortcut)
 		// re-enables advisor auto-resume that a prior user interrupt suppressed.

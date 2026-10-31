@@ -3,13 +3,16 @@ import { describe, expect, it } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import type { TodoPhase } from "@oh-my-pi/pi-tui/tools/todo";
 import {
 	estimateCardTokens,
 	parseTurnCard,
 	renderOpenFailures,
+	renderTodoLedger,
 	renderTurnTranscript,
 	readTurnCardChain,
 	trimTurnCard,
+	turnCardChainCoversRegion,
 	writeTurnCard,
 	type TurnCard,
 } from "@oh-my-pi/pi-coding-agent/rabid/turn-cards";
@@ -177,6 +180,7 @@ describe("turn cards", () => {
 		const full = await readTurnCardChain(tempDir.path(), "s", 10_000);
 		expect(full.blocks).toBe(3);
 		expect(full.truncated).toBe(false);
+		expect(typeof full.newestTimestamp).toBe("number");
 		expect(full.text.indexOf("first")).toBeLessThan(full.text.indexOf("third"));
 
 		const tail = await readTurnCardChain(tempDir.path(), "s", 40);
@@ -185,5 +189,69 @@ describe("turn cards", () => {
 		expect(tail.text).toContain("older cards omitted");
 		expect(tail.text).toContain("third");
 		expect(tail.text).not.toContain("first");
+		expect(tail.newestTimestamp).toBe(full.newestTimestamp);
+	});
+});
+
+describe("turn-card chain coverage", () => {
+	const user = (timestamp: number) => ({ role: "user", content: [], timestamp }) as unknown as AgentMessage;
+	const assistant = (timestamp: number) => ({ role: "assistant", content: [], timestamp }) as unknown as AgentMessage;
+
+	it("rejects a chain whose newest card predates the summarized messages", () => {
+		const messages = [user(1_000), assistant(2_000)];
+
+		expect(turnCardChainCoversRegion(messages, 1, 1_500)).toBe(false);
+		expect(turnCardChainCoversRegion(messages, 1, 2_000)).toBe(true);
+	});
+
+	it("rejects a chain with fewer cards than user turns", () => {
+		expect(turnCardChainCoversRegion([user(1_000), user(2_000)], 1, 3_000)).toBe(false);
+	});
+
+	it("requires a timestamp and at least one message", () => {
+		expect(turnCardChainCoversRegion([user(1_000)], 1, undefined)).toBe(false);
+		expect(turnCardChainCoversRegion([], 0, 1_000)).toBe(false);
+	});
+
+	it("rejects a chain that stops at the previous turn when the current turn is mid-flight", () => {
+		expect(turnCardChainCoversRegion([assistant(2_000)], 3, 1_000)).toBe(false);
+		expect(turnCardChainCoversRegion([assistant(2_000)], 3, 2_500)).toBe(true);
+	});
+});
+
+describe("todo ledger", () => {
+	it("renders only open items with their phase and status", () => {
+		const phases: TodoPhase[] = [
+			{
+				name: "Sprint 4 closeout",
+				tasks: [
+					{ content: "Check architecture.md", status: "in_progress" },
+					{ content: "Commit Sprint 4", status: "pending" },
+					{ content: "Add .gitignore entry", status: "completed" },
+					{ content: "Old approach", status: "abandoned" },
+				],
+			},
+			{
+				name: "Sprint 5",
+				tasks: [{ content: "Vendor chiptune2", status: "blocked", blocker: "license unconfirmed" }],
+			},
+		];
+
+		const rendered = renderTodoLedger(phases);
+
+		expect(rendered).toContain("## Todo (live)");
+		expect(rendered).toContain("2/5 done, 3 open");
+		expect(rendered).toContain("- Sprint 4 closeout");
+		expect(rendered).toContain("  - [in_progress] Check architecture.md");
+		expect(rendered).toContain("  - [pending] Commit Sprint 4");
+		expect(rendered).not.toContain("Add .gitignore entry");
+		expect(rendered).not.toContain("Old approach");
+		expect(rendered).toContain("  - [blocked] Vendor chiptune2 — license unconfirmed");
+	});
+
+	it("renders nothing when every task is closed", () => {
+		const phases: TodoPhase[] = [{ name: "Done", tasks: [{ content: "Ship it", status: "completed" }] }];
+
+		expect(renderTodoLedger(phases)).toBe("");
 	});
 });

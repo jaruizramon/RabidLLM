@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { Agent, type AgentMessage } from "@oh-my-pi/pi-agent-core";
 import * as compactionModule from "@oh-my-pi/pi-agent-core/compaction";
 import type { AssistantMessage, Context, Message, Model, UserMessage } from "@oh-my-pi/pi-ai";
+import type { TodoPhase } from "@oh-my-pi/pi-tui/tools/todo";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
@@ -197,6 +198,7 @@ describe("slm compaction method", () => {
 		prepareSlmHandoff: () => Promise<SlmHandoffRecord | undefined>;
 		asyncEnabled?: boolean;
 		turnCardChain?: boolean;
+		todoPhases?: TodoPhase[];
 	}): SessionMaintenance {
 		agent = new Agent({ initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] } });
 		const settings = Settings.isolated({
@@ -256,6 +258,7 @@ describe("slm compaction method", () => {
 			resetCodexProviderAfterCompaction: () => {},
 			resetPlanReference: () => {},
 			syncTodoPhasesFromBranch: () => {},
+			getTodoPhases: () => options.todoPhases ?? [],
 			resetAdvisorRuntimes: () => {},
 			rebaseAfterCompaction: () => {},
 			recordAnchoredHistoryRewrite: () => {},
@@ -313,9 +316,6 @@ describe("slm compaction method", () => {
 		try {
 			setAgentDir(agentDir);
 			const sessionId = sessionManager.getSessionId();
-			for (const promptText of ["inspect the repo", "copy the fixtures", "keep X"]) {
-				await writeTurnCard(agentDir, sessionId, { prompt: promptText, files: [], operations: [] });
-			}
 			// A developer directive inside the summarized region: the cards never
 			// carry it, so only the deterministic block can keep it.
 			sessionManager.appendMessage(userMessage("continue"));
@@ -326,11 +326,24 @@ describe("slm compaction method", () => {
 			};
 			sessionManager.appendMessage(directive);
 			sessionManager.appendMessage(assistantMessage("working", model));
+			// Cards are written at agent_end, after the turn they cover.
+			for (const promptText of ["inspect the repo", "copy the fixtures", "keep X"]) {
+				await writeTurnCard(agentDir, sessionId, { prompt: promptText, files: [], operations: [] });
+			}
 
 			maintenance = createMaintenance({
 				methodOrder: ["soft"],
 				turnCardChain: true,
 				prepareSlmHandoff: async () => undefined,
+				todoPhases: [
+					{
+						name: "Sprint 4 closeout",
+						tasks: [
+							{ content: "Check architecture.md", status: "in_progress" },
+							{ content: "Commit Sprint 4", status: "pending" },
+						],
+					},
+				],
 			});
 			const compactSpy = vi
 				.spyOn(compactionModule, "compact")
@@ -344,7 +357,51 @@ describe("slm compaction method", () => {
 			expect(entry.summary).toContain("Implement the parser before the renderer.");
 			expect(entry.summary).toContain("## User messages (verbatim; authoritative)");
 			expect(entry.summary).toContain("MUST keep X");
+			expect(entry.summary).toContain("## Todo (live)");
+			expect(entry.summary).toContain("[in_progress] Check architecture.md");
 			expect(compactSpy).not.toHaveBeenCalled();
+		} finally {
+			setAgentDir(originalAgentDir);
+			await fs.rm(agentDir, { recursive: true, force: true });
+		}
+	});
+
+	it("falls back to the LLM when the turn-card chain predates the summarized region", async () => {
+		const originalAgentDir = getAgentDir();
+		const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "turn-card-stale-"));
+		try {
+			setAgentDir(agentDir);
+			const chainDir = path.join(agentDir, "turn-cards");
+			await fs.mkdir(chainDir, { recursive: true });
+			// Three cards satisfy the user-turn count, but all predate the messages
+			// this compaction summarizes: a mid-turn compaction has no card for the
+			// work that triggered it.
+			const stale = ["first", "second", "third"]
+				.map(
+					prompt =>
+						`## [2020-01-01T00:00:0${prompt.length}.000Z] ${prompt}\n<!-- session:${sessionManager.getSessionId()} -->\n\nFiles: \`game.js\`\n`,
+				)
+				.join("\n");
+			await fs.writeFile(path.join(chainDir, `${sessionManager.getSessionId()}.chain.md`), stale);
+
+			maintenance = createMaintenance({
+				methodOrder: ["soft"],
+				turnCardChain: true,
+				prepareSlmHandoff: async () => undefined,
+			});
+			const compactSpy = vi.spyOn(compactionModule, "compact").mockImplementation(async preparation => ({
+				summary: "fresh summary",
+				firstKeptEntryId: preparation.firstKeptEntryId,
+				tokensBefore: preparation.tokensBefore,
+				details: {},
+			}));
+
+			await maintenance.runAutoCompaction("threshold", false, { triggerContextTokens: THRESHOLD });
+
+			const entry = latestCompaction();
+			expect(entry.summary).not.toContain("## Turn cards");
+			expect(entry.summary).toContain("fresh summary");
+			expect(compactSpy).toHaveBeenCalledTimes(1);
 		} finally {
 			setAgentDir(originalAgentDir);
 			await fs.rm(agentDir, { recursive: true, force: true });

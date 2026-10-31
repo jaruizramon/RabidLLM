@@ -183,6 +183,18 @@ describe("file actions", () => {
 		]);
 	});
 
+	it("recovers the path from an edit patch header", () => {
+		const actions = extractFileActions([
+			call("edit", { input: "[/home/pipo/proj/go/duels.go#070C]\nPUT 173.=174:\n+\tepoch int" }),
+			call("edit", { input: "[PLAN.md#01EB] PUT >115: +Sprint 5" }),
+		]);
+
+		expect(actions).toEqual([
+			{ kind: "edit", label: "/home/pipo/proj/go/duels.go" },
+			{ kind: "edit", label: "PLAN.md" },
+		]);
+	});
+
 	it("collapses consecutive repeats and keeps only the newest actions", () => {
 		const repeated = renderFileActions([call("edit", { path: "a.ts" }), call("edit", { path: "a.ts" })]);
 		expect(repeated).toBe("## Recent file actions\n\n- edit `a.ts` (×2)");
@@ -416,6 +428,32 @@ describe("renderStandingDirectives", () => {
 		const rendered = renderStandingDirectives([], 4_096, previousSummary);
 
 		expect(rendered).toContain("Approved plan: finish the parser.");
+	});
+
+	it("does not promote a repeated-failure notice to a standing directive", () => {
+		const notice =
+			"Repeated tool failure (2×) for `bash`: FAIL round-2 mismatch detected on both seats\n" +
+			"This is an argument-shape problem, not a change in the environment.";
+		const developer = {
+			role: "developer",
+			content: [{ type: "text", text: notice }],
+			timestamp: 1,
+		} as unknown as AgentMessage;
+
+		const rendered = renderStandingDirectives([developer], 4_096);
+
+		expect(rendered).toBe("");
+	});
+
+	it("drops a carried-forward repeated-failure notice", () => {
+		const previousSummary = [
+			"## Standing directives (verbatim; authoritative)",
+			"",
+			"### Directive 1",
+			"Repeated tool failure (2×) for `bash`: FAIL round-2 mismatch",
+		].join("\n");
+
+		expect(renderStandingDirectives([], 4_096, previousSummary)).toBe("");
 	});
 
 	it("does not duplicate a directive the previous block already holds", () => {

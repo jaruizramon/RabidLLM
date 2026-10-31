@@ -17,6 +17,8 @@ export interface SessionPickerHost<T extends SessionSelectorEntry = SessionSelec
 /** Presentation and capability controls for the standalone session picker. */
 export interface SessionPickerOptions<T extends SessionSelectorEntry = SessionSelectorEntry> {
 	allSessions?: T[];
+	/** Scope to open in. `all` requires a preloaded `allSessions` list. */
+	initialScope?: "folder" | "all";
 	title?: string;
 	scopeLabel?: string | false;
 	showCwd?: boolean;
@@ -66,6 +68,7 @@ export async function selectSession<T extends SessionSelectorEntry>(
 					historyMatcher,
 					loadAllSessions: options.allowGlobalScope === false ? undefined : host.loadAllSessions,
 					allSessions: options.allSessions,
+					initialScope: options.initialScope,
 					getTerminalRows: () => ui.terminal.rows,
 					fillHeight: true,
 					standalone: true,

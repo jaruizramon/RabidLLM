@@ -413,6 +413,14 @@ const VERBATIM_LABEL = "User message";
 /** Heading that marks the deterministic operator-directive block (approved plans, harness directives). */
 const DIRECTIVE_HEADING = "## Standing directives (verbatim; authoritative)";
 const DIRECTIVE_LABEL = "Directive";
+/**
+ * Harness steering note emitted by `ToolFailureTracker` after a repeated tool
+ * failure. It is diagnostic, not an operator directive: `renderOpenFailures`
+ * already tracks the failing call and clears it when the same tool later
+ * succeeds. Carrying the note forward as an authoritative directive outlives
+ * the fix and tells the successor to chase a resolved loop.
+ */
+const REPEATED_FAILURE_NOTICE_PREFIX = "Repeated tool failure (";
 /** Marker inserted when the middle of a long verbatim list is dropped. */
 const VERBATIM_OMISSION = "… middle user messages omitted …";
 
@@ -517,11 +525,13 @@ export function renderStandingDirectives(
 	maxTokens: number,
 	previousSummary?: string,
 ): string {
-	const bodies = verbatimSectionBodies(previousSummary, DIRECTIVE_HEADING, DIRECTIVE_LABEL);
+	const bodies = verbatimSectionBodies(previousSummary, DIRECTIVE_HEADING, DIRECTIVE_LABEL).filter(
+		body => !body.startsWith(REPEATED_FAILURE_NOTICE_PREFIX),
+	);
 	for (const message of messages) {
 		if (message.role !== "developer") continue;
 		const text = messageText(message.content).trim();
-		if (text === "") continue;
+		if (text === "" || text.startsWith(REPEATED_FAILURE_NOTICE_PREFIX)) continue;
 		const clipped =
 			text.length > USER_MESSAGE_CLIP
 				? `${text.slice(0, USER_MESSAGE_CLIP)}… [${text.length - USER_MESSAGE_CLIP} chars omitted]`

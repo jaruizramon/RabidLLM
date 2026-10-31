@@ -46,6 +46,7 @@ import {
 	shouldUseProviderNativeCompaction,
 	upsertFileOperations,
 } from "@oh-my-pi/pi-agent-core/compaction";
+import type { TodoPhase } from "@oh-my-pi/pi-tui/tools/todo";
 import { renderCompactionResumePoint } from "./compaction-resume-point";
 import {
 	DEFAULT_PRUNE_CONFIG,
@@ -79,8 +80,10 @@ import {
 	readTurnCardChain,
 	renderFileActions,
 	renderOpenFailures,
+	renderTodoLedger,
 	renderTurnTranscript,
 	trimTurnCard,
+	turnCardChainCoversRegion,
 	type TurnCard,
 } from "../rabid/turn-cards";
 import type { ModelRegistry } from "../config/model-registry";
@@ -556,6 +559,8 @@ export interface SessionMaintenanceHost {
 	resetCodexProviderAfterCompaction(compaction: CodexCompactionContext): void;
 	resetPlanReference(): void;
 	syncTodoPhasesFromBranch(): void;
+	/** Live todo phases for the deterministic compaction ledger. */
+	getTodoPhases(): TodoPhase[];
 	/** `compacted` marks a rewrite that replaced history with a summary. */
 	resetAdvisorRuntimes(reason?: string, options?: { compacted?: boolean }): void;
 	/** Re-aligns advisors after an in-place prune their own contexts already cover (no re-prime). */
@@ -3963,17 +3968,19 @@ export class SessionMaintenance {
 	 * falls back to the LLM.
 	 */
 	async #turnCardCompaction(preparation: CompactionPreparation): Promise<CompactionResult | undefined> {
-		const userTurns = [...preparation.messagesToSummarize, ...preparation.turnPrefixMessages].filter(
-			message => message.role === "user",
-		).length;
+		const region = [...preparation.messagesToSummarize, ...preparation.turnPrefixMessages];
 		const chainBudget = resolveTurnCardChainBudget(this.#model?.contextWindow ?? 0, preparation.settings);
-		const { text, blocks, truncated } = await readTurnCardChain(getAgentDir(), this.#host.sessionId(), chainBudget);
+		const { text, blocks, truncated, newestTimestamp } = await readTurnCardChain(
+			getAgentDir(),
+			this.#host.sessionId(),
+			chainBudget,
+		);
 		if (!blocks || !text) return undefined;
-		const covered = blocks >= userTurns;
-		if (!covered) {
-			logger.debug("Turn-card chain does not cover the summarized prompts; using the LLM", {
+		if (!turnCardChainCoversRegion(region, blocks, newestTimestamp)) {
+			logger.debug("Turn-card chain does not cover the summarized region; using the LLM", {
 				blocks,
-				userTurns,
+				userTurns: region.filter(message => message.role === "user").length,
+				newestTimestamp,
 			});
 			return undefined;
 		}
@@ -4022,8 +4029,11 @@ export class SessionMaintenance {
 		// Same for failed and repeated calls: a summarizer cannot turn an
 		// unresolved loop into progress.
 		const failures = renderOpenFailures(messages);
+		// Todo phases are live tool state; no summarizer sees them, so the
+		// successor's task pointer would otherwise vanish at the rewrite.
+		const todo = renderTodoLedger(this.#host.getTodoPhases());
 		const resumePoint = renderCompactionResumePoint(preparation.recentMessages);
-		return [summary, actions, failures, directives, requirements, resumePoint]
+		return [summary, actions, failures, directives, requirements, todo, resumePoint]
 			.filter(block => block !== "")
 			.join("\n\n");
 	}

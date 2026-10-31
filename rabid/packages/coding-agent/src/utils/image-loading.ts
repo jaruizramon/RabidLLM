@@ -19,6 +19,23 @@ import { formatDimensionNote, type ImageResizeOptions, resizeImage } from "./ima
 const SVG_IMAGE_MAX_EDGE_PX = 2048;
 const MODEL_BOUNDARY_IMAGE_CACHE_MAX_SIZE = 64 * 1024 * 1024;
 const MODEL_BOUNDARY_IMAGE_CACHE_MAX_ENTRIES = 128;
+/**
+ * Model-boundary image budget. Every user attachment, tool screenshot, and
+ * historical image is re-encoded through this profile: 640px longest edge,
+ * 128 KiB cap, 8-bit palette PNG or JPEG (smallest wins). The source bytes are
+ * only re-encoded; the persisted session copy is untouched.
+ */
+export const MODEL_IMAGE_COMPRESSION: ImageResizeOptions = {
+	maxWidth: 640,
+	maxHeight: 640,
+	maxBytes: 128 * 1024,
+	jpegQuality: 70,
+	force: true,
+	paletteColors: 256,
+	// llama.cpp's STB decoder cannot read WebP and custom local provider ids are
+	// not in `modelLacksWebpSupport`; keep the model-boundary profile WebP-free.
+	excludeWebP: true,
+};
 type NormalizedImagePayload = Pick<ImageContent, "data" | "mimeType">;
 const modelBoundaryImageCache = new LRUCache<string, NormalizedImagePayload | null>({
 	max: MODEL_BOUNDARY_IMAGE_CACHE_MAX_ENTRIES,
@@ -66,6 +83,8 @@ function modelBoundaryImageCacheKey(image: ImageContent, resize: ImageResizeOpti
 		resize?.minDimension,
 		resize?.maxBytes,
 		resize?.jpegQuality,
+		resize?.force,
+		resize?.paletteColors,
 	]);
 	return `${resizeKey}:${image.mimeType}:${image.data.length}:${image.data.slice(0, 32)}:${image.data.slice(-32)}:${String(Bun.hash(image.data))}`;
 }
@@ -259,14 +278,14 @@ export async function normalizeModelContextImages(
 ): Promise<ImageContent[] | undefined> {
 	if (!images || images.length === 0) return undefined;
 	const excludesWebP = modelLacksWebpSupport(options?.model);
-	const resize: ImageResizeOptions | undefined = excludesWebP
-		? { ...options?.resize, excludeWebP: true }
-		: options?.resize;
+	const resize: ImageResizeOptions = excludesWebP
+		? { ...MODEL_IMAGE_COMPRESSION, ...options?.resize, excludeWebP: true }
+		: { ...MODEL_IMAGE_COMPRESSION, ...options?.resize };
 	const normalized: ImageContent[] = [];
 	for (const image of images) {
 		try {
 			if (excludesWebP && isWebPImage(image)) {
-				const converted = await memoizedStbImageNormalization(image, options?.resize);
+				const converted = await memoizedStbImageNormalization(image, resize);
 				// Mixed-content callers reassemble normalized images positionally, so
 				// preserve one output slot per input. The provider-boundary pass replaces
 				// an undecodable WebP with an omission note before dispatch.

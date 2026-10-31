@@ -1336,6 +1336,8 @@ export interface SessionSelectorOptions<T extends SessionSelectorEntry = Session
 	loadAllSessions?: () => Promise<T[]>;
 	/** Preloaded all-projects list; cached so the first Tab toggle is instant. */
 	allSessions?: T[];
+	/** Open in `all` scope when a preloaded all-projects list is supplied. */
+	initialScope?: "folder" | "all";
 	/** Picker heading; defaults to "Resume Session". */
 	title?: string;
 	/** Primary action label; defaults to "Resume" (ANSI footer defaults to "select"). */
@@ -1462,6 +1464,7 @@ export class SessionSelectorComponent<T extends SessionSelectorEntry = SessionSe
 		// symlink aliases of the same path, which must not turn the column on.
 		this.#folderShowCwd = options.showCwd ?? new Set(sessions.map(session => path.dirname(session.path))).size > 1;
 		this.#globalSessions = options.allSessions ?? null;
+		this.#scope = options.initialScope === "all" && this.#globalSessions ? "all" : "folder";
 		this.#getTerminalRows = options.getTerminalRows ?? (() => 24);
 		this.#fillHeight = options.fillHeight ?? false;
 		this.#title = options.title ?? "Resume Session";
@@ -1478,8 +1481,8 @@ export class SessionSelectorComponent<T extends SessionSelectorEntry = SessionSe
 		// user to Tab into all-projects rather than silently surfacing other
 		// projects' history (issue #3099).
 		this.#sessionList = new SessionList(
-			sessions,
-			this.#folderShowCwd,
+			this.#scope === "all" ? (this.#globalSessions ?? sessions) : sessions,
+			this.#scope === "all" ? true : this.#folderShowCwd,
 			options.historyMatcher,
 			options.getTerminalRows,
 			options.pinnedIds,

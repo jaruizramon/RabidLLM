@@ -3047,13 +3047,12 @@ async function prepareToolCallDispatch(
 				? { intent: undefined, strippedArgs: argsForExecution }
 				: extractIntent(toolCall.arguments);
 			argsForExecution = strippedArgs;
-			if (intent !== undefined && intent.length > MAX_INTENT_LENGTH && tool) {
-				entry.args = strippedArgs;
-				entry.validationErrorMessage = `\`${INTENT_FIELD}\` is a short intent label (at most ${MAX_INTENT_LENGTH} chars); the value you sent is ${intent.length} chars. The tool was not run. Put that content in the tool's own parameters and retry with a brief \`${INTENT_FIELD}\`.`;
-				continue;
-			}
 			if (intent) {
-				toolCall.intent = intent;
+				// `i` is a display label, not payload. A model that puts the patch
+				// in `i` or writes a paragraph should not lose the whole call; keep
+				// the first 200 chars for the transcript and let the tool schema
+				// judge the actual arguments.
+				toolCall.intent = intent.length > MAX_INTENT_LENGTH ? intent.slice(0, MAX_INTENT_LENGTH) : intent;
 			} else if (typeof tool?.intent === "function") {
 				try {
 					const derived = tool.intent(strippedArgs as never)?.trim();

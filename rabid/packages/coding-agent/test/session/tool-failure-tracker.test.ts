@@ -35,6 +35,55 @@ describe("ToolFailureTracker", () => {
 		expect(second?.additionalContext).toContain("argument-shape problem");
 	});
 
+	it("steers a repeated edit header failure to the current content tag", () => {
+		const tracker = new ToolFailureTracker();
+		const error = 'Input header must be [PATH] or [PATH#TAG] with a 4-hex content-hash tag; got "[index.html#131]".';
+		tracker.recordOutcome("edit", { input: "[index.html#131]\nPUT <132:" }, true, errorContent(error));
+		const second = tracker.recordOutcome("edit", { input: "[index.html#131]\nPUT <133:" }, true, errorContent(error));
+
+		expect(second?.additionalContext).toContain("4-hex content hash");
+		expect(second?.additionalContext).toContain("Re-read the target file");
+		expect(second?.additionalContext).not.toContain("argument-shape problem");
+	});
+
+	it("steers a repeated edit range failure to range replacement", () => {
+		const tracker = new ToolFailureTracker();
+		const error =
+			"`PUT 266.=352:` rejected: the body ends by restating the 42 line(s) just below the range, but is too short";
+		tracker.recordOutcome("edit", { input: "a" }, true, errorContent(error));
+		const second = tracker.recordOutcome("edit", { input: "b" }, true, errorContent(error));
+
+		expect(second?.additionalContext).toContain("PUT N.=M:");
+		expect(second?.additionalContext).toContain("complete final content");
+	});
+
+	it("steers a missing edit header to a bracketed path/hash", () => {
+		const tracker = new ToolFailureTracker();
+		const error =
+			'edit input must begin with "[PATH#HASH]" on the first non-blank line for anchored edits; got: "PUT 52-58:".';
+		tracker.recordOutcome("edit", { input: "PUT 52-58:\n+x" }, true, errorContent(error));
+		const second = tracker.recordOutcome("edit", { input: "PUT 56-61:\n+x" }, true, errorContent(error));
+
+		expect(second?.additionalContext).toContain("[PATH#HASH]");
+		expect(second?.additionalContext).toContain("keep `i` short");
+	});
+
+	it("steers a stale edit tag to the current hash", () => {
+		const tracker = new ToolFailureTracker();
+		const error =
+			"Edit rejected for js/camera.js: file changed between read and edit. Section is bound to #AD6C, but the current file hashes to #1045.";
+		tracker.recordOutcome("edit", { input: "[js/camera.js#AD6C]\nPUT 1-2:\n+x" }, true, errorContent(error));
+		const second = tracker.recordOutcome(
+			"edit",
+			{ input: "[js/camera.js#AD6C]\nPUT 3-4:\n+y" },
+			true,
+			errorContent(error),
+		);
+
+		expect(second?.additionalContext).toContain("[path#newhash]");
+		expect(second?.additionalContext).toContain("do not reuse the old tag");
+	});
+
 	it("clears the loop counter after a successful call", () => {
 		const tracker = new ToolFailureTracker();
 		const args = { path: "same" };

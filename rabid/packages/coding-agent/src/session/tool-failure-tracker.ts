@@ -4,6 +4,36 @@ import type { AgentToolResult, AfterToolCallResult, BeforeToolCallResult } from 
 const MAX_ERROR_EXCERPT = 300;
 
 /**
+ * Recovery guidance for a repeated failure. The `edit` tool's contract errors
+ * are not argument-serialization defects: the model usually reused a stale
+ * content tag or mistook `PUT N:` for a block replacement. Steer it to the
+ * current tag and to the range-replacement/`write` paths instead of letting it
+ * retry the same broken shape.
+ */
+function failureGuidance(toolName: string, text: string): string {
+	if (toolName === "edit") {
+		if (text.includes("input must begin with") && text.includes("[PATH#HASH]")) {
+			return "Start the edit `input` with `[PATH#HASH]` copied from the latest `read`. Put the patch in `input`; keep `i` short. Do not put the patch in `i`.";
+		}
+		if (text.includes("file changed between read and edit")) {
+			return "The file changed since that tag. Use the current `[path#newhash]` shown in the error (or re-read) and do not reuse the old tag.";
+		}
+		if (text.includes("Input header must be [PATH]")) {
+			return "Re-read the target file with `read` and retry using its current `[PATH#TAG]` (the 4-hex content hash from the read result). A line number is not a tag; do not reuse the failed header.";
+		}
+		if (/register `PUT`|without `:`|body ends by restating|single-line block/.test(text)) {
+			return "Use `PUT N.=M:` with the complete final content of the range, or rewrite the whole file with `write`. `PUT N:` inserts at N without deleting; `PUT N*` only walks a real multi-line construct; register PUTs paste without body rows.";
+		}
+		return "Re-read the target file with `read`, use its current `[PATH#TAG]`, and replace ranges with `PUT N.=M:` plus their complete final content (or use `write`). Do not retry the same edit.";
+	}
+	return (
+		"This is an argument-shape problem, not a change in the environment. " +
+		'Check scalar arguments for JSON-string-literal wrapping (path: "\\"/abs/file\\"", op: "\\"init\\""); ' +
+		"pass raw values, and do not retry the same call shape."
+	);
+}
+
+/**
  * Tracks repeated tool failures inside one session.
  *
  * Two failure classes matter:
@@ -34,7 +64,8 @@ export class ToolFailureTracker {
 		return {
 			block: true,
 			reason:
-				`Repeated-failure guard: this exact ${toolName} call has already failed ${this.#identicalFailures} times, so it was not run again. The arguments are not reaching the tool as intended — check for JSON-string-literal-wrapped values (path: '"/abs/file"', op: '"init"') and quoted path segments, then change the call or use a different tool.` +
+				`Repeated-failure guard: this exact ${toolName} call has already failed ${this.#identicalFailures} times, so it was not run again. ` +
+				failureGuidance(toolName, last ?? "") +
 				(last ? ` Last error: ${last}` : ""),
 		};
 	}
@@ -67,10 +98,7 @@ export class ToolFailureTracker {
 		if (count < 2) return undefined;
 		return {
 			additionalContext:
-				`Repeated tool failure (${count}×) for \`${toolName}\`: ${text}\n` +
-				"This is an argument-shape problem, not a change in the environment. " +
-				'Check scalar arguments for JSON-string-literal wrapping (path: "\\"/abs/file\\"", op: "\\"init\\""); ' +
-				"pass raw values, and do not retry the same call shape.",
+				`Repeated tool failure (${count}×) for \`${toolName}\`: ${text}\n` + failureGuidance(toolName, text),
 		};
 	}
 

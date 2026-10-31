@@ -167,10 +167,12 @@ archive; the fork never writes the script-owned `THOUGHTS.md`.
 `compaction.turnCardChain: true` removes the summary model call: the handoff/soft preparation reads
 `<session>.chain.md` (every card appended in turn order), tails it to a quarter of the resolved compaction
 trigger capped at 8K tokens, and uses it as the compaction summary. If that tail dropped older cards, the
-previous summary is prepended so older history is not lost. Coverage is checked first — the chain must hold at least as
-many cards as the summarized user prompts, or a previous summary must exist; otherwise the LLM path runs. The
-result is marked `details.turnCardChain = true`. `shake` still runs first; the chain only replaces the prose
-summarizer, so compaction is deterministic whenever the cards cover the range.
+previous summary is prepended so older history is not lost. Coverage is checked first — the chain must hold at
+least as many cards as the summarized user prompts, and its newest card must be at least as new as the newest
+summary message; otherwise the summarizer runs. The timestamp check is what stops a mid-turn compaction from
+reusing cards written at the previous `agent_end`, when the current turn has no card yet. The result is marked
+`details.turnCardChain = true`. `shake` still runs first; the chain only replaces the prose summarizer, so
+compaction is deterministic whenever fresh cards cover the range.
 
 ### Speed-floor trigger
 
@@ -325,13 +327,16 @@ Including `slm` in `compaction.methodOrder` commits a handoff document that a CP
 
 ### Deterministic requirement block
 
-Every text compaction — `slm`, `handoff`, and each LLM method including provider-native `remote` — ends its committed summary with up to three harness-authored blocks plus the model's prose:
+Every text compaction — `slm`, `handoff`, and each LLM method including provider-native `remote` — ends its committed summary with harness-authored blocks plus the model's prose:
 
+- `## Recent file actions` — extracted from the tool calls in the summarized region (`edit`/`write`/`read`/`search`/`bash`, newest 24, consecutive repeats collapsed; an `edit` path comes from its `[path#tag]` patch header). The summarizer never writes these paths, so a file named in the summary is a file the session touched.
+- `## Open failures` — failed or repeated calls computed from the transcript. A failure is open only when the same tool has no later successful result, so a fixed test or a retried command does not linger as a verdict.
+- `## Standing directives (verbatim; authoritative)` — developer-role messages (the approved plan, harness operating directives), carried forward across passes. Harness “repeated tool failure” steering notes are diagnostics, not directives: they are excluded here, and `## Open failures` already tracks and clears them.
+- `## User messages (verbatim; authoritative)` — the operator's own messages, rendered by this process from the summarized window, never by a model. Each pass carries the previous block forward (deduplicated, order-preserving), so a summary chain cannot erode a requirement that an earlier pass recorded.
+- `## Todo (live)` — the open todo items read from live tool state, with phase and status; completed and abandoned items are omitted. A summarizer never sees the todo store, so without this block a resume loses its task position even though `todo view` still has it.
 - `## Resume point` — present only when the retained tail starts with an assistant message (the cut kept it for its tool call). It tells the successor to continue from that call and its result instead of restarting checks already listed under `### Done`.
-- `## Recent file actions` — extracted from the tool calls in the summarized region (`edit`/`write`/`read`/`search`/`bash`, newest 24, consecutive repeats collapsed). The summarizer never writes these paths, so a file named in the summary is a file the session touched.
-- `## What just happened` — written by the summarizer from the action log: `Learned:`, `Implemented:`, `Files:`. The prompt supplies `<recent_actions>` and forbids naming a path that is not in it, so "learned this / implemented that" is grounded rather than invented.
 
-Then `## User messages (verbatim; authoritative)`: the operator's own messages, rendered by this process from the summarized window, never by a model. A summarizer that paraphrases, truncates, or invents cannot alter it, and each pass carries the previous block forward (deduplicated, order-preserving), so a summary chain cannot erode a requirement that an earlier pass recorded.
+The model's own `## What just happened` prose (`Learned:`, `Implemented:`, `Files:`) is written from the action log; the prompt supplies `<recent_actions>` and forbids naming a path that is not in it, so "learned this / implemented that" is grounded rather than invented.
 
 The block is bounded at 5 % of the live window, clamped to 1K–8K tokens: small windows must not spend their summary on verbatim text, and large ones gain nothing past 8K. Snapcompact and extension-supplied compactions keep their own shape — snapcompact's summary is a lead-in to rendered frames, and a hook-owned summary belongs to the extension.
 

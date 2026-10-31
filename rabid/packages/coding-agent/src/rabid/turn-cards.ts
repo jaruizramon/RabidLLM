@@ -10,6 +10,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
+import type { TodoPhase } from "@oh-my-pi/pi-tui/tools/todo";
 import { isRecord } from "@oh-my-pi/pi-utils";
 
 export type TurnCardOperationKind = "read" | "edit" | "write" | "bash" | "grep" | "other";
@@ -84,9 +85,13 @@ const ACTION_KIND_BY_TOOL: Record<string, FileAction["kind"]> = {
 	bash: "bash",
 };
 
+/** `[PATH#TAG]` header the `edit` tool uses for anchored patch input. */
+const PATCH_PATH_RE = /^\s*\[([^\]\n#]+)(?:#[^\]\n]*)?\]/;
+
 function actionFromToolCall(name: string, args: unknown): FileAction {
 	const kind = ACTION_KIND_BY_TOOL[name] ?? "other";
 	const record = isRecord(args) ? args : {};
+	const patchPath = typeof record.input === "string" ? PATCH_PATH_RE.exec(record.input)?.[1]?.trim() : undefined;
 	const path =
 		typeof record.path === "string"
 			? record.path
@@ -94,7 +99,9 @@ function actionFromToolCall(name: string, args: unknown): FileAction {
 				? record.file_path
 				: typeof record.filePath === "string"
 					? record.filePath
-					: undefined;
+					: patchPath === undefined || patchPath === ""
+						? undefined
+						: patchPath;
 	const label = (() => {
 		if (kind === "bash") {
 			const command = typeof record.command === "string" ? record.command.trim().split("\n")[0] : "";
@@ -241,6 +248,42 @@ export function renderOpenFailures(messages: readonly AgentMessage[], maxItems =
 	return `## Open failures\n\n${lines.join("\n")}\n\nA later passing command or test must prove these; do not record their targets as Done.`;
 }
 
+/**
+ * Live todo ledger for a committed summary.
+ *
+ * Todo phases are tool state, not transcript text, so a compaction that only
+ * carries prose silently drops the successor's task pointer. Rendering the
+ * open items here keeps the resume position exact even when the summarizer
+ * never saw a `todo` call.
+ */
+export function renderTodoLedger(phases: readonly TodoPhase[]): string {
+	const open = phases.flatMap(phase =>
+		phase.tasks
+			.filter(task => task.status === "pending" || task.status === "in_progress" || task.status === "blocked")
+			.map(task => ({ phase: phase.name, task })),
+	);
+	if (open.length === 0) return "";
+	const total = phases.reduce((sum, phase) => sum + phase.tasks.length, 0);
+	const closed = total - open.length;
+	const lines = [
+		"## Todo (live)",
+		"",
+		`${closed}/${total} done, ${open.length} open. This is live state, not transcript decoration: update it with \`todo\` before working past an item.`,
+	];
+	for (const phase of phases) {
+		const tasks = phase.tasks.filter(
+			task => task.status === "pending" || task.status === "in_progress" || task.status === "blocked",
+		);
+		if (tasks.length === 0) continue;
+		lines.push(`- ${phase.name.replace(/\s+/g, " ")}`);
+		for (const task of tasks) {
+			const blocker = task.blocker === undefined ? "" : ` — ${task.blocker.replace(/\s+/g, " ")}`;
+			lines.push(`  - [${task.status}] ${task.content.replace(/\s+/g, " ")}${blocker}`);
+		}
+	}
+	return lines.join("\n");
+}
+
 /** Render the turn's messages as the archivist transcript (thinking omitted). */
 export function renderTurnTranscript(messages: readonly AgentMessage[]): string {
 	const lines: string[] = [];
@@ -381,7 +424,7 @@ export async function readTurnCardChain(
 	agentDir: string,
 	sessionId: string,
 	maxTokens: number,
-): Promise<{ text: string; blocks: number; truncated: boolean }> {
+): Promise<{ text: string; blocks: number; truncated: boolean; newestTimestamp?: number }> {
 	const safeId = sessionId.replace(/[^a-zA-Z0-9._-]+/g, "_");
 	let raw: string;
 	try {
@@ -394,6 +437,12 @@ export async function readTurnCardChain(
 		.map(block => block.trim())
 		.filter(block => block.length > 0);
 	if (blocks.length === 0) return { text: "", blocks: 0, truncated: false };
+	const newestTimestamp = (() => {
+		const match = /^## \[([^\]]+)\]/.exec(blocks[blocks.length - 1]!);
+		if (!match) return undefined;
+		const parsed = Date.parse(match[1]!);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	})();
 	const selected: string[] = [];
 	let chars = 0;
 	const budget = maxTokens * 4;
@@ -409,5 +458,40 @@ export async function readTurnCardChain(
 		text: `${truncated ? "… older cards omitted …\n\n" : ""}${selected.join("\n\n")}`,
 		blocks: blocks.length,
 		truncated,
+		...(newestTimestamp === undefined ? {} : { newestTimestamp }),
 	};
+}
+
+function messageTimestamp(message: AgentMessage): number | undefined {
+	if (!("timestamp" in message)) return undefined;
+	const timestamp = message.timestamp;
+	return typeof timestamp === "number" && Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+/**
+ * Whether the cumulative card chain actually covers the region being
+ * summarized.
+ *
+ * The block count alone is not coverage: a stale chain from an earlier turn
+ * passes `blocks >= userTurns` while describing none of the current work. A
+ * card is written at `agent_end`, so a card timestamp at or after the newest
+ * summarized message proves the last completed turn is represented. Mid-turn
+ * compactions have no such card and must fall back to a summarizer.
+ */
+export function turnCardChainCoversRegion(
+	messages: readonly AgentMessage[],
+	blocks: number,
+	newestTimestamp: number | undefined,
+): boolean {
+	const userTurns = messages.filter(message => message.role === "user").length;
+	if (blocks < userTurns) return false;
+	if (newestTimestamp === undefined) return false;
+	let newestMessage: number | undefined;
+	for (const message of messages) {
+		const timestamp = messageTimestamp(message);
+		if (timestamp !== undefined && (newestMessage === undefined || timestamp > newestMessage)) {
+			newestMessage = timestamp;
+		}
+	}
+	return newestMessage !== undefined && newestTimestamp >= newestMessage;
 }

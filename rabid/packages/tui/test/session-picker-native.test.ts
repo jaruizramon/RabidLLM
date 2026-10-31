@@ -58,7 +58,15 @@ describe("session selector picker", () => {
 	const old = session("c", "Gamma", 40 * 24 * HOUR);
 	const others = session("d", "Delta", 3 * 24 * HOUR, "/work/other");
 
-	function make(opts: { deleted?: string[]; resumed?: string[]; standalone?: boolean } = {}) {
+	function make(
+		opts: {
+			deleted?: string[];
+			resumed?: string[];
+			standalone?: boolean;
+			initialScope?: "folder" | "all";
+			allSessions?: SessionSelectorEntry[];
+		} = {},
+	) {
 		return new SessionSelectorComponent(
 			[today, todayToo, old],
 			s => opts.resumed?.push(s.id),
@@ -70,6 +78,8 @@ describe("session selector picker", () => {
 					return true;
 				},
 				loadAllSessions: async () => [today, todayToo, others, old],
+				allSessions: opts.allSessions,
+				initialScope: opts.initialScope,
 				currentSessionPath: todayToo.path,
 				standalone: opts.standalone,
 			},
@@ -103,6 +113,14 @@ describe("session selector picker", () => {
 
 		expect(selector.nativeSheet(withoutPicker)).toBe(false);
 		expect(selector.describe(withoutPicker).k).toBe("card");
+	});
+
+	it("opens directly in all-projects scope when requested", () => {
+		const selector = make({ initialScope: "all", allSessions: [today, todayToo, others, old] });
+		const p = props(selector.describe(withPicker));
+		expect(p.placeholder).toBe("Search all sessions…");
+		expect(p.actions?.find(a => a.id === "scope")?.label).toBe("This folder");
+		expect(p.items?.some(item => item.id === others.path)).toBe(true);
 	});
 
 	it("fills the screen surface in the standalone app", () => {

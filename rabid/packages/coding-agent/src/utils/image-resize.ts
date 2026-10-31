@@ -14,6 +14,10 @@ export interface ImageResizeOptions {
 	maxBytes?: number;
 	jpegQuality?: number;
 	excludeWebP?: boolean;
+	/** Re-encode even when the source already satisfies the size caps. */
+	force?: boolean;
+	/** Indexed-PNG palette size (2-256). 0 keeps truecolor. */
+	paletteColors?: number;
 }
 
 export interface ResizedImage {
@@ -57,6 +61,8 @@ const DEFAULT_OPTIONS: Required<Omit<ImageResizeOptions, "excludeWebP">> = {
 	maxBytes: DEFAULT_MAX_BYTES,
 	jpegQuality: 80,
 	minDimension: DEFAULT_MIN_DIMENSION,
+	force: false,
+	paletteColors: 0,
 };
 
 interface ImageHeaderDimensions {
@@ -348,6 +354,8 @@ export async function resizeImage(
 		// impossible "≥ min and ≤ max" target.
 		const minDimension = Math.min(opts.minDimension, opts.maxWidth, opts.maxHeight);
 		if (
+			!opts.force &&
+			opts.paletteColors === 0 &&
 			originalWidth >= minDimension &&
 			originalHeight >= minDimension &&
 			originalWidth <= opts.maxWidth &&
@@ -405,6 +413,16 @@ export async function resizeImage(
 		async function resizedPng(width: number, height: number, compressionLevel?: number): Promise<Uint8Array> {
 			if (!premultiplied) {
 				const image = new Bun.Image(inputBuffer).resize(width, height);
+				if (!translucent && opts.paletteColors > 0) {
+					return image
+						.png({
+							compressionLevel: compressionLevel ?? 9,
+							palette: true,
+							colors: Math.min(256, Math.max(2, Math.floor(opts.paletteColors))),
+							dither: false,
+						})
+						.bytes();
+				}
 				return (compressionLevel === undefined ? image.png() : image.png({ compressionLevel })).bytes();
 			}
 			const resized = await readRgba(new Bun.Image(premultiplied).resize(width, height));

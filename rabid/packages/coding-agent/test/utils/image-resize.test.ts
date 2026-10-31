@@ -198,6 +198,41 @@ beforeAll(async () => {
 	]);
 });
 
+describe("resizeImage model compression", () => {
+	function palettePng(size: number): Uint8Array {
+		const pixels = new Uint8Array(size * size * 4);
+		for (let y = 0; y < size; y++) {
+			for (let x = 0; x < size; x++) {
+				const i = (y * size + x) * 4;
+				const edge = x === 0 || y === 0 || x === size - 1 || y === size - 1;
+				pixels[i] = edge ? 255 : 0;
+				pixels[i + 1] = edge ? 255 : 0;
+				pixels[i + 2] = edge ? 255 : 0;
+				pixels[i + 3] = 255;
+			}
+		}
+		return encodeRawPng(pixels, size, size, 4, 9);
+	}
+
+	it("force re-encodes an image that would otherwise take the fast path", async () => {
+		const result = await resizeImage({ bytes: palettePng(200), mimeType: "image/png" }, { force: true });
+		expect(result.wasResized).toBe(true);
+		expect(result.width).toBe(200);
+		expect(result.height).toBe(200);
+	});
+
+	it("emits an indexed PNG when palette quantization produces the smallest candidate", async () => {
+		const result = await resizeImage(
+			{ bytes: palettePng(256), mimeType: "image/png" },
+			{ force: true, paletteColors: 256, excludeWebP: true },
+		);
+		expect(result.mimeType).toBe("image/png");
+		const bytes = Buffer.from(result.data, "base64");
+		// PNG: signature(8) + IHDR length(4) + "IHDR"(4) + bit depth(1) + colour type(1)
+		expect(bytes[25]).toBe(3);
+	});
+});
+
 describe("resizeImage defaults", () => {
 	it("downscales inputs larger than 1568px on the long edge", async () => {
 		// 1600px wide — exceeds the default 1568 cap on the long edge.

@@ -229,9 +229,9 @@ describe("AgentSession mid-run todo reconciliation nudge", () => {
 		const text = typeof nudge?.content === "string" ? nudge.content : "";
 		expect(text).toContain("<system-reminder>");
 		expect(text).toContain("3 todo items");
-		// Gentle hint, not the stop-time escalation ladder: no per-task
-		// enumeration, no attempt counter.
-		expect(text).not.toContain("Sweep call sites");
+		// Names the open items so the model can reconcile without a `todo view`.
+		expect(text).toContain("- [in_progress] Sweep call sites (Refactor pass)");
+		expect(text).toContain("- [pending] Update tests (Refactor pass)");
 		expect(text).not.toMatch(/reminder \d\/\d/i);
 
 		// SEPARATE concept from the stop-time reminder: no todo_reminder event,
@@ -253,6 +253,27 @@ describe("AgentSession mid-run todo reconciliation nudge", () => {
 
 		expect(text).toContain(`${THRESHOLD} file-changing tool call(s)`);
 		expect(text).toContain("edit `src/app.ts`");
+	});
+
+	it("caps the named items and points at todo view", async () => {
+		session.setTodoPhases([
+			{
+				name: "Big list",
+				tasks: Array.from({ length: 14 }, (_, index) => ({
+					content: `item ${index}`,
+					status: "pending" as const,
+				})),
+			},
+		]);
+
+		for (let i = 0; i < THRESHOLD; i++) emitToolResult("edit");
+
+		const nudges = await drainNudges();
+		const text = typeof nudges[0]?.content === "string" ? nudges[0].content : "";
+		expect(text).toContain("- [pending] item 0 (Big list)");
+		expect(text).toContain("- [pending] item 11 (Big list)");
+		expect(text).not.toContain("item 12");
+		expect(text).toContain("2 more; call `todo` to view the full list.");
 	});
 
 	it("errored mutating results do not tick the counter", async () => {
