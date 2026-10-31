@@ -268,9 +268,9 @@ the desktop/Laya bridge; do not put per-token inference work there.
 
 ## 3. Prerequisites: the 35B Q4 pack is not on disk
 
-`~/models` currently has the Q5 main file but **not** the Q4_K_XL file, the F16 projector, or the MTP
-Q8_0 sidecar. The existing `[qwen3.6-35b-a3b-q5-k-m]` section points at a **missing** `mmproj`, so it
-would fail to load as written. Two paths:
+`~/models` now has the Q5 main file and the F16 projector, so `[qwen3.6-35b-a3b-q5-k-m]` is wired for
+244K total / 220K active with vision (no draft). The Q4_K_XL file and the MTP Q8_0 sidecar are still
+absent; the Q4+vision+draft path below remains the measured fast option once fetched.
 
 ### P0-A — fetch the Q4 pack (recommended; disk 576 GiB free)
 
@@ -335,7 +335,7 @@ Guidance:
 | Compaction | omp `thresholdPercent 75` (196,608), `methodOrder ["handoff","shake","soft"]`, `asyncEnabled false`, `keepRecentTokens 20000`, `handoffSaveToDisk true`, `midTurnEnabled true`, `autoContinue true` |
 | Thought archive | `omp-thoughts` (detached) → `/dev/shm/qwen-thoughts/THOUGHTS.index.md` + `THOUGHTS.md`; user note in `~/.omp/agent/AGENTS.md`; filter follows `local-llama` ids; current pointer = newest top-level local session |
 | Aux models | `modelRoles.smol/slow/tiny = deepseek/deepseek-flash` (titles/classifier/memory off the V100); `default` was rewritten to deepseek by the live session |
-| Loaded now | `Qwen3.8-27B-MTP-Q4_K_M.gguf`, `n_ctx_slot 262144`, 27,736 / 32,768 MiB, 4,759 free |
+| Loaded now | `Qwen3.8-27B-MTP-Q5_K_M.gguf`, `n_ctx 131072` (100K active + 28K vision headroom), F16 KV, MTP depth 2: 28,906 / 32,768 MiB, ~3.9 GiB free; vision verified; 34.6 t/s at 1K |
 
 Optional harness-side consistency: launch with
 `--tools=read,bash,edit,write,grep,glob,lsp,python,notebook,browser,todo,web_search,ask` so OMP's own

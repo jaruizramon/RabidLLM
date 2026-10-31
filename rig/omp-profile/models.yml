@@ -7,11 +7,11 @@ providers:
     api: openai-completions
     models:
       - id: qwen3.8-27b
-        name: Qwen3.8-27B MTP-Q4_K_M (local, 164K)
+        name: Qwen3.8-27B MTP-Q5_K_M (local, 128K total / 100K active)
         reasoning: true
         input: [text, image]
-        contextWindow: 163840
-        maxTokens: 32768
+        contextWindow: 131072
+        maxTokens: 28672
         tokenizer: qwen3
         compat:
           supportsDeveloperRole: false
@@ -54,11 +54,11 @@ providers:
           supportsReasoningEffort: false
           maxTokensField: max_tokens
       - id: qwen3.6-35b-a3b-q5-k-m
-        name: Qwen3.6-35B-A3B UD-Q5_K_M (local, 256K, vision)
+        name: Qwen3.6-35B-A3B UD-Q5_K_M (local, 182K total / 144K active, vision)
         reasoning: true
         input: [text, image]
-        contextWindow: 262144
-        maxTokens: 32768
+        contextWindow: 186368
+        maxTokens: 22528
         # Same 248,320-token Qwen3.5 vocabulary as qwen3.8-27b, so the qwen3 embedding fits.
         tokenizer: qwen3
         compat:
@@ -130,12 +130,12 @@ providers:
     api: openai-completions
     models:
       - id: qwen3.8-27b
-        name: Qwen3.8-27B MTP-Q4_K_M (local, 164K)
+        name: Qwen3.8-27B MTP-Q5_K_M (local, 128K total / 100K active)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text, image]
-        contextWindow: 163840
-        maxTokens: 32768
+        contextWindow: 131072
+        maxTokens: 28672
         tokenizer: qwen3
         compat:
           supportsDeveloperRole: false
@@ -179,12 +179,12 @@ providers:
           supportsReasoningEffort: false
           maxTokensField: max_tokens
       - id: qwen3.6-35b-a3b-q5-k-m
-        name: Qwen3.6-35B-A3B UD-Q5_K_M (local, 256K, vision)
+        name: Qwen3.6-35B-A3B UD-Q5_K_M (local, 182K total / 144K active, vision)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text, image]
-        contextWindow: 262144
-        maxTokens: 32768
+        contextWindow: 186368
+        maxTokens: 22528
         # Same 248,320-token Qwen3.5 vocabulary as qwen3.8-27b, so the qwen3 embedding fits.
         tokenizer: qwen3
         compat:
@@ -192,6 +192,82 @@ providers:
           # The template has no reasoning_effort branch at all — thinking is on unless
           # `enable_thinking` is false — so the knob cannot be offered: a harness that
           # believes it exists sends a value there is no branch to receive (§21.1).
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      - id: gemma-4-12b
+        name: Gemma 4 12B IT QAT UD-Q4_K_XL (local, 256K, vision, MTP)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text, image]
+        contextWindow: 262144
+        maxTokens: 32768
+        # No tokenizer key: Gemma 4's 262K vocab is not in the harness tokenizer set;
+        # counting is approximate until a gemma4 embedding exists.
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      - id: gemma-4-26b-a4b
+        name: Gemma 4 26B A4B IT UD-Q6_K_XL (local, 256K, vision, MTP)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text, image]
+        contextWindow: 262144
+        maxTokens: 32768
+        # Same Gemma 4 tokenizer gap; counts are approximate.
+        # The override prompt carries <|think|>; enable_thinking makes the
+        # template emit its control token at the system-prompt boundary.
+        extraBody:
+          chat_template_kwargs:
+            enable_thinking: true
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      - id: gpt-oss-20b-q4-k-m
+        name: GPT-OSS-20B Q4_K_M (local, 128K active / 131K total, CoT, tools)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        supportsTools: true
+        contextWindow: 131072
+        maxContextWindow: 131072
+        maxTokens: 32768
+        compat:
+          supportsDeveloperRole: true
+          supportsReasoningEffort: true
+          maxTokensField: max_tokens
+
+      - id: deepseek-r1-distill-14b-q4-k-m
+        name: DeepSeek-R1-Distill-14B Q4_K_M (local, 128K, R1 distill)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        supportsTools: false
+        contextWindow: 131072
+        maxTokens: 32768
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+
+      - id: nanbeige-4.3-33b-q4-k-m
+        name: Nanbeige4.3 33B Q4_K_M (local, 128K active / 166K total, tools)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text]
+        contextWindow: 166000
+        maxTokens: 32768
+        # Nanbeige's 166K vocabulary is not in the harness tokenizer set;
+        # counts are approximate until a tokenizer is registered.
+        extraBody:
+          chat_template_kwargs:
+            enable_thinking: true
+        compat:
+          supportsDeveloperRole: false
           supportsReasoningEffort: false
           maxTokensField: max_tokens
 
@@ -261,11 +337,11 @@ providers:
           supportsReasoningEffort: false
           maxTokensField: max_tokens
       - id: rabid-balanced
-        name: Rabid Balanced — Qwen3.6-35B-A3B Q5 text (local, 256K, budget 4096)
+        name: Rabid Balanced — Qwen3.6-35B-A3B Q5 text (local, 182K total / 144K active, budget 4096)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text]
-        contextWindow: 262144
+        contextWindow: 186368
         maxTokens: 32768
         tokenizer: qwen3
         compat:
@@ -273,11 +349,11 @@ providers:
           supportsReasoningEffort: false
           maxTokensField: max_tokens
       - id: rabid-fast
-        name: Rabid Fast — Qwen3.6-35B-A3B Q5 text (local, 256K, budget 2048, temp 0.7)
+        name: Rabid Fast — Qwen3.6-35B-A3B Q5 text (local, 182K total / 144K active, budget 2048, temp 0.7)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text]
-        contextWindow: 262144
+        contextWindow: 186368
         maxTokens: 32768
         tokenizer: qwen3
         compat:

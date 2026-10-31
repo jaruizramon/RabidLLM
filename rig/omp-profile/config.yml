@@ -18,8 +18,8 @@ profiles:
         - task
   llama-rabid/rabid-balanced:
     thinkingBudgets:
-      medium: 4096
-      high: 4096
+      medium: 5000
+      high: 5000
     tools:
       disabled:
         - task
@@ -34,6 +34,12 @@ profiles:
     tools:
       disabled:
         - task
+  llama-rabid/gemma-4-26b-a4b:
+    systemPromptAppend: prompts/gemma-4-26b-append.md
+  llama-rabid/gpt-oss-20b-q4-k-m:
+    systemPromptAppend: prompts/gpt-oss-append.md
+    compaction:
+      thresholdTokens: 131072
   # vLLM presets on the same port. They have 8K/32K windows where the global
   # 12K tail and 16K summary cap cannot fit; the engine also clamps the tail,
   # but these keep the summary itself small enough to leave room for input.
@@ -60,6 +66,10 @@ compaction:
   allowMainModel: false
   modelThresholds:
     llama-rabid/*: f88000
+    llama-rabid/qwen3.8-27b: f102400
+    local-llama/qwen3.8-27b: f102400
+    llama-rabid/qwen3.6-35b-a3b-q5-k-m: f147456
+    local-llama/qwen3.6-35b-a3b-q5-k-m: f147456
   asyncEnabled: false
   methodOrder:
     - slm
