@@ -480,4 +480,116 @@ describe("AgentSession tool-call loop guard", () => {
 		);
 		expect(guardResult).toBeDefined();
 	});
+
+	it("steers when an edit-rebuild loop keeps returning the same error signature", async () => {
+		const model = createMockModel({ provider: "openai", id: "gpt-test" }).model;
+		const modelRegistry = new ModelRegistry(authStorage);
+		const contexts: Context[] = [];
+		let edits = 0;
+		// The build exits 0 because its output is piped, so `isError` is false: the
+		// signature, not the exit status, is the only evidence of the loop.
+		const bashOutput =
+			"error[E0107]: missing generics for struct `Next`\n  --> src/middleware/cors.rs:2:14\nhelp: consider giving Next a type argument";
+		const editTool: AgentTool = {
+			name: "edit",
+			label: "Edit",
+			description: "Mock edit tool",
+			parameters: type({ "path?": "string", "old_string?": "string", "new_string?": "string" }),
+			execute: async () => ({ content: [{ type: "text" as const, text: `[cors.rs] replaced ${++edits}` }] }),
+		};
+		const bashTool: AgentTool = {
+			name: "bash",
+			label: "Bash",
+			description: "Mock bash tool",
+			parameters: type({ "command?": "string" }),
+			execute: async () => ({ content: [{ type: "text" as const, text: bashOutput }] }),
+		};
+		let callCount = 0;
+		const agent = new Agent({
+			getApiKey: () => "test-key",
+			initialState: { model, systemPrompt: ["Test"], tools: [editTool, bashTool], messages: [] },
+			convertToLlm,
+			streamFn: (_model, context) => {
+				contexts.push(context);
+				callCount++;
+				const building = callCount <= 3;
+				const message: AssistantMessage = building
+					? {
+							role: "assistant",
+							content: [
+								{
+									type: "toolCall",
+									id: `edit-${callCount}`,
+									name: "edit",
+									arguments: { path: "src/middleware/cors.rs", old_string: `attempt ${callCount}` },
+								},
+								{
+									type: "toolCall",
+									id: `bash-${callCount}`,
+									name: "bash",
+									arguments: { command: "cd backend && cargo build --release" },
+								},
+							],
+							api: model.api,
+							provider: model.provider,
+							model: model.id,
+							usage: zeroUsage,
+							stopReason: "toolUse",
+							timestamp: Date.now(),
+						}
+					: {
+							role: "assistant",
+							content: [{ type: "text", text: "Reading the unfiltered diagnostic." }],
+							api: model.api,
+							provider: model.provider,
+							model: model.id,
+							usage: zeroUsage,
+							stopReason: "stop",
+							timestamp: Date.now(),
+						};
+				const stream = new AssistantMessageEventStream();
+				queueMicrotask(() => {
+					stream.push({ type: "start", partial: message });
+					stream.push({ type: "done", reason: building ? "toolUse" : "stop", message });
+				});
+				return stream;
+			},
+		});
+		const settings = Settings.isolated({
+			"compaction.enabled": false,
+			"todo.enabled": false,
+			"model.toolCallLoopGuard.enabled": true,
+			"model.toolCallLoopGuard.threshold": 10,
+			"model.toolCallLoopGuard.resultThreshold": 0,
+			"model.toolCallLoopGuard.failureThreshold": 3,
+			"model.toolCallLoopGuard.exemptTools": ["wait"],
+		});
+		settings.setModelRole("default", `${model.provider}/${model.id}`);
+		session = new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(tempDir.path()),
+			settings,
+			modelRegistry,
+			toolRegistry: new Map([
+				[editTool.name, editTool],
+				[bashTool.name, bashTool],
+			]),
+		});
+
+		await session.prompt("make it compile");
+		await session.waitForIdle();
+
+		// Three identical failures earn the steer; the model then stops.
+		expect(contexts).toHaveLength(4);
+		expect(JSON.stringify(contexts[3]!.messages)).toContain("tool_call_loop_detected");
+		expect(JSON.stringify(contexts[3]!.messages)).toContain("E0107: missing generics for struct `Next`");
+		const redirects = session.agent.state.messages.filter(
+			(message): message is CustomMessage =>
+				message.role === "custom" && message.customType === "tool-call-loop-redirect",
+		);
+		expect(redirects).toHaveLength(1);
+		const details = redirects[0]!.details;
+		const kind = details !== null && typeof details === "object" && "kind" in details ? details.kind : undefined;
+		expect(kind).toBe("repeated_tool_failure");
+	});
 });

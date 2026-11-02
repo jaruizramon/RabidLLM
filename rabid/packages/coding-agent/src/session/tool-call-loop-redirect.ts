@@ -12,6 +12,8 @@ export interface ToolCallLoopRedirectDetails {
 	count: number;
 	argumentsSummary: string;
 	resultSummary: string;
+	/** For `repeated_tool_failure`: the error line that kept recurring. */
+	signature?: string;
 }
 
 /**
@@ -24,10 +26,12 @@ export interface ToolCallLoopRedirectDetails {
 export function renderToolCallLoopRedirect(detection: RepeatedToolCallDetection): string {
 	return prompt.render(toolCallLoopRedirectTemplate, {
 		repeated_cycle: detection.kind === "repeated_tool_cycle",
+		repeated_failure: detection.kind === "repeated_tool_failure",
 		repeated_result: detection.kind === "repeated_tool_result",
 		period: detection.period ?? 0,
 		tool_name: detection.toolName,
 		count: detection.count,
+		failure_signature: detection.signature ?? "(no signature)",
 		arguments_summary: detection.argumentsSummary,
 		result_summary: detection.resultSummary || "(no text result)",
 	});
@@ -41,5 +45,6 @@ export function toolCallLoopRedirectDetails(detection: RepeatedToolCallDetection
 		count: detection.count,
 		argumentsSummary: detection.argumentsSummary,
 		resultSummary: detection.resultSummary,
+		signature: detection.signature,
 	};
 }

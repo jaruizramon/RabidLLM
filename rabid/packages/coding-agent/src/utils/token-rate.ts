@@ -208,7 +208,13 @@ export class TokenRateMeter {
 		// The first visible delta is the end of the prompt prefill. Providers are not
 		// required to report ttft (the local llama.cpp path does not), and without it a
 		// large prompt reads as a slow model.
-		if (this.#firstDeltaAt === null) this.#firstDeltaAt = nowMs;
+		if (this.#firstDeltaAt === null) {
+			this.#firstDeltaAt = nowMs;
+			// Generation is metered from here, not from message_start: reading the prompt
+			// is not the model producing tokens, and charging it to the window would drag
+			// the displayed rate down for the whole turn.
+			this.#advancedTo = nowMs;
+		}
 		const index = Math.floor((nowMs - (this.#startedAt ?? nowMs)) / METER_BUCKET_MS);
 		if (index !== this.#pendingIndex) {
 			this.#flushPending(true, nowMs);
@@ -289,7 +295,12 @@ export class TokenRateMeter {
 
 	/** Tokens per second over the decayed window, or null until enough tokens have accumulated. */
 	rate(nowMs: number = Date.now()): number | null {
-		const dtMs = this.#startedAt === null ? 0 : nowMs - this.#advancedTo;
+		// Only generation time ages the window. Before the first delta the model is still
+		// reading the prompt, and between messages it is not running at all (tool calls,
+		// file reads); ageing either interval would drag the reading toward the hidden
+		// rate and report it as if the model had slowed down.
+		const metered = this.#startedAt !== null && this.#firstDeltaAt !== null;
+		const dtMs = metered ? nowMs - this.#advancedTo : 0;
 		const pendingTokens = this.#countPending();
 		let tokens = 0;
 		let time = 0;

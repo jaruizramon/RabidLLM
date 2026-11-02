@@ -515,3 +515,92 @@ describe("ToolCallLoopGuard output cycle", () => {
 		expect(guard.recordTurn(B())).toBeNull();
 	});
 });
+
+describe("ToolCallLoopGuard repeated failures", () => {
+	let nextId = 0;
+
+	function call(name: string, args: Record<string, unknown>): ToolCall {
+		return { type: "toolCall", id: `tc_${nextId++}`, name, arguments: args };
+	}
+
+	function result(c: ToolCall, text: string): ToolResultMessage {
+		return {
+			role: "toolResult",
+			toolCallId: c.id,
+			toolName: c.name,
+			content: [{ type: "text", text }],
+			isError: false,
+			timestamp: Date.now(),
+		};
+	}
+
+	function turn(calls: ToolCall[], toolResults: ToolResultMessage[]) {
+		return {
+			message: {
+				role: "assistant",
+				content: calls,
+				api: "openai-responses",
+				provider: "openai",
+				model: "test-model",
+				usage: zeroUsage,
+				stopReason: "toolUse",
+				timestamp: Date.now(),
+			} satisfies AssistantMessage,
+			toolResults,
+		};
+	}
+
+	/** One edit-rebuild turn: the arguments and the diagnostic body move, the first error line does not. */
+	function buildTurn(attempt: number, errorLine: string) {
+		const edit = call("edit", { path: "src/middleware/cors.rs", old_string: `attempt ${attempt}` });
+		const build = call("bash", { command: "cd backend && cargo build --release" });
+		return turn(
+			[edit, build],
+			[
+				result(edit, `[src/middleware/cors.rs] replaced 1 line (attempt ${attempt})`),
+				result(
+					build,
+					`${errorLine}\n  --> src/middleware/cors.rs:2:${attempt}\nhelp: consider giving Next a type argument`,
+				),
+			],
+		);
+	}
+
+	const NEXT_ERROR = "error[E0107]: missing generics for struct `Next`";
+
+	test("detects one error signature across turns that also edit", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 99, failureThreshold: 3, exemptTools: [] });
+		expect(guard.recordTurn(buildTurn(1, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(2, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(3, NEXT_ERROR))).toMatchObject({
+			kind: "repeated_tool_failure",
+			toolName: "bash",
+			count: 3,
+			signature: "E0107: missing generics for struct `Next`",
+		});
+	});
+
+	test("a different signature ends the previous streak", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 99, failureThreshold: 3, exemptTools: [] });
+		expect(guard.recordTurn(buildTurn(1, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(2, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(3, "error[E0308]: mismatched types"))).toBeNull();
+	});
+
+	test("a turn without the error resets the streak", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 99, failureThreshold: 3, exemptTools: [] });
+		const cleanCall = call("bash", { command: "cd backend && cargo build --release" });
+		const clean = turn([cleanCall], [result(cleanCall, "Finished `release` profile in 2.69s")]);
+		expect(guard.recordTurn(buildTurn(1, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(2, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(clean)).toBeNull();
+		expect(guard.recordTurn(buildTurn(3, NEXT_ERROR))).toBeNull();
+	});
+
+	test("a zero failure threshold disables signature detection", () => {
+		const guard = new ToolCallLoopGuard({ threshold: 99, failureThreshold: 0, exemptTools: [] });
+		expect(guard.recordTurn(buildTurn(1, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(2, NEXT_ERROR))).toBeNull();
+		expect(guard.recordTurn(buildTurn(3, NEXT_ERROR))).toBeNull();
+	});
+});

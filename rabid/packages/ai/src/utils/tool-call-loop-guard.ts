@@ -33,6 +33,12 @@ export interface ToolCallLoopGuardOptions {
 	 * disables output-based detection.
 	 */
 	readonly resultThreshold?: number;
+	/**
+	 * Consecutive turns whose output carries the same error signature before the
+	 * guard reports a failure loop, even when the arguments and the exact bytes
+	 * differ. `0` disables signature detection.
+	 */
+	readonly failureThreshold?: number;
 	readonly exemptTools: readonly string[];
 }
 
@@ -48,12 +54,16 @@ export interface RepeatedToolCallDetection {
 	 * `repeated_tool_call`: the same arguments came back.
 	 * `repeated_tool_result`: different arguments produced the same output.
 	 * `repeated_tool_cycle`: the same sequence of probes repeated.
+	 * `repeated_tool_failure`: the same error signature kept coming back while
+	 * the arguments and the surrounding bytes changed (edit → rebuild → same error).
 	 */
-	readonly kind: "repeated_tool_call" | "repeated_tool_result" | "repeated_tool_cycle";
+	readonly kind: "repeated_tool_call" | "repeated_tool_result" | "repeated_tool_cycle" | "repeated_tool_failure";
 	readonly toolName: string;
 	readonly count: number;
 	/** For `repeated_tool_cycle`: the number of turns in the repeating sequence. */
 	readonly period?: number;
+	/** For `repeated_tool_failure`: the normalized error line that keeps recurring. */
+	readonly signature?: string;
 	readonly resultSummary: string;
 	readonly argumentsSummary: string;
 }
@@ -81,6 +91,42 @@ function summarizeText(text: string, limit: number): string {
 		summary = `${summary.slice(0, limit)}…`;
 	}
 	return summary;
+}
+
+const FAILURE_SIGNATURE_LIMIT = 200;
+/**
+ * Diagnostic lines worth counting across turns. The first line of an error is
+ * the stable part; source spans, `help:` and `note:` lines move on every edit,
+ * which is why byte-identical comparison misses an edit-rebuild loop.
+ */
+const FAILURE_LINE_PATTERNS: readonly { readonly re: RegExp; readonly code: "prefix" | "none" }[] = [
+	{ re: /^\s*error\[([A-Za-z]+\d+)\]:\s*(.+?)\s*$/u, code: "prefix" },
+	{ re: /^\s*error\s+(TS\d+):\s*(.+?)\s*$/u, code: "prefix" },
+	{ re: /^\s*error:\s*(.+?)\s*$/u, code: "none" },
+	{ re: /^\s*Error:\s*(.+?)\s*$/u, code: "none" },
+];
+
+/** Normalized error lines in one tool result, in output order. */
+function failureSignatures(text: string): string[] {
+	const signatures: string[] = [];
+	let seen: Set<string> | undefined;
+	for (const line of text.split("\n")) {
+		if (!/error/i.test(line)) continue;
+		for (const { re, code } of FAILURE_LINE_PATTERNS) {
+			const match = re.exec(line);
+			if (!match) continue;
+			const label = code === "prefix" ? `${match[1]}: ` : "";
+			const message = match[code === "prefix" ? 2 : 1]!.replace(/\s+/g, " ").trim();
+			const signature = `${label}${message.slice(0, FAILURE_SIGNATURE_LIMIT)}`;
+			seen ??= new Set();
+			if (!seen.has(signature)) {
+				seen.add(signature);
+				signatures.push(signature);
+			}
+			break;
+		}
+	}
+	return signatures;
 }
 
 function summarizeToolResult(toolResults: readonly ToolResultMessage[], toolCallId: string): string {
@@ -126,17 +172,21 @@ function toolOutputDigest(
 export class ToolCallLoopGuard {
 	#threshold: number;
 	#resultThreshold: number;
+	#failureThreshold: number;
 	#exemptTools: ReadonlySet<string>;
 	#lastHash: string | undefined;
 	#count = 0;
 	#lastResultDigest: string | undefined;
 	#resultCount = 0;
+	/** Consecutive turns each error signature has appeared in. */
+	#failureCounts = new Map<string, number>();
 	/** Digests of the newest turns, for period-2..4 sequence detection. */
 	#recentOutputs: Array<string | undefined> = [];
 
 	constructor(options: ToolCallLoopGuardOptions) {
 		this.#threshold = Math.max(1, Math.trunc(options.threshold));
 		this.#resultThreshold = Math.max(0, Math.trunc(options.resultThreshold ?? 0));
+		this.#failureThreshold = Math.max(0, Math.trunc(options.failureThreshold ?? 0));
 		this.#exemptTools = new Set(options.exemptTools);
 	}
 
@@ -155,9 +205,13 @@ export class ToolCallLoopGuard {
 		const reportCall = toolCalls.find(tc => !this.#exemptTools.has(tc.name)) ?? toolCalls[0]!;
 		const detection = this.#recordArguments(toolCalls, turn, reportCall);
 		const resultDetection = this.#recordOutput(toolCalls, turn, reportCall);
+		// Runs every turn: the signature counts only reset by observing a turn
+		// that no longer carries them, so skipping it would keep a stale streak.
+		const failureDetection = this.#recordFailure(toolCalls, turn, reportCall);
 		// Precedence: the argument detector names the exact call to stop, then a
-		// consecutive output repeat, then a repeating multi-turn sequence.
-		return detection ?? resultDetection ?? this.#detectCycle(turn, reportCall);
+		// consecutive output repeat, then a repeated error signature, then a
+		// repeating multi-turn sequence.
+		return detection ?? resultDetection ?? failureDetection ?? this.#detectCycle(turn, reportCall);
 	}
 
 	#recordArguments(
@@ -224,6 +278,60 @@ export class ToolCallLoopGuard {
 	}
 
 	/**
+	 * Same error signature across consecutive turns, regardless of the arguments
+	 * that produced it. This is the edit-rebuild loop the byte digests miss: the
+	 * error's first line stays put while the source span, `note:` and `help:`
+	 * lines move with every edit, so no two turns are ever identical.
+	 *
+	 * The pre-dispatch `ToolFailureTracker` blocks an identical call after two
+	 * failures; this covers what escapes it — different arguments, `isError:
+	 * false` results from piped commands, and moving diagnostic bodies.
+	 */
+	#recordFailure(
+		toolCalls: readonly ToolCall[],
+		turn: ToolCallLoopTurn,
+		_reportCall: ToolCall,
+	): RepeatedToolCallDetection | null {
+		if (this.#failureThreshold === 0) return null;
+		const present = new Map<string, ToolCall>();
+		for (const call of toolCalls) {
+			if (this.#exemptTools.has(call.name)) continue;
+			const result = turn.toolResults.find(candidate => candidate.toolCallId === call.id);
+			if (!result) continue;
+			const text = result.content.map(block => (block.type === "text" ? block.text : "")).join("\n");
+			for (const signature of failureSignatures(text)) {
+				if (!present.has(signature)) present.set(signature, call);
+			}
+		}
+		// A signature missing from this turn ends its streak; anything else would
+		// count failures separated by genuine progress. Deleting from a Map while
+		// iterating its keys is safe: deleted entries are simply skipped.
+		for (const signature of this.#failureCounts.keys()) {
+			if (!present.has(signature)) this.#failureCounts.delete(signature);
+		}
+		let winner: { signature: string; count: number; call: ToolCall } | undefined;
+		for (const [signature, call] of present) {
+			const count = (this.#failureCounts.get(signature) ?? 0) + 1;
+			this.#failureCounts.set(signature, count);
+			if (count >= this.#failureThreshold && (!winner || count > winner.count)) {
+				winner = { signature, count, call };
+			}
+		}
+		if (!winner) return null;
+		return {
+			kind: "repeated_tool_failure",
+			toolName: winner.call.name,
+			count: winner.count,
+			signature: winner.signature,
+			resultSummary: summarizeToolResult(turn.toolResults, winner.call.id),
+			argumentsSummary: summarizeText(
+				JSON.stringify(canonicalizeToolCallValue(winner.call.arguments)),
+				ARGUMENT_SUMMARY_LIMIT,
+			),
+		};
+	}
+
+	/**
 	 * Two full periods of the same output sequence, with distinct entries.
 	 * Judged on output digests only: alternating two probes that keep returning
 	 * the same evidence is the pathology, while alternating two calls whose
@@ -258,6 +366,7 @@ export class ToolCallLoopGuard {
 		this.#count = 0;
 		this.#lastResultDigest = undefined;
 		this.#resultCount = 0;
+		this.#failureCounts.clear();
 		this.#recentOutputs = [];
 	}
 }

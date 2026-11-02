@@ -345,6 +345,19 @@ export const cfgModelToolCallLoopGuardResultThreshold = register({
 	},
 });
 
+export const cfgModelToolCallLoopGuardFailureThreshold = register({
+	id: "model.toolCallLoopGuard.failureThreshold",
+	type: "number",
+	default: 3,
+	ui: {
+		tab: "model",
+		group: "Thinking",
+		label: "Repeated-Failure Threshold",
+		description:
+			"Consecutive turns repeating the same error signature before the corrective steer is injected, even when the arguments and surrounding output differ (0 disables)",
+	},
+});
+
 export const cfgModelToolCallLoopGuardExemptTools = register({
 	id: "model.toolCallLoopGuard.exemptTools",
 	type: "array",

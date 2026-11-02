@@ -119,6 +119,7 @@ import { resolveResumableSession, type SessionInfo } from "./session/session-lis
 import { ForkSourceNotFoundError, SessionManager, SessionMoveRefusedError } from "./session/session-manager";
 import { forkIfMovedAway } from "./session/session-transfer";
 import { shouldShowStartupSplash } from "./startup-splash";
+import { hostInteractiveSession, insideMultiplexer } from "./stream/hosted-session";
 import {
 	discoverSystemPromptOverride,
 	discoverTitleSystemPromptFile,
@@ -1875,6 +1876,20 @@ export async function runRootCommand(
 		// tree; declare it so headless subagent optimizations (e.g. skipping replan
 		// title refresh) can tell a focusable process from a print/RPC/eval one.
 		setInteractiveHost(isInteractive);
+		if (parsedArgs.resumeStream) {
+			// Only the interactive TUI has a PTY a screen can own; print/json, RPC,
+			// ACP, and piped input have nothing to detach from.
+			if (!isInteractive) {
+				throw new CliUsageError(
+					"--resume-stream requires the interactive terminal (not --print, --mode, or piped input)",
+				);
+			}
+			// Already under screen/tmux: that multiplexer owns the PTY, and nesting a
+			// second screen would hide the session from the first one's viewers.
+			if (!insideMultiplexer()) {
+				process.exit(await hostInteractiveSession({ projectDir: cwd, rawArgs }));
+			}
+		}
 		if (!isInteractive) {
 			stopPendingStartupComposer();
 		}

@@ -8,6 +8,7 @@ import { renderToolCallLoopRedirect } from "../session/tool-call-loop-redirect";
 import {
 	cfgModelToolCallLoopGuardEnabled,
 	cfgModelToolCallLoopGuardExemptTools,
+	cfgModelToolCallLoopGuardFailureThreshold,
 	cfgModelToolCallLoopGuardResultThreshold,
 	cfgModelToolCallLoopGuardThreshold,
 } from "../session/settings";
@@ -102,12 +103,13 @@ export class AdvisorLoopGuard {
 		}
 		const threshold = cfgModelToolCallLoopGuardThreshold.get(this.#host.settings);
 		const resultThreshold = cfgModelToolCallLoopGuardResultThreshold.get(this.#host.settings);
+		const failureThreshold = cfgModelToolCallLoopGuardFailureThreshold.get(this.#host.settings);
 		const exemptTools = cfgModelToolCallLoopGuardExemptTools
 			.get(this.#host.settings)
 			.filter((tool): tool is string => typeof tool === "string" && tool.length > 0);
-		const settingsKey = `${threshold}:${resultThreshold}:${JSON.stringify(exemptTools)}`;
+		const settingsKey = `${threshold}:${resultThreshold}:${failureThreshold}:${JSON.stringify(exemptTools)}`;
 		if (!this.#guard || this.#guardSettingsKey !== settingsKey) {
-			this.#guard = new ToolCallLoopGuard({ threshold, resultThreshold, exemptTools });
+			this.#guard = new ToolCallLoopGuard({ threshold, resultThreshold, failureThreshold, exemptTools });
 			this.#guardSettingsKey = settingsKey;
 		}
 		return this.#guard;

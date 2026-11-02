@@ -55,6 +55,11 @@ export interface Args {
 	continue?: boolean;
 	resume?: string | true;
 	/**
+	 * `--resume-stream`: host the interactive TUI in a `screen` session the Rabid
+	 * web terminal can attach to, so the run stays reachable over Tailscale.
+	 */
+	resumeStream?: boolean;
+	/**
 	 * `--restore`: resume the session {@link resume} names, then go on with what its last
 	 * process left unfinished (the turn it was in, the subagents it was running).
 	 */
@@ -369,6 +374,8 @@ export function parseArgs(inputArgs: string[], extensionFlags?: Map<string, { ty
 			result.planYolo = true;
 		} else if (arg === "--print" || arg === "-p") {
 			result.print = true;
+		} else if (arg === "--resume-stream") {
+			result.resumeStream = true;
 		} else if (arg === "--print-thoughts") {
 			result.printThoughts = true;
 		} else if (arg === "--no-extensions") {

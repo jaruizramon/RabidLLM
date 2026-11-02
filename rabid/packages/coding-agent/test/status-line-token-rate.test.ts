@@ -139,6 +139,27 @@ describe("decode throughput vs prompt prefill", () => {
 		expect(meter.rate()).toBeCloseTo(50, 0);
 	});
 
+	it("holds the reading while the prompt is still prefilling", () => {
+		const meter = new TokenRateMeter(text => text.length);
+		meter.seed(200, 10_000, 8_000); // 100 tok/s of decode
+		meter.begin(0);
+		// 20 s of prompt reading before the first token: reading is not generation, so the
+		// live reading must not sag toward the hidden-token rate while it happens.
+		expect(meter.rate(20_000)).toBeCloseTo(100, 0);
+	});
+
+	it("holds across tool execution between messages", () => {
+		const meter = new TokenRateMeter(text => text.length);
+		meter.seed(200, 10_000, 8_000);
+		meter.begin(0);
+		meter.push("x".repeat(300), 1_000);
+		meter.end(300, 2_000);
+		const afterTurn = meter.rate(2_000);
+		expect(afterTurn).not.toBeNull();
+		// Two minutes of tool calls and file reads must not change the reading.
+		expect(meter.rate(120_000)).toBeCloseTo(afterTurn ?? 0, 5);
+	});
+
 	it("reports the same decode rate on the display path", () => {
 		const message = assistantMessage({
 			usage: { ...assistantMessage().usage, output: 200 },

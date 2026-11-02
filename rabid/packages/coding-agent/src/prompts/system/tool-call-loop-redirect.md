@@ -1,4 +1,13 @@
 <system-interrupt reason="tool_call_loop_detected">
+{{#if repeated_failure}}
+The same failure has now repeated {{count}} consecutive times:
+`{{failure_signature}}`
+
+Editing between attempts did not change it, so another guess will not either. Before the next attempt:
+1. Re-run the failing command with the output UNFILTERED — drop `grep`, `head`, `tail`, `-q`, and `--quiet` — so source spans, `help:` and `note:` lines survive. The first error line names the symptom, not the cause.
+2. Establish which version of the library is actually in use before changing the code again: the lockfile, `cargo tree -d`, or the installed package source.
+3. Write one line stating the diagnosis, then make the change that follows from it. If no installed version can satisfy the error, state the blocker and yield instead of retrying.
+{{else}}
 {{#if repeated_cycle}}
 You have now repeated the same {{period}}-probe sequence twice. The last turn returned:
 `{{result_summary}}`
@@ -21,6 +30,7 @@ You called `{{tool_name}}` {{count}} consecutive times with identical arguments:
 Last result (truncated): `{{result_summary}}`
 
 NEVER call `{{tool_name}}` with those arguments again in this run. The previous correction did not change the outcome, so repeating it stops the run. Use different arguments, choose another tool, or summarize findings and yield if complete.
+{{/if}}
 {{/if}}
 {{/if}}
 </system-interrupt>
