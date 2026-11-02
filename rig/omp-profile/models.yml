@@ -17,6 +17,17 @@ providers:
           supportsDeveloperRole: false
           supportsReasoningEffort: false
           maxTokensField: max_tokens
+      - id: qwen3.8-27b-q4-k-m
+        name: Qwen3.8-27B MTP-Q4_K_M (local, 128K total / 100K active)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 131072
+        maxTokens: 28672
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
       - id: qwen3.8-27b-uncensored
         name: Qwen3.8-27B Uncensored (local, 164K)
         reasoning: true
@@ -131,6 +142,18 @@ providers:
     models:
       - id: qwen3.8-27b
         name: Qwen3.8-27B MTP-Q5_K_M (local, 128K total / 100K active)
+        compactionModel: deepseek/deepseek-flash
+        reasoning: true
+        input: [text, image]
+        contextWindow: 131072
+        maxTokens: 28672
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+      - id: qwen3.8-27b-q4-k-m
+        name: Qwen3.8-27B MTP-Q4_K_M (local, 128K total / 100K active)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text, image]
@@ -360,3 +383,31 @@ providers:
           supportsDeveloperRole: false
           supportsReasoningEffort: false
           maxTokensField: max_tokens
+  sensenova-local:
+    # Patched llama.cpp fork: stock llama.cpp (and therefore the router) cannot load
+    # the sensenova_loop architecture. Start it separately:
+    #   ~/build-sensenova/llama.cpp/build/bin/llama-server \
+    #     -m ~/build-sensenova/models/SenseNova-Loop-9B-Preview-Q4_K_M.gguf \
+    #     --mmproj ~/build-sensenova/models/mmproj-SenseNova-Loop-F16.gguf \
+    #     -ngl 99 --device CUDA1 -c 196608 --parallel 1 --host 127.0.0.1 --port 8120
+    # `--device CUDA1` is mandatory: llama.cpp enumerates CUDA0 = RTX 3070 and
+    # CUDA1 = V100 (reverse of nvidia-smi), and without it layers split across both
+    # GPUs — the 3070 spikes to 100% and every token crosses PCIe.
+    # Thinking is on by default; disable per request with
+    # chat_template_kwargs: {enable_thinking: false}.
+    baseUrl: http://127.0.0.1:8120/v1
+    auth: none
+    api: openai-completions
+    models:
+      - id: sensenova-loop-9b
+        name: SenseNova-Loop-9B-Preview (Q4_K_M + F16 vision, patched llama.cpp)
+        reasoning: true
+        input: [text, image]
+        contextWindow: 196608
+        maxTokens: 8192
+        tokenizer: qwen3
+        compat:
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          maxTokensField: max_tokens
+          reasoningContentField: reasoning_content
