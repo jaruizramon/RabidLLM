@@ -3,6 +3,7 @@ export const BUILTIN_TOOL_NAMES = [
 	"bash",
 	"calculate",
 	"deps",
+	"laya",
 	"edit",
 	"ast_grep",
 	"ast_edit",

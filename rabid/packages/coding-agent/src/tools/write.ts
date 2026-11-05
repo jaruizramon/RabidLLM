@@ -202,6 +202,19 @@ const writeSchema = type({
 	"content?": "string",
 });
 
+/**
+ * Model-facing parameters. {@link writeSchema} leaves `content` optional because
+ * `proc://<id>/kill` carries no payload, but a `write` to any other target
+ * without it can only fail (`content is required for <path>`). Advertising the
+ * requirement keeps schema-constrained decoders (llama.cpp GBNF, OpenAI strict
+ * mode) from emitting `path` alone — the shape small models land on when the
+ * injected `i` intent field is the only other free-form string in the schema.
+ */
+const writeWireSchema = type({
+	path: type(PATH_ARG_PATTERN),
+	content: "string",
+});
+
 /** Write arguments; `content` may be omitted only where the target scheme's write policy allows it. */
 export type WriteToolInput = typeof writeSchema.infer;
 
@@ -488,6 +501,7 @@ export class WriteTool implements AgentTool<typeof writeSchema, WriteToolDetails
 		return prompt.render(deviceOnly ? writeDeviceOnlyDescription : writeDescription);
 	}
 	readonly parameters = writeSchema;
+	readonly wireParameters = writeWireSchema;
 	readonly strict = true;
 	readonly concurrency = "exclusive";
 	readonly loadMode = "essential";

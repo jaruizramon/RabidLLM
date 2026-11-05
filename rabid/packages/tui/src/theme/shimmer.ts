@@ -150,9 +150,26 @@ function tierFor(intensity: number): Tier {
 	return "low";
 }
 
-/** Whether shimmer animations are active (any mode other than `disabled`). */
+/**
+ * Below this width the sweep stops paying for itself: a phone-sized terminal repaints
+ * the animated row many times a second, and emulators that append rather than overwrite
+ * turn each frame into a new line.
+ */
+const MIN_SHIMMER_COLUMNS = 60;
+
+/**
+ * Whether shimmer animations are active.
+ *
+ * Off when the host selected `disabled`, when `RABID_NO_ANIMATIONS` is set (the web
+ * terminal exports it), or on a terminal too narrow to show the sweep without churn.
+ * An unset width (pipes, tests) keeps the historical behaviour.
+ */
 export function shimmerEnabled(): boolean {
-	return activeMode !== "disabled";
+	if (activeMode === "disabled") return false;
+	const noAnimations = process.env.RABID_NO_ANIMATIONS;
+	if (noAnimations !== undefined && noAnimations !== "" && noAnimations !== "0") return false;
+	const columns = process.stdout?.columns ?? 0;
+	return columns === 0 || columns >= MIN_SHIMMER_COLUMNS;
 }
 
 /**

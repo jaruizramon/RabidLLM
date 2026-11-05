@@ -7,22 +7,22 @@ providers:
     api: openai-completions
     models:
       - id: qwen3.8-27b
-        name: Qwen3.8-27B MTP-Q5_K_M (local, 128K total / 100K active)
+        name: Qwen3.8-27B MTP-Q5_K_M (local, 192K total / 128K text + 32K images)
         reasoning: true
         input: [text, image]
-        contextWindow: 131072
-        maxTokens: 28672
+        contextWindow: 196608
+        maxTokens: 32768
         tokenizer: qwen3
         compat:
           supportsDeveloperRole: false
           supportsReasoningEffort: false
           maxTokensField: max_tokens
       - id: qwen3.8-27b-q4-k-m
-        name: Qwen3.8-27B MTP-Q4_K_M (local, 128K total / 100K active)
+        name: Qwen3.8-27B MTP-Q4_K_M (local, 192K total / 128K text + 32K images)
         reasoning: true
         input: [text, image]
-        contextWindow: 131072
-        maxTokens: 28672
+        contextWindow: 196608
+        maxTokens: 32768
         tokenizer: qwen3
         compat:
           supportsDeveloperRole: false
@@ -141,24 +141,24 @@ providers:
     api: openai-completions
     models:
       - id: qwen3.8-27b
-        name: Qwen3.8-27B MTP-Q5_K_M (local, 128K total / 100K active)
+        name: Qwen3.8-27B MTP-Q5_K_M (local, 192K total / 128K text + 32K images)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text, image]
-        contextWindow: 131072
-        maxTokens: 28672
+        contextWindow: 196608
+        maxTokens: 32768
         tokenizer: qwen3
         compat:
           supportsDeveloperRole: false
           supportsReasoningEffort: false
           maxTokensField: max_tokens
       - id: qwen3.8-27b-q4-k-m
-        name: Qwen3.8-27B MTP-Q4_K_M (local, 128K total / 100K active)
+        name: Qwen3.8-27B MTP-Q4_K_M (local, 192K total / 128K text + 32K images)
         compactionModel: deepseek/deepseek-flash
         reasoning: true
         input: [text, image]
-        contextWindow: 131072
-        maxTokens: 28672
+        contextWindow: 196608
+        maxTokens: 32768
         tokenizer: qwen3
         compat:
           supportsDeveloperRole: false
@@ -384,18 +384,14 @@ providers:
           supportsReasoningEffort: false
           maxTokensField: max_tokens
   sensenova-local:
-    # Patched llama.cpp fork: stock llama.cpp (and therefore the router) cannot load
-    # the sensenova_loop architecture. Start it separately:
-    #   ~/build-sensenova/llama.cpp/build/bin/llama-server \
-    #     -m ~/build-sensenova/models/SenseNova-Loop-9B-Preview-Q4_K_M.gguf \
-    #     --mmproj ~/build-sensenova/models/mmproj-SenseNova-Loop-F16.gguf \
-    #     -ngl 99 --device CUDA1 -c 196608 --parallel 1 --host 127.0.0.1 --port 8120
-    # `--device CUDA1` is mandatory: llama.cpp enumerates CUDA0 = RTX 3070 and
-    # CUDA1 = V100 (reverse of nvidia-smi), and without it layers split across both
-    # GPUs — the 3070 spikes to 100% and every token crosses PCIe.
+    # Served by the V100 manager: the `sensenova-loop-9b` preset has
+    # `backend = stock`, and ~/.local/bin/llama-server-stock dispatches SenseNova
+    # paths to the patched llama-volta build. Drop the card on the 8090 page; the
+    # engine then owns the front-door port, so the base URL is the same relay as
+    # every other local model. There is no separate 8120 server any more.
     # Thinking is on by default; disable per request with
     # chat_template_kwargs: {enable_thinking: false}.
-    baseUrl: http://127.0.0.1:8120/v1
+    baseUrl: http://127.0.0.1:8101/v1
     auth: none
     api: openai-completions
     models:

@@ -2545,7 +2545,7 @@ export class AgentSession implements SettingsScope {
 			recentTokenRate: () => this.tokenRate.rate(),
 			rummage: this.#compactionRummage,
 			shake: (mode, options) => this.shake(mode, options),
-			dropImages: () => this.dropImages(),
+			dropImages: (keepTokens?: number) => this.dropImages(keepTokens),
 			generateHandoffDocument: (customInstructions, options) =>
 				this.#handoff.generateDocument(customInstructions, options),
 			removeAssistantMessageFromActiveContext: message =>
@@ -6827,8 +6827,8 @@ export class AgentSession implements SettingsScope {
 		return this.#maintenance.speculationState;
 	}
 	/** Strip image content from the current branch and persist the rewrite. */
-	dropImages(): Promise<{ removed: number; tokensFreed: number }> {
-		return this.#maintenance.dropImages();
+	dropImages(keepTokens?: number): Promise<{ removed: number; tokensFreed: number }> {
+		return this.#maintenance.dropImages(keepTokens);
 	}
 
 	/** Reduce stored context with the selected shake strategy. */

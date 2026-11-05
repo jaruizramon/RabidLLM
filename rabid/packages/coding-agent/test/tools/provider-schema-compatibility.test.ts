@@ -155,4 +155,19 @@ describe("builtin tool schemas provider compatibility", () => {
 		expect(typeSchema?.type).toBe("string");
 		expect(typeSchema?.anyOf).toBeUndefined();
 	});
+
+	it("requires write.content on the wire while keeping contentless proc://kill calls valid", async () => {
+		const tools = await builtinToolsPromise;
+		const write = tools.find(tool => tool.name === "write");
+		expect(write).toBeDefined();
+		if (!write) return;
+
+		// A decoder constrained by this schema must emit content; `path` alone is the
+		// shape small local models otherwise land on, and every non-kill target then
+		// fails at execution with `content is required for <path>`.
+		expect(toolWireSchema(write).required).toContain("content");
+
+		// Runtime validation stays lenient: `proc://<id>/kill` is a verb with no payload.
+		expect(() => write.parameters.assert({ path: "proc://worker/kill" })).not.toThrow();
+	});
 });

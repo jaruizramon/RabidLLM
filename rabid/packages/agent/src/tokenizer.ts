@@ -331,6 +331,31 @@ export class Tokenizer {
 	}
 
 	/**
+	 * Image-token cost of the image blocks in `messages`, at the same estimate
+	 * {@link countMessage} charges.
+	 *
+	 * The compaction trigger credits images against their own reserve, so the
+	 * budget needs the image share separately from the text share even though the
+	 * provider reports one prompt total.
+	 */
+	countImageTokens(messages: readonly AgentMessage[]): number {
+		let total = 0;
+		const asDetail = (value: unknown): ImageDetail =>
+			value === "auto" || value === "low" || value === "high" || value === "original" ? value : undefined;
+		for (const message of messages) {
+			if (!("content" in message) || !Array.isArray(message.content)) continue;
+			for (const block of message.content) {
+				if (!block || typeof block !== "object") continue;
+				if (!("type" in block) || block.type !== "image") continue;
+				if (!("data" in block) || typeof block.data !== "string") continue;
+				const detail = "detail" in block ? asDetail(block.detail) : undefined;
+				total += this.imageTokens(base64ImageSize(block.data), detail);
+			}
+		}
+		return total;
+	}
+
+	/**
 	 * Input tokens for one image (not a snapcompact frame) under the reader's
 	 * catalog image rule, or the generic estimate when it has none.
 	 */

@@ -577,7 +577,7 @@ export interface SessionMaintenanceHost {
 	/** Archive/offload ledger the status panel reads while a pass runs (absent in minimal hosts). */
 	readonly rummage?: CompactionRummageTracker;
 	shake(mode: ShakeMode, options?: { config?: ShakeConfig; signal?: AbortSignal }): Promise<ShakeResult>;
-	dropImages(): Promise<{ removed: number; tokensFreed: number }>;
+	dropImages(keepTokens?: number): Promise<{ removed: number; tokensFreed: number }>;
 	generateHandoffDocument(
 		customInstructions?: string,
 		options?: SessionHandoffOptions,
@@ -942,7 +942,7 @@ export class SessionMaintenance {
 	 * No-op when the branch carries no images; returns `{ removed: 0, tokensFreed: 0 }`
 	 * and skips the disk rewrite.
 	 */
-	async dropImages(): Promise<{ removed: number; tokensFreed: number }> {
+	async dropImages(keepTokens?: number): Promise<{ removed: number; tokensFreed: number }> {
 		const branchEntries = this.#host.sessionManager.getBranch();
 		const countOptions = { excludeEncryptedReasoning: true } as const;
 		const latestCompaction = getLatestCompactionEntry(branchEntries);
@@ -952,15 +952,28 @@ export class SessionMaintenance {
 		let removed = 0;
 		let tokensFreed = 0;
 		let anchoredTokensRemoved = 0;
+		const totalImageTokens = branchEntries.reduce((sum, entry) => {
+			if (entry.type === "message") return sum + this.#tokenizer.countImageTokens([entry.message]);
+			if (entry.type !== "custom_message" || typeof entry.content === "string") return sum;
+			const projected = customMessageEntryMessage(entry);
+			return sum + (projected ? this.#tokenizer.countImageTokens([projected]) : 0);
+		}, 0);
+		if (keepTokens !== undefined && totalImageTokens <= keepTokens) {
+			return { removed: 0, tokensFreed: 0 };
+		}
+		let remainingImageTokens = totalImageTokens;
 		for (const [index, entry] of branchEntries.entries()) {
+			if (keepTokens !== undefined && remainingImageTokens <= keepTokens) break;
 			// Only entries the anchor's provider-reported prompt already carried may
 			// be subtracted from it, and a remote compaction's replacement history
 			// hides everything before its cutoff from the wire.
 			const anchored = index < anchorIndex && (!hasRemoteReplacementHistory || index > compactionIndex);
 			if (entry.type === "message") {
 				const before = this.#tokenizer.countMessage(entry.message, countOptions);
+				const imageTokensBefore = this.#tokenizer.countImageTokens([entry.message]);
 				const dropped = stripImagesFromMessage(entry.message);
 				if (dropped === 0) continue;
+				remainingImageTokens -= imageTokensBefore;
 				const saved = Math.max(0, before - this.#tokenizer.countMessage(entry.message, countOptions));
 				removed += dropped;
 				tokensFreed += saved;
@@ -972,6 +985,7 @@ export class SessionMaintenance {
 			// hand-made probe, so the estimate cannot drift from the projection.
 			const projected = customMessageEntryMessage(entry);
 			if (!projected) continue;
+			const imageTokensBefore = this.#tokenizer.countImageTokens([projected]);
 			const before = this.#tokenizer.countMessage(projected, countOptions);
 			const kept: typeof entry.content = [];
 			let dropped = 0;
@@ -983,6 +997,7 @@ export class SessionMaintenance {
 				}
 			}
 			if (dropped === 0) continue;
+			remainingImageTokens -= imageTokensBefore;
 			if (kept.length === 0) {
 				kept.push({ type: "text", text: "[image removed]" });
 			}
@@ -2859,9 +2874,10 @@ export class SessionMaintenance {
 		if (contextWindow <= 0) return;
 		const compactionSettings = this.#compactionSettings;
 		const contextTokens = this.#estimatePrePromptContextTokens(messages, contextWindow);
+		const imageTokens = this.#tokenizer.countImageTokens(messages);
 		const pendingMidTurnDeadEnd = this.#midTurnDeadEndPendingPrePrompt;
 		this.#midTurnDeadEndPendingPrePrompt = false;
-		if (!shouldCompact(contextTokens, contextWindow, compactionSettings)) {
+		if (!shouldCompact(contextTokens, contextWindow, compactionSettings, imageTokens)) {
 			this.maybeStartSpeculativeCompaction(contextTokens, contextWindow);
 			return;
 		}
@@ -2993,7 +3009,14 @@ export class SessionMaintenance {
 		const billedContextTokens = calculateContextTokens(lastAssistant.usage);
 		const storedContextTokens = this.#estimateStoredContextTokens();
 		const contextTokens = compactionContextTokens(billedContextTokens, storedContextTokens);
-		if (!shouldCompact(contextTokens, contextWindow, compactionSettings)) {
+		if (
+			!shouldCompact(
+				contextTokens,
+				contextWindow,
+				compactionSettings,
+				this.#tokenizer.countImageTokens(activeMessages),
+			)
+		) {
 			this.maybeStartSpeculativeCompaction(contextTokens, contextWindow);
 			return;
 		}
@@ -3611,6 +3634,13 @@ export class SessionMaintenance {
 			: await this.#pruneStaleToolResults();
 
 		const compactionSettings = this.#compactionSettings;
+		// Keep the image buffer bounded: images are their own budget above the text
+		// trigger, so over-budget screenshots are overwritten oldest-first before the
+		// next prompt rather than inflating the conversation's tokens.
+		const imageReserveTokens = compactionSettings.imageReserveTokens ?? 0;
+		if (imageReserveTokens > 0 && this.#tokenizer.countImageTokens(this.#host.messages()) > imageReserveTokens) {
+			await this.dropImages(imageReserveTokens);
+		}
 		if (
 			!compactionSettings.enabled ||
 			(!this.#usesExperimentalContextManagement() && !hasConfiguredCompactionMethod(compactionSettings))
@@ -3654,7 +3684,12 @@ export class SessionMaintenance {
 			storedContextTokens,
 		);
 		const thresholdTokens = resolveThresholdTokens(contextWindow, compactionSettings);
-		const shouldThresholdCompact = shouldCompact(contextTokens, contextWindow, compactionSettings);
+		const shouldThresholdCompact = shouldCompact(
+			contextTokens,
+			contextWindow,
+			compactionSettings,
+			this.#tokenizer.countImageTokens(this.#host.messages()),
+		);
 		logger.debug("Auto-compaction threshold decision", {
 			phase: "post-agent-end",
 			goalModeEnabled: this.#goalModeState?.enabled === true,
@@ -6383,7 +6418,12 @@ export class SessionMaintenance {
 					stillOverThreshold = correctedTokens > recoveryBand;
 				} else {
 					const postShakeTokens = this.#host.getContextUsage({ contextWindow })?.tokens ?? 0;
-					stillOverThreshold = shouldCompact(postShakeTokens, contextWindow, compactionSettings);
+					stillOverThreshold = shouldCompact(
+						postShakeTokens,
+						contextWindow,
+						compactionSettings,
+						this.#tokenizer.countImageTokens(this.#host.messages()),
+					);
 				}
 			}
 			const shouldFallBack = reason !== "idle" && ((reason === "overflow" && !reclaimed) || stillOverThreshold);

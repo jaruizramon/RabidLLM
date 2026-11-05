@@ -7,6 +7,7 @@ import * as path from "node:path";
 import type { AgentTool } from "@oh-my-pi/pi-agent-core";
 import type { ToolExample, TSchema } from "@oh-my-pi/pi-ai";
 import { renderToolInventory } from "@oh-my-pi/pi-ai/dialect";
+import { toolWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
 import type { DelegationBias } from "@oh-my-pi/pi-catalog/compat/delegation";
 import { $env, getAgentDir, getProjectDir, hasFsCode, isEnoent, logger, prompt } from "@oh-my-pi/pi-utils";
 import { contextFileCapability } from "./capability/context-file";
@@ -467,7 +468,10 @@ export function projectSystemPromptToolMetadata(
 		if (projection.mode === "full") {
 			const descriptionValue = override?.description ?? tool.description;
 			metadataEntry.description = typeof descriptionValue === "string" ? descriptionValue : "";
-			metadataEntry.parameters = tool.parameters;
+			// The catalog replaces the provider tool schema when descriptors are
+			// inlined, so it must describe the wire contract, not the lenient
+			// validation schema (write requires content on the wire).
+			metadataEntry.parameters = toolWireSchema(tool) as TSchema;
 			metadataEntry.examples = tool.examples;
 		}
 		if ((override?.readsSkillUris ?? toolReadsSkillUris(tool)) === true) metadataEntry.readsSkillUris = true;

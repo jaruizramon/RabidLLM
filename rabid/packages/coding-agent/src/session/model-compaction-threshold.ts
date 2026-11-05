@@ -60,6 +60,9 @@ export function resolveModelCompactionSettings(
 	if (profile.reserveTokens !== undefined) {
 		settings = { ...settings, reserveTokens: profile.reserveTokens };
 	}
+	if (profile.imageReserveTokens !== undefined) {
+		settings = { ...settings, imageReserveTokens: profile.imageReserveTokens };
+	}
 	return settings;
 }
 

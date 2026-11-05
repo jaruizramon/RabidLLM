@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added image reservation and a rolling image buffer: the compaction trigger now counts text only and credits images against `compaction.imageReserveTokens` (drawn as its own `▧` band above the trigger), and screenshots beyond the budget overwrite the oldest image blocks at turn end instead of consuming the conversation's tokens.
+- Added `laya`: asks the local Laya decision model typed questions over a piece of state and returns calibrated probabilities in one forward pass (~25 ms, offline, nothing billed). Triage a failure, guard a command, or rank candidate causes before spending a turn on the main model; the tool reports the bridge's start command when the daemon is not running
 - Added `deps`: resolves the versions this project actually installed (Cargo.lock / package-lock.json, monorepo children included) and ranks duplicate breaking majors — declared dependencies first, then the most-depended-on bridges such as `http`/`hyper`/`tower` — then finds a symbol in that exact installed source, so `Next`/`serve` questions are answered against axum 0.6.20 instead of the latest docs
 - `rabid --resume-stream` hosts the interactive TUI in a `screen` session the Rabid web terminal attaches to and continues the latest session there, so a run started at the desk can be picked up from the phone over Tailscale; detach with Ctrl-A D and the session keeps running
 - Image attachments and user corrections now carry hidden deterministic notices: an image triggers the visual-grounding protocol (original attachment, bbox/crop, flat-vs-perspective, raycast/DOM hit-test), and a correction tells the model to restate the corrected fact, discard the contradicted hypothesis, and change method
@@ -49,6 +51,7 @@
 
 ### Fixed
 
+- `write` now requires `content` in the schema the model receives, so grammar-constrained decoders (local llama.cpp models) can no longer emit a `path`-only call that every real target rejects; runtime validation still accepts a contentless `proc://<id>/kill` write
 - The generation-rate readout (`tok/s`) now meters only time the model spends emitting tokens: prompt prefill and tool execution no longer dilute it, so a long-context turn reports its real decode rate instead of sagging while the agent reads files or waits on a tool
 - Long `i` intent labels are truncated instead of rejecting the tool call; repeated `edit` failures now name the missing `[PATH#HASH]` header and the stale-tag recovery.
 - Repeated tool-failure steering for `edit` now directs the model to re-read the current `[PATH#TAG]` and use range replacement or `write`, instead of claiming an argument-shape bug.

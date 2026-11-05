@@ -19,6 +19,7 @@ import { arkToWireSchema } from "@oh-my-pi/pi-ai/utils/schema";
 import {
 	type ContextBreakdown,
 	type NonMessageTokenSource,
+	computeContextBreakdown,
 	computeNonMessageBreakdown,
 	computeNonMessageTokens,
 	estimateSkillsTokens,
@@ -139,6 +140,7 @@ describe("renderContextUsage snapcompact section", () => {
 			categories: [],
 			usedTokens: 27929,
 			autoCompactBufferTokens: 0,
+			imageReserveTokens: 0,
 			freeTokens: 172071,
 			snapcompact,
 		};
@@ -373,5 +375,78 @@ describe("non-message estimates tolerate a missing description", () => {
 		const b = computeNonMessageBreakdown(session, tokenizer);
 		expect(Number.isFinite(b.systemContextTokens)).toBe(true);
 		expect(b.systemContextTokens).toBeGreaterThanOrEqual(0);
+	});
+});
+
+/**
+ * Contract: the image reserve is a slice of the prompt budget, carved out of the
+ * space the gauge would otherwise show as free, and it never makes free space
+ * negative when the configured reserve exceeds the remaining window.
+ */
+describe("context gauge image reserve", () => {
+	const model = { id: "local-27b", name: "Local 27B", contextWindow: 196608 } as never;
+	const session = {
+		model,
+		agent: { tokenizer, state: { tools: [] } },
+		systemPrompt: [],
+		skills: [],
+		messages: [],
+		getContextBreakdown: () => ({
+			contextWindow: 196608,
+			anchored: false,
+			usedTokens: 25000,
+			systemPromptTokens: 0,
+			systemToolsTokens: 0,
+			systemContextTokens: 0,
+			skillsTokens: 0,
+			messagesTokens: 25000,
+		}),
+	} as never;
+
+	it("keeps the trigger on text and draws the image budget above it", () => {
+		const breakdown = computeContextBreakdown(session, {
+			compaction: { ...DEFAULT_COMPACTION_SETTINGS, thresholdTokens: 131072, imageReserveTokens: 32768 },
+			sourceRevision: 0,
+		});
+		expect(breakdown.thresholdTokens).toBe(131072);
+		expect(breakdown.freeTokens).toBe(131072 - 25000);
+		expect(breakdown.imageReserveTokens).toBe(32768);
+		expect(breakdown.autoCompactBufferTokens).toBe(196608 - 131072 - 32768);
+	});
+
+	it("consumes the image budget before the output buffer", () => {
+		const imageHeavy = {
+			model,
+			agent: { tokenizer, state: { tools: [] } },
+			systemPrompt: [],
+			skills: [],
+			messages: [],
+			getContextBreakdown: () => ({
+				contextWindow: 196608,
+				anchored: false,
+				usedTokens: 135000,
+				systemPromptTokens: 0,
+				systemToolsTokens: 0,
+				systemContextTokens: 0,
+				skillsTokens: 0,
+				messagesTokens: 135000,
+			}),
+		} as never;
+		const breakdown = computeContextBreakdown(imageHeavy, {
+			compaction: { ...DEFAULT_COMPACTION_SETTINGS, thresholdTokens: 131072, imageReserveTokens: 32768 },
+			sourceRevision: 0,
+		});
+		expect(breakdown.freeTokens).toBe(0);
+		expect(breakdown.imageReserveTokens).toBe(32768 - (135000 - 131072));
+		expect(breakdown.autoCompactBufferTokens).toBe(196608 - 135000 - breakdown.imageReserveTokens);
+	});
+
+	it("caps an oversized reserve at the space above the trigger", () => {
+		const breakdown = computeContextBreakdown(session, {
+			compaction: { ...DEFAULT_COMPACTION_SETTINGS, thresholdTokens: 131072, imageReserveTokens: 500000 },
+			sourceRevision: 0,
+		});
+		expect(breakdown.imageReserveTokens).toBe(196608 - 131072);
+		expect(breakdown.autoCompactBufferTokens).toBe(0);
 	});
 });

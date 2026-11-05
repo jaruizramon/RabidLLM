@@ -79,6 +79,7 @@ const CELL_FILLED = "⛁";
 const CELL_FILLED_MESSAGES = "⛃";
 const CELL_FREE = "⛶";
 const CELL_BUFFER = "⛝";
+const CELL_RESERVE = "▧";
 
 type CategoryId = "systemPrompt" | "systemContext" | "systemTools" | "skills" | "messages";
 
@@ -96,6 +97,8 @@ export interface ContextBreakdown {
 	categories: CategoryInfo[];
 	usedTokens: number;
 	autoCompactBufferTokens: number;
+	/** Budget earmarked for image attachments, drawn as its own segment. */
+	imageReserveTokens: number;
 	freeTokens: number;
 	/** Where auto-compaction fires, in tokens; undefined when compaction is off. */
 	thresholdTokens?: number;
@@ -478,7 +481,7 @@ export function computeContextBreakdown(session: ContextUsageSession, options: C
 		if (compactionSettings.enabled && compactionSettings.strategy !== "off") {
 			const threshold = resolveThresholdTokens(contextWindow, compactionSettings);
 			if (threshold > 0 && threshold <= contextWindow) thresholdTokens = threshold;
-			autoCompactBufferTokens = Math.max(0, contextWindow - threshold);
+			autoCompactBufferTokens = Math.max(0, contextWindow - (thresholdTokens ?? 0));
 		} else {
 			autoCompactBufferTokens = 0;
 		}
@@ -487,9 +490,21 @@ export function computeContextBreakdown(session: ContextUsageSession, options: C
 			autoCompactBufferTokens = effectiveReserveTokens(contextWindow, compactionSettings);
 		}
 	}
-	autoCompactBufferTokens = Math.min(autoCompactBufferTokens, Math.max(0, contextWindow - usedTokens));
 
-	const freeTokens = Math.max(0, contextWindow - usedTokens - autoCompactBufferTokens);
+	// The image reserve is a separate budget *above* the compaction trigger, not a
+	// slice of the conversation's allowance: text fills up to `thresholdTokens`,
+	// screenshots draw the next `imageReserveTokens`, and the output buffer keeps
+	// the rest. Images above the reserve overflow into the buffer, so the cells
+	// always sum to the window.
+	const configuredImageReserve = Math.max(0, options.compaction.imageReserveTokens ?? 0);
+	const imageReserveBudget = Math.min(configuredImageReserve, autoCompactBufferTokens);
+	const freeTokens =
+		thresholdTokens !== undefined
+			? Math.max(0, thresholdTokens - usedTokens)
+			: Math.max(0, contextWindow - usedTokens);
+	const imageReserveTokens =
+		thresholdTokens === undefined ? 0 : Math.max(0, imageReserveBudget - Math.max(0, usedTokens - thresholdTokens));
+	autoCompactBufferTokens = Math.max(0, contextWindow - usedTokens - freeTokens - imageReserveTokens);
 
 	return {
 		model,
@@ -497,6 +512,7 @@ export function computeContextBreakdown(session: ContextUsageSession, options: C
 		categories,
 		usedTokens,
 		autoCompactBufferTokens,
+		imageReserveTokens,
 		freeTokens,
 		thresholdTokens,
 		snapcompact: options.snapcompact,
@@ -531,12 +547,13 @@ function planCells(breakdown: ContextBreakdown): CellSpec[] {
 		count: ratioCells(category.tokens),
 	}));
 
-	let bufferCount = ratioCells(breakdown.autoCompactBufferTokens);
+	const bufferCount = ratioCells(breakdown.autoCompactBufferTokens);
+	let reserveCount = ratioCells(breakdown.imageReserveTokens);
 
 	let usedCount = categoryCounts.reduce((sum, c) => sum + c.count, 0);
 
 	// Prevent the visualization from over-running the grid.
-	const maxUsable = GRID_CELLS - bufferCount;
+	const maxUsable = GRID_CELLS - bufferCount - reserveCount;
 	if (usedCount > maxUsable) {
 		// Scale categories proportionally down to fit.
 		let overflow = usedCount - maxUsable;
@@ -549,8 +566,8 @@ function planCells(breakdown: ContextBreakdown): CellSpec[] {
 			}
 		}
 		usedCount = categoryCounts.reduce((sum, c) => sum + c.count, 0);
-		if (usedCount + bufferCount > GRID_CELLS) {
-			bufferCount = Math.max(0, GRID_CELLS - usedCount);
+		if (usedCount + bufferCount + reserveCount > GRID_CELLS) {
+			reserveCount = Math.max(0, GRID_CELLS - usedCount - bufferCount);
 		}
 	}
 
@@ -560,9 +577,12 @@ function planCells(breakdown: ContextBreakdown): CellSpec[] {
 		}
 	}
 
-	const freeCount = Math.max(0, GRID_CELLS - cells.length - bufferCount);
+	const freeCount = Math.max(0, GRID_CELLS - cells.length - reserveCount - bufferCount);
 	for (let i = 0; i < freeCount; i++) {
 		cells.push({ glyph: CELL_FREE, color: "dim" });
+	}
+	for (let i = 0; i < reserveCount; i++) {
+		cells.push({ glyph: CELL_RESERVE, color: "accent" });
 	}
 	for (let i = 0; i < bufferCount; i++) {
 		cells.push({ glyph: CELL_BUFFER, color: "warning" });
@@ -591,7 +611,8 @@ interface LegendPart {
 /** Legend lines as styled runs, shared by the ANSI panel and the native description. */
 function buildLegendParts(breakdown: ContextBreakdown): LegendPart[][] {
 	const lines: LegendPart[][] = [];
-	const { model, contextWindow, categories, usedTokens, autoCompactBufferTokens, freeTokens } = breakdown;
+	const { model, contextWindow, categories, usedTokens, autoCompactBufferTokens, imageReserveTokens, freeTokens } =
+		breakdown;
 
 	const modelName = model?.name ?? model?.id ?? "no model";
 	const modelId = model?.id ?? "unknown";
@@ -628,6 +649,16 @@ function buildLegendParts(breakdown: ContextBreakdown): LegendPart[][] {
 		{ t: " " },
 		{ t: `(${percentString(freeTokens, contextWindow)})`, s: "dim" },
 	]);
+
+	if (imageReserveTokens > 0) {
+		lines.push([
+			{ t: CELL_RESERVE, s: "accent" },
+			{ t: " Image reserve: " },
+			{ t: formatNumber(imageReserveTokens), s: "strong" },
+			{ t: " " },
+			{ t: `tokens (${percentString(imageReserveTokens, contextWindow)})`, s: "dim" },
+		]);
+	}
 
 	if (autoCompactBufferTokens > 0) {
 		lines.push([
@@ -734,6 +765,14 @@ function contextMeterParts(
 		token: "track",
 		label: `Free space · ${formatNumber(breakdown.freeTokens)} tokens (${percentString(breakdown.freeTokens, window)})`,
 	});
+	if (breakdown.imageReserveTokens > 0) {
+		parts.push({
+			value: breakdown.imageReserveTokens / window,
+			token: "accent",
+			hatch: true,
+			label: `Image reserve · ${formatNumber(breakdown.imageReserveTokens)} tokens (${percentString(breakdown.imageReserveTokens, window)})`,
+		});
+	}
 	if (breakdown.autoCompactBufferTokens > 0) {
 		parts.push({
 			value: breakdown.autoCompactBufferTokens / window,

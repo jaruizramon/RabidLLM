@@ -335,7 +335,7 @@ Guidance:
 | Compaction | omp `thresholdPercent 75` (196,608), `methodOrder ["handoff","shake","soft"]`, `asyncEnabled false`, `keepRecentTokens 20000`, `handoffSaveToDisk true`, `midTurnEnabled true`, `autoContinue true` |
 | Thought archive | `omp-thoughts` (detached) → `/dev/shm/qwen-thoughts/THOUGHTS.index.md` + `THOUGHTS.md`; user note in `~/.omp/agent/AGENTS.md`; filter follows `local-llama` ids; current pointer = newest top-level local session |
 | Aux models | `modelRoles.smol/slow/tiny = deepseek/deepseek-flash` (titles/classifier/memory off the V100); `default` was rewritten to deepseek by the live session |
-| Loaded now | `Qwen3.8-27B-MTP-Q5_K_M.gguf`, `n_ctx 131072` (100K active + 28K vision headroom), F16 KV, MTP depth 2: 28,906 / 32,768 MiB, ~3.9 GiB free; vision verified; 34.6 t/s at 1K |
+| Loaded now | `Qwen3.8-27B-MTP-Q5_K_M.gguf`, `n_ctx 196608` (128K text + 32K image + 32K output), q8_0 KV, MTP depth 2 |
 
 Optional harness-side consistency: launch with
 `--tools=read,bash,edit,write,grep,glob,lsp,python,notebook,browser,todo,web_search,ask` so OMP's own

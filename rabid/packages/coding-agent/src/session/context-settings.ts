@@ -326,6 +326,26 @@ export const cfgCompactionMaxSummaryTokens = register({
 });
 
 /**
+ * Tokens inside the compaction trigger earmarked for image attachments.
+ *
+ * The trigger still counts the whole prompt; this only changes how the budget
+ * is displayed — the context gauge draws this slice as a distinct "image
+ * reserve" box, so a screenshot's tokens are visible instead of disappearing
+ * into the message category.
+ */
+export const cfgCompactionImageReserveTokens = register({
+	id: "compaction.imageReserveTokens",
+	type: "number",
+	default: 0,
+	ui: {
+		tab: "context",
+		group: "Compaction",
+		label: "Image Reserve Tokens",
+		description: "Prompt budget earmarked for image attachments; shown as its own box in the context gauge",
+	},
+});
+
+/**
  * Speed-floor trigger: compact when generation sits below `speedFloorTps` for
  * `speedConsecutive` completed turns, above `speedMinTokens` live context.
  * `0` disables it. This catches the "slow but not full" regime that token and
@@ -710,6 +730,7 @@ export const cfgCompaction = combine({
 	reserveTokens: cfgCompactionReserveTokens,
 	keepRecentTokens: cfgCompactionKeepRecentTokens,
 	maxSummaryTokens: cfgCompactionMaxSummaryTokens,
+	imageReserveTokens: cfgCompactionImageReserveTokens,
 	midTurnEnabled: cfgCompactionMidTurnEnabled,
 	asyncEnabled: cfgCompactionAsyncEnabled,
 	handoffSaveToDisk: cfgCompactionHandoffSaveToDisk,

@@ -1607,6 +1607,19 @@ export interface Tool<TParameters extends TSchema = TSchema> {
 	name: string;
 	description: string;
 	parameters: TParameters;
+	/**
+	 * Parameters as the model should see them, when they differ from the schema
+	 * the runtime validates against. Use for a requirement the validator must
+	 * stay lenient about but a model-facing call cannot leave out — e.g. `write`
+	 * accepts `proc://<id>/kill` without `content`, yet every schema-constrained
+	 * decoder must be told `content` is required or it emits `path` alone and the
+	 * call can only fail at execution.
+	 *
+	 * Provider emission, strict-schema adaptation, and the `xd://` device
+	 * signature all read the wire schema. Argument validation keeps reading
+	 * {@link parameters}.
+	 */
+	wireParameters?: TParameters;
 	/** If true, tool is strictly typed and validated against the parameters schema before execution */
 	strict?: boolean;
 	/** Withhold this Anthropic tool until a `tool_addition` message references it. */

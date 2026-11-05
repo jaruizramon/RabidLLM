@@ -47,6 +47,42 @@ profiles:
     systemPromptAppend: prompts/gpt-oss-append.md
     compaction:
       thresholdTokens: 131072
+  llama-rabid/qwen3.8-27b:
+    thinkingBudgets:
+      minimal: 1024
+      low: 1024
+      medium: 2048
+      high: 4096
+    systemPromptAppend: prompts/qwen-discipline.md
+    compaction:
+      imageReserveTokens: 32768
+  llama-rabid/qwen3.8-27b-q4-k-m:
+    thinkingBudgets:
+      minimal: 1024
+      low: 1024
+      medium: 2048
+      high: 4096
+    systemPromptAppend: prompts/qwen-discipline.md
+    compaction:
+      imageReserveTokens: 32768
+  local-llama/qwen3.8-27b-q4-k-m:
+    thinkingBudgets:
+      minimal: 1024
+      low: 1024
+      medium: 2048
+      high: 4096
+    systemPromptAppend: prompts/qwen-discipline.md
+    compaction:
+      imageReserveTokens: 32768
+  local-llama/qwen3.8-27b:
+    thinkingBudgets:
+      minimal: 1024
+      low: 1024
+      medium: 2048
+      high: 4096
+    systemPromptAppend: prompts/qwen-discipline.md
+    compaction:
+      imageReserveTokens: 32768
   # vLLM presets on the same port. They have 8K/32K windows where the global
   # 12K tail and 16K summary cap cannot fit; the engine also clamps the tail,
   # but these keep the summary itself small enough to leave room for input.
@@ -75,11 +111,11 @@ compaction:
   allowMainModel: false
   modelThresholds:
     llama-rabid/*: f88000
-    llama-rabid/qwen3.8-27b: f102400
+    llama-rabid/qwen3.8-27b: f131072
     sensenova-local/sensenova-loop-9b: f163840
-    llama-rabid/qwen3.8-27b-q4-k-m: f102400
-    local-llama/qwen3.8-27b: f102400
-    local-llama/qwen3.8-27b-q4-k-m: f102400
+    llama-rabid/qwen3.8-27b-q4-k-m: f131072
+    local-llama/qwen3.8-27b: f131072
+    local-llama/qwen3.8-27b-q4-k-m: f131072
     llama-rabid/underdog-saluki-27b: f98304
     llama-rabid/qwen3.6-35b-a3b-q5-k-m: f147456
     local-llama/qwen3.6-35b-a3b-q5-k-m: f147456

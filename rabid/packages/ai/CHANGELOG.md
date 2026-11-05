@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added `Tool.wireParameters`: a model-facing parameter schema that may differ from the one the runtime validates against, so a tool that tolerates a missing field at execution (`write` without content for `proc://<id>/kill`) can still require it in the schema grammar-constrained decoders build from
 - Added `failureThreshold` to `ToolCallLoopGuard`: the same error signature on consecutive turns reports `repeated_tool_failure` even when the arguments and the surrounding diagnostic bytes change, which is how an edit → rebuild → same `error[E0277]` loop escapes the identical-output digests
 - Added `resultThreshold` to `ToolCallLoopGuard`: consecutive turns returning identical non-trivial tool output report `repeated_tool_result`, and a 2–4 turn output sequence repeated twice reports `repeated_tool_cycle`, so a model that changes its arguments but keeps getting the same answer is steered instead of looping
 - Added `reasoning_budget_tokens` to local llama.cpp Chat Completions requests: the selected thinking level's budget now caps the server-side reasoning sampler, where OpenAI's `reasoning.max_tokens` never reached it; cloud endpoints are unchanged

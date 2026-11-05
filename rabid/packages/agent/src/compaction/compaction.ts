@@ -197,6 +197,15 @@ export interface CompactionSettings {
 	 */
 	maxSummaryTokens?: number;
 	/**
+	 * Tokens inside the compaction trigger earmarked for image attachments.
+	 *
+	 * Display/headroom policy, not a second window: the trigger still counts the
+	 * whole prompt, but the context gauge draws this slice of the budget as a
+	 * separate "image reserve" box so a screenshot's tokens are visibly budgeted
+	 * instead of silently consuming the text share.
+	 */
+	imageReserveTokens?: number;
+	/**
 	 * Whether the active session model may be an implicit compaction candidate.
 	 * An explicit `compactionModel` naming it still wins; this only excludes it
 	 * from the fallback chain (roles and the largest-context scan). Defaults to
@@ -380,11 +389,23 @@ export function resolveBudgetReserveTokens(contextWindow: number, settings: Comp
 
 /**
  * Check if compaction should trigger based on context usage.
+ *
+ * `imageTokens` lifts the trigger by up to `settings.imageReserveTokens`: images
+ * are a separate budget above the text trigger, so a screenshot's tokens do not
+ * consume the conversation's compaction allowance.
  */
-export function shouldCompact(contextTokens: number, contextWindow: number, settings: CompactionSettings): boolean {
+export function shouldCompact(
+	contextTokens: number,
+	contextWindow: number,
+	settings: CompactionSettings,
+	imageTokens = 0,
+): boolean {
 	if (!settings.enabled || settings.strategy === "off" || contextWindow <= 0) return false;
 	const thresholdTokens = resolveThresholdTokens(contextWindow, settings);
-	return contextTokens > thresholdTokens;
+	const reserve = Math.max(0, settings.imageReserveTokens ?? 0);
+	const credit = Math.min(Math.max(0, imageTokens), reserve);
+	const effective = Math.min(contextWindow - 1, thresholdTokens + credit);
+	return contextTokens > effective;
 }
 
 /**

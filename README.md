@@ -20,6 +20,49 @@ weights the installer lists by name, and the harness and rig come up the same wa
 The mechanism ships inside the harness, so the two are never out of step; the rig is what
 the harness talks to.
 
+## What this fork adds (not in oh-my-pi)
+
+The harness is more than a profile: the modules, settings, and tools below are fork-owned.
+[`docs/FORK.md`](docs/FORK.md) is the merge inventory, and every user-facing entry is in the
+[changelog](rabid/packages/coding-agent/CHANGELOG.md). Rig-side features (manager page, context
+parking, tool filter, installer) are under [The rig](#the-rig).
+
+### Context and compaction
+
+| Feature | What it does |
+|---|---|
+| **Image reservation** | The compaction trigger counts **text**, not the prompt total. `compaction.imageReserveTokens` (a per-model budget, 32K on the shipped 27B profiles) is credited above the trigger, so a screenshot spends the image band instead of the conversation's allowance. The context gauge draws that band as its own `▧` segment between free space and the output buffer; screenshots beyond the budget overwrite the oldest image blocks at turn end (`dropImages(keepTokens)`), so the buffer is a rolling window rather than an unbounded history. |
+| **SLM handoff compaction** | A small worker keeps a rolling handoff document current after every turn; compaction commits that document plus the user's verbatim messages, with no main-model summarization call. `methodOrder` falls back through `shake`/`handoff`/`soft` when the worker is absent. |
+| **Compaction rummage** | Token reclamation over the region being discarded: drop reads, supersede stale reads, drop useless entries, with a ledger panel showing what was reclaimed. |
+| **Speed-floor trigger** | Compact when generation stays below `compaction.speedFloorTps` for consecutive turns at contextual size, then allow a cooldown so the shorter context can show its rate. |
+| **Turn cards** | After each turn the worker distils a ≤1024-token card (prompt, touched files, 50-word pointers per operation) to `<agent>/turn-cards/`; `compaction.turnCardChain` can commit the cumulative chain deterministically. |
+| **Per-model profiles** | `profiles.<selector>` overrides the compaction threshold and method order, thinking budgets, disabled tools, sampling defaults, and a `systemPromptAppend` markdown block — so one local model can carry its own discipline without replacing the global prompt. |
+| **Local-model budgets** | Per-profile `keepRecentTokens`/`maxSummaryTokens`/`reserveTokens`, plus llama.cpp `reasoning_budget_tokens` and `chat_template_kwargs` on the provider side, keep 8K/32K presets usable instead of assuming a 128K cloud window. |
+
+### Agent reliability
+
+| Feature | What it does |
+|---|---|
+| **Bitch-slap watchdog** | A 30-second watchdog over the live branch renders `can I bitch slap it?` above the preset row: `nah` while the agent is progressing, `bitchslapping...` when the same tool call or output repeats three times, the same answer is restated, or the model yields text-only with open todos. It steers a running turn or prompts an idle one, escalates once (soft → hard corrective naming the open todos) per stuck signature, then stays quiet until the transcript moves. |
+| **Loop guards** | Repeated tool-call failures (same error line on consecutive turns while editing), identical non-trivial tool output, and a repeated 2–4 probe sequence (A→B→C→A→B→C) produce a corrective that names the recurrence instead of letting the model retry blindly (`model.toolCallLoopGuard.*`). |
+| **Correction notices** | Image attachments trigger a deterministic visual-grounding protocol, and a user correction carries a hidden notice to restate the corrected fact, discard the contradicted hypothesis, and change method. |
+| **Resume stream** | `rabid --resume-stream` hosts the interactive TUI in a `screen` session the Rabid web terminal attaches to, so a run started at the desk can be continued from the phone over Tailscale; detach with `Ctrl-A D`. |
+
+### Tools, providers, and TUI
+
+| Feature | What it does |
+|---|---|
+| **`laya`** | Asks the local 421M Laya decision model typed `choice`/`score` questions over a piece of state and returns calibrated probabilities in one forward pass (~25 ms, offline, nothing billed) — triage a failure, guard a command, rank causes. Profiles: `triage`, `guard`, `email`, `moderation`, `router`. |
+| **`deps`** | Resolves the versions the project actually installed (`Cargo.lock`, `package-lock.json`, monorepo children), ranks duplicate breaking majors, then finds a symbol in that exact installed source — version answers from disk, not latest docs. |
+| **`calculate`** | A deterministic slider sweep: one arithmetic expression over up to eight named axes with an optional `compare` column set, no I/O or clock, so identical calls print identical tables. |
+| **`/llama` and `/preset`** | A live V100 model-manager sheet and `fast`/`balanced`/`deep` preset picker: load/unload presets, switch the session model, park/restore contexts, expose the SLM worker and log tails, and change request-side thinking budgets without unloading. |
+| **`/artifacts`** | A browser gallery for images, sprites, SVGs, and pages the session created, with a bounded workspace scan and headless-Chromium previews. |
+| **Wire schema** | `wireParameters` lets a tool advertise a stricter contract to schema-constrained decoders (llama.cpp GBNF, OpenAI strict mode) than the runtime validator accepts — e.g. `write` requires `content` on the wire while `proc://<id>/kill` still omits it. |
+| **Generation-only tok/s** | The status meter ages its window only while tokens are actually streaming, so prefill and tool execution no longer drag the reading toward the hidden-token rate. |
+| **TUI detail** | Rabid fast/balanced/deep modes row with reasoning-budget and context gauges, the compaction threshold marker, rummage/archive panels, and a token-rate panel. |
+| **Shimmer gating** | Animations stop on narrow terminals and under `RABID_NO_ANIMATIONS` (the web terminal exports it), so a phone terminal is not repainted for a sweep it cannot show. |
+| **Compact repeated lines** | Large pasted logs offer to collapse consecutive duplicate lines to one copy plus `[×N]` before spending context. |
+
 ## Why
 
 On a one-GPU box, compaction is the most expensive thing a session can do: the only card

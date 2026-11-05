@@ -24,6 +24,8 @@ export interface ModelProfileCompaction {
 	maxSummaryTokens?: number;
 	/** Tokens reserved below the window; explicit values disable small-window reserve recovery. */
 	reserveTokens?: number;
+	/** Prompt budget earmarked for images, drawn as its own box in the context gauge. */
+	imageReserveTokens?: number;
 }
 
 /** Per-effort thinking-token budgets; unset efforts keep the global value. */
@@ -68,6 +70,7 @@ const COMPACTION_KEYS: Record<string, true> = {
 	keepRecentTokens: true,
 	maxSummaryTokens: true,
 	reserveTokens: true,
+	imageReserveTokens: true,
 };
 const TOOLS_KEYS: Record<string, true> = { disabled: true };
 const SAMPLING_KEYS: Record<string, true> = {
@@ -130,7 +133,7 @@ function normalizeCompaction(scope: string, value: unknown): ModelProfileCompact
 		}
 		compaction.methodOrder = methods;
 	}
-	for (const key of ["keepRecentTokens", "maxSummaryTokens", "reserveTokens"] as const) {
+	for (const key of ["keepRecentTokens", "maxSummaryTokens", "reserveTokens", "imageReserveTokens"] as const) {
 		const budget = value[key];
 		if (budget === undefined) continue;
 		if (typeof budget !== "number" || !Number.isSafeInteger(budget) || budget <= 0) {

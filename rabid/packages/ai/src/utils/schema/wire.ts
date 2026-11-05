@@ -592,11 +592,13 @@ export function arkToWireSchema(schema: Type): Record<string, unknown> {
 
 /**
  * Resolve a tool's parameters to a JSON Schema object suitable for sending
- * over the wire. ArkType schemas are converted and cached; legacy TypeBox /
- * raw JSON Schema parameters are upgraded to draft 2020-12 and cached.
+ * over the wire. {@link Tool.wireParameters} wins when the tool declares a
+ * model-facing shape that differs from its validation schema. ArkType schemas
+ * are converted and cached; legacy TypeBox / raw JSON Schema parameters are
+ * upgraded to draft 2020-12 and cached.
  */
 export function toolWireSchema(tool: Tool): Record<string, unknown> {
-	const params: TSchema = tool.parameters;
+	const params: TSchema = tool.wireParameters ?? tool.parameters;
 	if (isArkSchema(params)) return arkToWireSchema(params);
 	return stamp(params as Record<string, unknown>, kJsonWireSchema, p => {
 		// Legacy schemas may carry non-cloneable metadata (helper functions); the JSON

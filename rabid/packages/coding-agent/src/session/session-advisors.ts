@@ -2376,7 +2376,8 @@ export class SessionAdvisors {
 			);
 		const contextTokens = contextTokensFor(advisorModel);
 
-		if (!shouldCompact(contextTokens, contextWindow, compactionSettings)) {
+		const imageTokens = agent.tokenizer.countImageTokens(messages);
+		if (!shouldCompact(contextTokens, contextWindow, compactionSettings, imageTokens)) {
 			return false;
 		}
 
@@ -2390,7 +2391,12 @@ export class SessionAdvisors {
 			);
 			const newWindow = newModel.contextWindow ?? 0;
 			if (newWindow > 0) {
-				const stillNeedsCompaction = shouldCompact(contextTokensFor(newModel), newWindow, compactionSettings);
+				const stillNeedsCompaction = shouldCompact(
+					contextTokensFor(newModel),
+					newWindow,
+					compactionSettings,
+					imageTokens,
+				);
 				if (!stillNeedsCompaction) return false;
 			}
 		}

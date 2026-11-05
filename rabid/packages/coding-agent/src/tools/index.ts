@@ -49,6 +49,7 @@ import { AstGrepTool } from "./ast-grep";
 import { BashTool } from "./bash";
 import { CalculateTool } from "./calculate";
 import { DepsTool } from "./deps";
+import { LayaTool } from "./laya";
 import { type BuiltinToolName, type HiddenToolName, normalizeToolNames } from "./builtin-names";
 import { type CheckpointState, CheckpointTool, type CompletedRewindState, RewindTool } from "./checkpoint";
 import { ContextNotesTool, NewContextTool } from "./context-notes";
@@ -561,6 +562,7 @@ export const BUILTIN_TOOLS: Record<BuiltinToolName, ToolFactory> = {
 	bash: s => new BashTool(s),
 	calculate: () => new CalculateTool(),
 	deps: s => new DepsTool(s),
+	laya: s => new LayaTool(s),
 	edit: s => new EditTool(s),
 	ast_grep: s => new AstGrepTool(s),
 	ast_edit: s => new AstEditTool(s),
